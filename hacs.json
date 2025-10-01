@@ -1,1 +1,8 @@
-
+{
+  "name": "Energy Dispatcher",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": ["energy_dispatcher"],
+  "country": ["SE", "NO", "FI", "DK", "EE", "LV", "LT"],
+  "homeassistant": "2024.6.0"
+}
