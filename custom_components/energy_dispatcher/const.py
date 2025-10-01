@@ -17,8 +17,12 @@ CONF_BATTERY_BRAND = "battery_brand"
 CONF_BATTERY_SOC_ENTITY = "battery_soc_entity"
 CONF_PV_POWER_ENTITY = "pv_power_entity"
 CONF_HOUSE_LOAD_ENTITY = "house_load_entity"
-CONF_PRICE_TODAY_ENTITY = "price_today_entity"
-CONF_PRICE_TOMORROW_ENTITY = "price_tomorrow_entity"
+
+# Price sensors
+CONF_PRICE_TODAY_ENTITY = "price_today_entity"         # optional now
+CONF_PRICE_TOMORROW_ENTITY = "price_tomorrow_entity"   # optional now
+CONF_PRICE_COMBINED_ENTITY = "price_combined_entity"   # NEW: preferred single sensor with raw_today/raw_tomorrow
+
 CONF_IMPORT_LIMIT_KW = "import_limit_kw"
 
 CONF_SOC_FLOOR = "soc_floor"
