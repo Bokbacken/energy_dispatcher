@@ -1,5 +1,4 @@
 from __future__ import annotations
-import time, json
 from datetime import timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
@@ -8,6 +7,10 @@ from .const import *
 from .coordinator import EnergyDispatcherCoordinator
 from .adapters.huawei import HuaweiBatteryAdapter
 from .models import PriceSeries, Period
+
+def _to_ts(hass: HomeAssistant, s: str) -> float:
+    # robust: handles ISO with timezone
+    return hass.helpers.template.time.as_datetime(s).timestamp()
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     cfg = dict(entry.data)
@@ -20,23 +23,52 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     def get_price_series():
         """
-        Read price sensors attributes 'data' which should be a list of {start, end, price} ISO strings.
-        Merge today+tomorrow into a single list and convert to epoch seconds.
+        Supports either:
+          - combined sensor with attributes.raw_today + attributes.raw_tomorrow, or
+          - split sensors (today/tomorrow) each with attributes.data [{start, end, price}]
         """
+        periods: list[Period] = []
+
+        combined = cfg.get(CONF_PRICE_COMBINED_ENTITY) or ""
+        today = cfg.get(CONF_PRICE_TODAY_ENTITY) or ""
+        tomorrow = cfg.get(CONF_PRICE_TOMORROW_ENTITY) or ""
+
+        if combined:
+            st = hass.states.get(combined)
+            if st:
+                raw_today = st.attributes.get("raw_today") or []
+                raw_tomorrow = st.attributes.get("raw_tomorrow") or []
+                rows = list(raw_today) + list(raw_tomorrow)
+                for r in rows:
+                    try:
+                        start_ts = _to_ts(hass, r["start"])
+                        # Assume 60-min resolution if end not provided; fallback +3600s
+                        end_ts = _to_ts(hass, r["end"]) if "end" in r else (start_ts + 3600.0)
+                        price = float(r.get("price", r.get("value", 0.0)))
+                        periods.append(Period(start_ts, end_ts, price))
+                    except Exception:
+                        continue)
+
+        # Fallback/also support split sensors
         def read_periods(entity_id: str):
             st = hass.states.get(entity_id)
-            data = []
+            out = []
             if st and isinstance(st.attributes.get("data"), list):
                 for p in st.attributes["data"]:
                     try:
-                        start_ts = hass.helpers.template.time.as_datetime(p["start"]).timestamp()
-                        end_ts = hass.helpers.template.time.as_datetime(p["end"]).timestamp()
+                        start_ts = _to_ts(hass, p["start"])
+                        end_ts = _to_ts(hass, p["end"])
                         price = float(p["price"])
-                        data.append(Period(start_ts, end_ts, price))
+                        out.append(Period(start_ts, end_ts, price))
                     except Exception:
                         continue
-            return data
-        periods = read_periods(cfg[CONF_PRICE_TODAY_ENTITY]) + read_periods(cfg[CONF_PRICE_TOMORROW_ENTITY])
+            return out
+
+        if not periods and today:
+            periods += read_periods(today)
+        if not periods and tomorrow:
+            periods += read_periods(tomorrow)
+
         return PriceSeries(periods=periods)
 
     coordinator = EnergyDispatcherCoordinator(hass, get_price_series, batt, {
