@@ -89,12 +89,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         return PriceSeries(periods=periods)
 
     coordinator = EnergyDispatcherCoordinator(hass, get_price_series, batt, {
-        "battery_capacity_kwh": cfg[CONF_BATTERY_CAPACITY_KWH],
-        "battery_eff": cfg[CONF_BATTERY_EFF],
-        "morning_soc_target": cfg[CONF_MORNING_SOC_TARGET],
-        "soc_floor": cfg[CONF_SOC_FLOOR],
-        "max_grid_charge_kw": cfg[CONF_MAX_GRID_CHARGE_KW],
-        "bec_margin": cfg[CONF_BEC_MARGIN],
+        "battery_capacity_kwh": cfg.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH),
+        "battery_eff": cfg.get(CONF_BATTERY_EFF, DEFAULT_BATTERY_EFF),
+        "morning_soc_target": cfg.get(CONF_MORNING_SOC_TARGET, DEFAULT_MORNING_SOC_TARGET),
+        "soc_floor": cfg.get(CONF_SOC_FLOOR, DEFAULT_SOC_FLOOR),
+        "max_grid_charge_kw": cfg.get(CONF_MAX_GRID_CHARGE_KW, DEFAULT_MAX_GRID_CHARGE_KW),
+        "bec_margin": cfg.get(CONF_BEC_MARGIN, DEFAULT_BEC_MARGIN_KR_PER_KWH),
     })
     await coordinator.async_config_entry_first_refresh()
 
