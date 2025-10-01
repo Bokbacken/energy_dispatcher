@@ -8,13 +8,8 @@ from typing import Callable, List
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import (
-    DOMAIN,
-    PLAN_REFRESH_SECONDS,
-)
+from .const import DOMAIN, PLAN_REFRESH_SECONDS
 from .models import PriceSeries, Period
-from .planner import Planner
-from .dispatcher import Dispatcher
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +23,6 @@ class PlanSlot:
 
 
 class EnergyDispatcherCoordinator(DataUpdateCoordinator):
-    """
-    Central coordinator that:
-    - fetches price series via get_price_series()
-    - plans optimal actions via Planner
-    - executes dispatch decisions via Dispatcher
-    - exposes plan/derived states for platforms (sensors/switches/buttons)
-    """
-
     def __init__(
         self,
         hass: HomeAssistant,
@@ -54,15 +41,16 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         self.batt = batt
         self.params = params
 
-        # Core helpers
+        # Lazy import to avoid config_flow-time import issues
+        from .planner import Planner  # type: ignore
+        from .dispatcher import Dispatcher  # type: ignore
+
         self._planner = Planner(params=self.params)
         self._dispatcher = Dispatcher(hass=self.hass, batt=self.batt, params=self.params)
 
-        # State
         self._last_plan: List[PlanSlot] = []
         self._last_plan_generated_utc: datetime | None = None
 
-    # Public getters (used by platforms)
     @property
     def last_plan(self) -> List[PlanSlot]:
         return self._last_plan
@@ -72,26 +60,15 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         return self._last_plan_generated_utc
 
     async def _async_update_data(self):
-        """
-        Called by HA (DataUpdateCoordinator) on schedule to refresh data.
-        We keep it lightweight: compute/update plan if needed.
-        """
         await self._refresh_plan_if_needed()
 
     async def async_config_entry_first_refresh(self):
-        """
-        Called by integration setup after coordinator constructed.
-        Make an initial plan immediately.
-        """
         await self._refresh_plan(force=True)
 
     async def _refresh_plan_if_needed(self):
-        # Refresh on schedule or if we don't have a plan
         if self._last_plan_generated_utc is None:
             await self._refresh_plan(force=True)
             return
-
-        # If PLAN_REFRESH_SECONDS passed, refresh
         if (datetime.utcnow() - self._last_plan_generated_utc).total_seconds() >= PLAN_REFRESH_SECONDS:
             await self._refresh_plan(force=True)
 
@@ -112,7 +89,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             logger.exception("Energy Dispatcher: Planner failed: %s", e)
             return
 
-        # Convert planner output (Periods with action/power) into PlanSlot list
         slots: List[PlanSlot] = []
         for p in plan:
             if not isinstance(p, Period):
@@ -126,17 +102,12 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         logger.debug("Energy Dispatcher: Plan updated with %d slots", len(self._last_plan))
 
     async def async_tick_dispatch(self):
-        """
-        Called periodically (e.g., every minute) from __init__.py to enact current plan.
-        """
-        # Ensure plan present/recent
         await self._refresh_plan_if_needed()
         if not self._last_plan:
             return
 
         now_ts = datetime.utcnow().timestamp()
 
-        # Find current slot
         current = None
         for s in self._last_plan:
             if s.start_ts <= now_ts < s.end_ts:
@@ -144,11 +115,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 break
 
         if current is None:
-            # outside known plan window – idle/stop charging
             await self._dispatcher.idle()
             return
 
-        # Dispatch action
         action = (current.action or "idle").lower()
         power_kw = max(0.0, float(current.power_kw or 0.0))
 
