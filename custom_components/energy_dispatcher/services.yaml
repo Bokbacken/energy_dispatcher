@@ -1,1 +1,27 @@
+force_batt_charge:
+  name: Force Battery Charge
+  description: Force battery charge for X minutes at Y kW
+  fields:
+    minutes:
+      required: true
+      example: 60
+      selector:
+        number:
+          min: 5
+          max: 240
+          step: 5
+          unit_of_measurement: min
+    power_kw:
+      required: true
+      example: 8
+      selector:
+        number:
+          min: 0.5
+          max: 15
+          step: 0.5
+          unit_of_measurement: kW
 
+stop_batt_charge:
+  name: Stop Battery Charge
+  description: Stop battery charging (best effort)
+  fields: {}
