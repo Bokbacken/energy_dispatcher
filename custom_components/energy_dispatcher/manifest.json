@@ -1,7 +1,7 @@
 {
   "domain": "energy_dispatcher",
   "name": "Energy Dispatcher",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "documentation": "https://github.com/REPLACE_ME/energy_dispatcher",
   "issue_tracker": "https://github.com/REPLACE_ME/energy_dispatcher/issues",
   "requirements": [],
