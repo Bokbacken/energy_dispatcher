@@ -36,16 +36,15 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_BATTERY_BRAND, default="huawei"): vol.In(BATTERY_BRANDS),
-                vol.Required(CONF_BATTERY_SOC_ENTITY): str,
-                vol.Optional(CONF_PRICE_COMBINED_ENTITY, default=""): str,
-                vol.Optional(CONF_PRICE_TODAY_ENTITY, default=""): str,
-                vol.Optional(CONF_PRICE_TOMORROW_ENTITY, default=""): str,
-                vol.Optional(CONF_PV_POWER_ENTITY, default=""): str,
-                vol.Optional(CONF_HOUSE_LOAD_ENTITY, default=""): str,
-                vol.Optional(CONF_HUAWEI_DEVICE_ID, default=""): str,
+                vol.Required("battery_capacity_kwh", default=DEFAULT_BATTERY_CAPACITY_KWH): vol.Coerce(float),
+                vol.Required("battery_eff", default=DEFAULT_BATTERY_EFF): vol.All(vol.Coerce(float), vol.Range(min=0.80, max=0.99)),
+                vol.Required("morning_soc_target", default=DEFAULT_MORNING_SOC_TARGET): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+                vol.Required("soc_floor", default=DEFAULT_SOC_FLOOR): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+                vol.Required("max_grid_charge_kw", default=DEFAULT_MAX_GRID_CHARGE_KW): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                vol.Required("bec_margin", default=DEFAULT_BEC_MARGIN_KR_PER_KWH): vol.Coerce(float),
+                vol.Required("price_low_percentile", default=DEFAULT_PRICE_LOW_PERCENTILE): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
             }
-        )
+        ) 
         return self.async_show_form(step_id="user", data_schema=schema)
 
     async def async_step_details(self, user_input=None):
