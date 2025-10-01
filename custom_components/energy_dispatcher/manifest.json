@@ -1,11 +1,11 @@
 {
   "domain": "energy_dispatcher",
   "name": "Energy Dispatcher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "documentation": "https://github.com/REPLACE_ME/energy_dispatcher",
   "issue_tracker": "https://github.com/REPLACE_ME/energy_dispatcher/issues",
   "requirements": [],
-  "codeowners": ["@REPLACE_ME"],
+  "codeowners": ["@Bokbacken"],
   "config_flow": true,
   "iot_class": "local_push",
   "loggers": ["custom_components.energy_dispatcher"]
