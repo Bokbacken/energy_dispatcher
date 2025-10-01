@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 from datetime import timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
@@ -8,65 +9,81 @@ from .coordinator import EnergyDispatcherCoordinator
 from .adapters.huawei import HuaweiBatteryAdapter
 from .models import PriceSeries, Period
 
+_LOGGER = logging.getLogger(__name__)
+PLATFORMS = ["sensor", "switch", "button"]
+
 def _to_ts(hass: HomeAssistant, s: str) -> float:
-    # robust: handles ISO with timezone
     return hass.helpers.template.time.as_datetime(s).timestamp()
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     cfg = dict(entry.data)
 
     # Build battery adapter
-    if cfg[CONF_BATTERY_BRAND] == "huawei":
+    brand = cfg.get(CONF_BATTERY_BRAND, "huawei")
+    if brand == "huawei":
         batt = HuaweiBatteryAdapter(hass, cfg)
     else:
-        raise NotImplementedError("Generic battery not implemented yet")
+        _LOGGER.error("Battery brand '%s' not implemented yet", brand)
+        return False
 
     def get_price_series():
-        """
-        Supports either:
-          - combined sensor with attributes.raw_today + attributes.raw_tomorrow, or
-          - split sensors (today/tomorrow) each with attributes.data [{start, end, price}]
-        """
         periods: list[Period] = []
 
         combined = cfg.get(CONF_PRICE_COMBINED_ENTITY) or ""
         today = cfg.get(CONF_PRICE_TODAY_ENTITY) or ""
         tomorrow = cfg.get(CONF_PRICE_TOMORROW_ENTITY) or ""
 
+        def _to_ts_safe(v):
+            try:
+                return _to_ts(hass, v)
+            except Exception:
+                return None
+
+        # Combined sensor path
         if combined:
             st = hass.states.get(combined)
-            if st:
+            if not st:
+                _LOGGER.warning("Combined price entity not found: %s", combined)
+            else:
                 raw_today = st.attributes.get("raw_today") or []
                 raw_tomorrow = st.attributes.get("raw_tomorrow") or []
                 rows = list(raw_today) + list(raw_tomorrow)
                 for r in rows:
+                    start_ts = _to_ts_safe(r.get("start"))
+                    if start_ts is None:
+                        continue
+                    end_val = r.get("end")
+                    end_ts = _to_ts_safe(end_val) if end_val else (start_ts + 3600.0)
+                    price_val = r.get("price", r.get("value", None))
+                    if price_val is None:
+                        continue
                     try:
-                        start_ts = _to_ts(hass, r["start"])
-                        # Assume 60-min resolution if end not provided; fallback +3600s
-                        end_ts = _to_ts(hass, r["end"]) if "end" in r else (start_ts + 3600.0)
-                        price = float(r.get("price", r.get("value", 0.0)))
-                        periods.append(Period(start_ts, end_ts, price))
-                    except Exception:
-                        continue)
-
-        # Fallback/also support split sensors
-        def read_periods(entity_id: str):
-            st = hass.states.get(entity_id)
-            out = []
-            if st and isinstance(st.attributes.get("data"), list):
-                for p in st.attributes["data"]:
-                    try:
-                        start_ts = _to_ts(hass, p["start"])
-                        end_ts = _to_ts(hass, p["end"])
-                        price = float(p["price"])
-                        out.append(Period(start_ts, end_ts, price))
+                        price = float(price_val)
                     except Exception:
                         continue
+                    periods.append(Period(start_ts, end_ts, price))
+
+        # Split sensors fallback
+        def read_periods(entity_id: str):
+            out = []
+            if not entity_id:
+                return out
+            st2 = hass.states.get(entity_id)
+            if st2 and isinstance(st2.attributes.get("data"), list):
+                for p in st2.attributes["data"]:
+                    start_ts = _to_ts_safe(p.get("start"))
+                    end_ts = _to_ts_safe(p.get("end"))
+                    try:
+                        price = float(p.get("price"))
+                    except Exception:
+                        continue
+                    if start_ts is None or end_ts is None:
+                        continue
+                    out.append(Period(start_ts, end_ts, price))
             return out
 
-        if not periods and today:
+        if not periods:
             periods += read_periods(today)
-        if not periods and tomorrow:
             periods += read_periods(tomorrow)
 
         return PriceSeries(periods=periods)
@@ -103,11 +120,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         await coordinator.async_tick_dispatch()
     async_track_time_interval(hass, _tick, timedelta(seconds=60))
 
-    hass.config_entries.async_setup_platforms(entry, ["sensor", "switch", "button"])
+    # Forward platforms
+    for platform in PLATFORMS:
+        hass.async_create_task(hass.config_entries.async_forward_entry_setup(entry, platform))
+
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    unload = await hass.config_entries.async_unload_platforms(entry, ["sensor", "switch", "button"])
-    if unload:
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
-    return unload
+    return unload_ok
