@@ -1,133 +1,142 @@
+"""Init-fil för Energy Dispatcher-integrationen."""
 from __future__ import annotations
+
 import logging
 from datetime import timedelta
-from homeassistant.core import HomeAssistant
+from typing import Any
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.event import async_track_time_interval
-from .const import *
+from homeassistant.const import CONF_NAME, Platform
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.typing import ConfigType
+
+from .const import (
+    ATTR_PLAN,
+    DOMAIN,
+    NAME,
+    PLATFORMS,
+    SERVICE_FORCE_CHARGE,
+    SERVICE_FORCE_DISCHARGE,
+    SERVICE_OVERRIDE_PLAN,
+    SERVICE_PAUSE_EV_CHARGING,
+    SERVICE_RESUME_EV_CHARGING,
+    SERVICE_SET_MANUAL_EV_SOC,
+)
 from .coordinator import EnergyDispatcherCoordinator
-from .adapters.huawei import HuaweiBatteryAdapter
-from .models import PriceSeries, Period
+from .dispatcher import ActionDispatcher
+from .models import EnergyDispatcherRuntimeData
+from .planner import EnergyPlanner
+from .bec import EnergyDispatcherStore, PriceAndCostHelper
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["sensor", "switch", "button"]
 
-def _to_ts(hass: HomeAssistant, s: str) -> float:
-    return hass.helpers.template.time.as_datetime(s).timestamp()
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    cfg = dict(entry.data)
+async def async_setup(_: HomeAssistant, __: ConfigType) -> bool:
+    """YAML-stöd behövs inte, returnera bara True."""
+    return True
 
-    # Build battery adapter
-    brand = cfg.get(CONF_BATTERY_BRAND, "huawei")
-    if brand == "huawei":
-        batt = HuaweiBatteryAdapter(hass, cfg)
-    else:
-        _LOGGER.error("Battery brand '%s' not implemented yet", brand)
-        return False
 
-    def get_price_series():
-        periods: list[Period] = []
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Initiera integrationen när en config entry skapas/hämtas."""
+    hass.data.setdefault(DOMAIN, {})
 
-        combined = cfg.get(CONF_PRICE_COMBINED_ENTITY) or ""
-        today = cfg.get(CONF_PRICE_TODAY_ENTITY) or ""
-        tomorrow = cfg.get(CONF_PRICE_TOMORROW_ENTITY) or ""
+    try:
+        coordinator = EnergyDispatcherCoordinator(hass, entry)
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryNotReady:
+        raise
+    except Exception as err:
+        raise ConfigEntryNotReady(
+            f"Energy Dispatcher kunde inte starta: {err}"
+        ) from err
 
-        def _to_ts_safe(v):
-            try:
-                return _to_ts(hass, v)
-            except Exception:
-                return None
+    planner = EnergyPlanner()
+    store = EnergyDispatcherStore(hass, entry.entry_id)
+    dispatcher = ActionDispatcher(hass, coordinator, planner)
 
-        # Combined sensor path
-        if combined:
-            st = hass.states.get(combined)
-            if not st:
-                _LOGGER.warning("Combined price entity not found: %s", combined)
-            else:
-                raw_today = st.attributes.get("raw_today") or []
-                raw_tomorrow = st.attributes.get("raw_tomorrow") or []
-                rows = list(raw_today) + list(raw_tomorrow)
-                for r in rows:
-                    start_ts = _to_ts_safe(r.get("start"))
-                    if start_ts is None:
-                        continue
-                    end_val = r.get("end")
-                    end_ts = _to_ts_safe(end_val) if end_val else (start_ts + 3600.0)
-                    price_val = r.get("price", r.get("value", None))
-                    if price_val is None:
-                        continue
-                    try:
-                        price = float(price_val)
-                    except Exception:
-                        continue
-                    periods.append(Period(start_ts, end_ts, price))
+    runtime = EnergyDispatcherRuntimeData(
+        coordinator=coordinator,
+        planner=planner,
+        dispatcher=dispatcher,
+        store=store,
+        hass=hass,
+    )
+    hass.data[DOMAIN][entry.entry_id] = runtime
 
-        # Split sensors fallback
-        def read_periods(entity_id: str):
-            out = []
-            if not entity_id:
-                return out
-            st2 = hass.states.get(entity_id)
-            if st2 and isinstance(st2.attributes.get("data"), list):
-                for p in st2.attributes["data"]:
-                    start_ts = _to_ts_safe(p.get("start"))
-                    end_ts = _to_ts_safe(p.get("end"))
-                    try:
-                        price = float(p.get("price"))
-                    except Exception:
-                        continue
-                    if start_ts is None or end_ts is None:
-                        continue
-                    out.append(Period(start_ts, end_ts, price))
-            return out
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-        if not periods:
-            periods += read_periods(today)
-            periods += read_periods(tomorrow)
-
-        return PriceSeries(periods=periods)
-
-    coordinator = EnergyDispatcherCoordinator(hass, get_price_series, batt, {
-        "battery_capacity_kwh": cfg.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH),
-        "battery_eff": cfg.get(CONF_BATTERY_EFF, DEFAULT_BATTERY_EFF),
-        "morning_soc_target": cfg.get(CONF_MORNING_SOC_TARGET, DEFAULT_MORNING_SOC_TARGET),
-        "soc_floor": cfg.get(CONF_SOC_FLOOR, DEFAULT_SOC_FLOOR),
-        "max_grid_charge_kw": cfg.get(CONF_MAX_GRID_CHARGE_KW, DEFAULT_MAX_GRID_CHARGE_KW),
-        "bec_margin": cfg.get(CONF_BEC_MARGIN, DEFAULT_BEC_MARGIN_KR_PER_KWH),
-    })
-    await coordinator.async_config_entry_first_refresh()
-
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        "coordinator": coordinator,
-        "batt": batt,
-    }
-
-    # Register services
-    async def _svc_force(call):
-        minutes = int(call.data.get("minutes", 15))
-        power_kw = float(call.data.get("power_kw", 6.0))
-        await batt.force_charge(minutes, power_kw)
-
-    async def _svc_stop(call):
-        await batt.stop_charge()
-
-    hass.services.async_register(DOMAIN, SERVICE_FORCE_CHARGE, _svc_force)
-    hass.services.async_register(DOMAIN, SERVICE_STOP_CHARGE, _svc_stop)
-
-    # Periodic dispatch tick every minute
-    async def _tick(now):
-        await coordinator.async_tick_dispatch()
-    async_track_time_interval(hass, _tick, timedelta(seconds=60))
-
-    # Forward platforms
-    for platform in PLATFORMS:
-        hass.async_create_task(hass.config_entries.async_forward_entry_setup(entry, platform))
+    _register_services(hass, runtime)
 
     return True
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Avregistrera entiteter och tjänster vid borttagning."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        runtime = hass.data[DOMAIN].pop(entry.entry_id)
+        runtime.dispatcher.async_unregister_listeners()
+
+    if not hass.data[DOMAIN]:
+        _unregister_services(hass)
+
     return unload_ok
+
+
+def _register_services(hass: HomeAssistant, runtime: EnergyDispatcherRuntimeData) -> None:
+    """Registrera Home Assistant-tjänster."""
+
+    async def _async_wrap(call, handler):
+        await handler(call.data)
+
+    if not hass.services.has_service(DOMAIN, SERVICE_FORCE_CHARGE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_FORCE_CHARGE,
+            lambda call: runtime.dispatcher.async_force_battery_charge(call.data),
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_FORCE_DISCHARGE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_FORCE_DISCHARGE,
+            lambda call: runtime.dispatcher.async_force_battery_discharge(call.data),
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_PAUSE_EV_CHARGING):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_PAUSE_EV_CHARGING,
+            lambda call: runtime.dispatcher.async_pause_ev_charging(call.data),
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RESUME_EV_CHARGING):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RESUME_EV_CHARGING,
+            lambda call: runtime.dispatcher.async_resume_ev_charging(call.data),
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_MANUAL_EV_SOC):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_MANUAL_EV_SOC,
+            lambda call: runtime.dispatcher.async_set_manual_ev_soc(call.data),
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_OVERRIDE_PLAN):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_OVERRIDE_PLAN,
+            lambda call: runtime.dispatcher.async_override_plan(call.data),
+        )
+
+
+def _unregister_services(hass: HomeAssistant) -> None:
+    """Avregistrera domänens tjänster."""
+    for service in (
+        SERVICE_FORCE_CHARGE,
+        SERVICE_FORCE_DISCHARGE,
+        SERVICE_PAUSE_EV_CHARGING,
+        SERVICE_RESUME_EV_CHARGING,
+        SERVICE_SET_MANUAL_EV_SOC,
+        SERVICE_OVERRIDE_PLAN,
+    ):
+        if hass.services.has_service(DOMAIN, service):
+            hass.services.async_remove(DOMAIN, service)
