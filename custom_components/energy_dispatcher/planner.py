@@ -1,91 +1,126 @@
+"""Enkel planeringslogik (kan byggas ut)."""
 from __future__ import annotations
-import time
-from typing import List, Tuple
-from .models import PriceSeries, PlanAction, Period
 
-def _select_night_window(periods: List[Period], night_start: int = 22, night_end: int = 7) -> List[Period]:
-    """
-    Filter periods that fall within [night_start, next_day night_end).
-    Assumes periods are local-time ISO converted already in your price sensors.
-    For simplicity here, we accept all next 12h as candidate; core logic is price-sort.
-    """
-    return periods  # MVP: you can later filter by hour boundaries
+import logging
+from datetime import datetime, timedelta, UTC
+from typing import Iterable, Optional
 
-def plan_night_charge_greedy(
-    price_series: PriceSeries,
-    soc_now: float,
-    cap_kwh: float,
-    target_soc: float,
-    max_grid_charge_kw: float,
-    eff: float,
-) -> List[PlanAction]:
-    """
-    Greedy: sort candidate periods by ascending price and pick enough slots to reach target SoC.
-    Uses 15-min resolution if provided.
-    """
-    slots = price_series.periods[:]
-    if not slots:
-        return []
+from .bec import PriceAndCostHelper
+from .const import (
+    HIGH_PRICE_THRESHOLD_FACTOR,
+    LOW_PRICE_THRESHOLD_FACTOR,
+)
+from .models import (
+    BatteryState,
+    EnergyDispatcherConfig,
+    EnergyPlan,
+    EnergyPlanAction,
+    EVState,
+    HouseState,
+    PricePoint,
+    SolarForecastPoint,
+)
 
-    # slot duration in hours (assume uniform)
-    dt_hours = max( (slots[0].end_ts - slots[0].start_ts) / 3600.0, 0.25)
+_LOGGER = logging.getLogger(__name__)
 
-    need_soc = max(target_soc - soc_now, 0.0) / 100.0
-    need_kwh = need_soc * cap_kwh
-    if need_kwh <= 0.0:
-        return []
 
-    # Sort by price ascending
-    sorted_slots = sorted(slots, key=lambda p: p.price)
-    plan: List[PlanAction] = []
-    charged_kwh = 0.0
+class EnergyPlanner:
+    """Planerar prioriterad energianvändning."""
 
-    per_slot_kwh = max_grid_charge_kw * dt_hours * eff  # delivered to battery accounting for efficiency
-    for s in sorted_slots:
-        if charged_kwh >= need_kwh:
-            break
-        plan.append(PlanAction(
-            ts_start=s.start_ts,
-            ts_end=s.end_ts,
-            batt_kw= -max_grid_charge_kw,  # negative = charging
-            ev_amps=None
-        ))
-        charged_kwh += per_slot_kwh
+    def build_plan(
+        self,
+        config: EnergyDispatcherConfig,
+        forecast: Iterable[SolarForecastPoint],
+        price_points: list[PricePoint],
+        battery_state: BatteryState | None,
+        ev_state: EVState | None,
+        house_state: HouseState,
+        price_helper: PriceAndCostHelper,
+    ) -> EnergyPlan:
+        """Bygg en plan baserat på känd data."""
+        plan = EnergyPlan(
+            generated_at=datetime.now(UTC),
+            horizon_hours=48,
+        )
 
-    # Sort actions by time for dispatcher
-    plan.sort(key=lambda a: a.ts_start)
-    return plan
+        price_stats = price_helper.get_price_statistics(price_points)
+        low_threshold = price_stats["average"] * LOW_PRICE_THRESHOLD_FACTOR
+        high_threshold = price_stats["average"] * HIGH_PRICE_THRESHOLD_FACTOR
 
-def plan_day_discharge_simple(
-    price_series: PriceSeries,
-    soc_now: float,
-    cap_kwh: float,
-    soc_floor: float,
-    batt_max_discharge_kw: float,
-    bec_kr_per_kwh: float,
-    margin: float,
-) -> List[PlanAction]:
-    """
-    Simple discharge policy: discharge only when price > BEC + margin.
-    """
-    actions: List[PlanAction] = []
-    slots = price_series.periods
-    if not slots:
-        return actions
+        if battery_state and battery_state.price_per_kwh:
+            _LOGGER.debug("Battery price per kWh: %s", battery_state.price_per_kwh)
 
-    dt_hours = max((slots[0].end_ts - slots[0].start_ts) / 3600.0, 0.25)
-    usable_kwh = max((soc_now - soc_floor)/100.0 * cap_kwh, 0.0)
-    max_slots = int(usable_kwh / (batt_max_discharge_kw * dt_hours)) if batt_max_discharge_kw > 0 else 0
+        # Batteri: ladda vid lågpris, håll reserv vid högpris.
+        if battery_state:
+            for point in price_points:
+                if point.price <= low_threshold and battery_state.soc < config.battery.max_soc:
+                    action = EnergyPlanAction(
+                        action_type="charge_battery",
+                        start=point.start,
+                        end=point.end,
+                        target_value=config.battery.max_soc,
+                        notes=f"Lågt pris ({point.price:.2f} {config.prices.currency}/kWh)",
+                    )
+                    plan.battery_actions.append(action)
+                elif point.price >= high_threshold and battery_state.soc > config.battery.min_soc:
+                    action = EnergyPlanAction(
+                        action_type="reserve_battery",
+                        start=point.start,
+                        end=point.end,
+                        target_value=config.battery.min_soc,
+                        notes=f"Högt pris ({point.price:.2f}) - behåll laddning",
+                    )
+                    plan.battery_actions.append(action)
 
-    candidates = [s for s in slots if s.price > (bec_kr_per_kwh + margin)]
-    # Take most expensive first
-    candidates.sort(key=lambda p: p.price, reverse=True)
-    for s in candidates[:max_slots]:
-        actions.append(PlanAction(
-            ts_start=s.start_ts, ts_end=s.end_ts, batt_kw= +batt_max_discharge_kw
-        ))
-    actions.sort(key=lambda a: a.ts_start)
-    return actions
+        # EV: planera laddning så att den är klar före departure.
+        if ev_state:
+            ready_time = price_helper.get_departure_time(config.ev)
+            if ready_time:
+                # Hitta billigaste block innan ready_time
+                sorted_prices = sorted(
+                    [p for p in price_points if p.end <= ready_time],
+                    key=lambda p: p.price,
+                )
+                remaining_kwh = max(ev_state.required_kwh, 0)
+                for block in sorted_prices:
+                    if remaining_kwh <= 0:
+                        break
+                    action = EnergyPlanAction(
+                        action_type="charge_ev",
+                        start=block.start,
+                        end=block.end,
+                        target_value=config.ev.default_ampere,
+                        notes=f"Ladda EV (mål {ev_state.target_soc*100:.0f}%)",
+                        metadata={
+                            "price": block.price,
+                            "kwh_block_est": price_helper.estimate_ev_block_kwh(block, config.ev),
+                        },
+                    )
+                    remaining_kwh -= action.metadata["kwh_block_est"]
+                    plan.ev_actions.append(action)
 
-def merge_plans(*plans: List[PlanAction]) -> List[PlanAction]:
-    return sorted([a for p in plans for a in p], key=lambda x: x.ts_start)
+        # Hushållslaster: föreslå att flytta tunga laster till soliga/lågpris timmar.
+        forecast_map = {p.timestamp: p for p in forecast}
+        for action in list(plan.battery_actions):
+            # Om solprognos är hög under samma period, markera synergi.
+            solar = forecast_map.get(action.start)
+            if solar and solar.watts > 1000:
+                action.notes += " (hög solproduktion)"
+
+        # Exempel: föreslå diskmaskin under lågpris.
+        if house_state and price_points:
+            cheapest = min(price_points, key=lambda p: p.price)
+            plan.household_actions.append(
+                EnergyPlanAction(
+                    action_type="suggest_shift_load",
+                    start=cheapest.start,
+                    end=cheapest.end,
+                    notes=f"Kör tunga laster (t.ex. diskmaskin) {cheapest.start}",
+                    metadata={
+                        "price": cheapest.price,
+                        "reason": "Lägsta pris kommande dygn",
+                    },
+                )
+            )
+
+        return plan
