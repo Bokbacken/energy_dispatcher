@@ -1,64 +1,75 @@
-DOMAIN = "energy_dispatcher"
+"""Konstanter och nycklar som används i Energy Dispatcher."""
+from __future__ import annotations
 
-# Update cadence (15 min slots)
-DISPATCH_INTERVAL_SECONDS = 15 * 60
-PLAN_REFRESH_SECONDS = 15 * 60
+from datetime import timedelta
+from typing import Final
 
-# Defaults
-DEFAULT_SOC_FLOOR = 25.0
-DEFAULT_MORNING_SOC_TARGET = 65.0
-DEFAULT_MAX_GRID_CHARGE_KW = 8.0
-DEFAULT_BATTERY_CAPACITY_KWH = 30.0
-DEFAULT_BATTERY_EFF = 0.92
-DEFAULT_BEC_MARGIN_KR_PER_KWH = 0.10
-DEFAULT_PRICE_LOW_PERCENTILE = 25.0
+from homeassistant.const import Platform
 
-CONF_BATTERY_BRAND = "battery_brand"
-CONF_BATTERY_SOC_ENTITY = "battery_soc_entity"
-CONF_PV_POWER_ENTITY = "pv_power_entity"
-CONF_HOUSE_LOAD_ENTITY = "house_load_entity"
+DOMAIN: Final = "energy_dispatcher"
+NAME: Final = "Energy Dispatcher"
 
-# Price sensors
-CONF_PRICE_TODAY_ENTITY = "price_today_entity"         # optional now
-CONF_PRICE_TOMORROW_ENTITY = "price_tomorrow_entity"   # optional now
-CONF_PRICE_COMBINED_ENTITY = "price_combined_entity"   # NEW: preferred single sensor with raw_today/raw_tomorrow
+PLATFORMS: Final[list[Platform]] = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.BUTTON,
+]
 
-CONF_IMPORT_LIMIT_KW = "import_limit_kw"
+# Standardintervall för uppdateringar om inget annat anges i options.
+DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=5)
 
-CONF_SOC_FLOOR = "soc_floor"
-CONF_MORNING_SOC_TARGET = "morning_soc_target"
-CONF_MAX_GRID_CHARGE_KW = "max_grid_charge_kw"
-CONF_BATTERY_CAPACITY_KWH = "battery_capacity_kwh"
-CONF_BATTERY_EFF = "battery_eff"
-CONF_BEC_MARGIN = "bec_margin"
-CONF_PRICE_LOW_PERCENTILE = "price_low_percentile"
+# Konfigurationsnycklar (config_flow, config entry data/options).
+CONF_FORECAST_API_KEY: Final = "forecast_api_key"
+CONF_FORECAST_LAT: Final = "forecast_lat"
+CONF_FORECAST_LON: Final = "forecast_lon"
+CONF_FORECAST_HORIZON: Final = "forecast_horizon"
+CONF_PV_ARRAYS: Final = "pv_arrays"
 
-CONF_HUAWEI_DEVICE_ID = "huawei_device_id"
+CONF_PRICE_AREA: Final = "price_area"
+CONF_PRICE_CURRENCY: Final = "price_currency"
+CONF_PRICE_API_TOKEN: Final = "price_api_token"
+CONF_PRICE_SENSOR: Final = "price_sensor_entity_id"
 
-# EV config
-CONF_EV_MODE = "ev_mode"  # "none" | "evse" | "manual"
-CONF_EVSE_SWITCH = "evse_switch"
-CONF_EVSE_CURRENT_NUMBER = "evse_current_number"
-CONF_EV_MAX_AMPS = "ev_max_amps"
-CONF_EV_PHASES = "ev_phases"
-CONF_EV_VOLTAGE = "ev_voltage"
-CONF_EV_MANUAL_SOC = "ev_manual_soc_helper"
-CONF_EV_TARGET = "ev_target_helper"
+CONF_BATTERY_SETTINGS: Final = "battery_settings"
+CONF_EV_SETTINGS: Final = "ev_settings"
+CONF_HOUSE_SETTINGS: Final = "house_settings"
 
-EV_MODE_NONE = "none"
-EV_MODE_EVSE = "evse"
-EV_MODE_MANUAL = "manual"
+CONF_ENABLE_AUTO_DISPATCH: Final = "enable_auto_dispatch"
+CONF_SCAN_INTERVAL: Final = "scan_interval_seconds"
 
-# Entity names
-SENSOR_BEC = "sensor.energy_dispatcher_bec"
-SENSOR_RUNTIME = "sensor.energy_dispatcher_battery_runtime"
-SENSOR_NEXT_CHEAP = "sensor.energy_dispatcher_next_cheap_window"
-SWITCH_OPT_BATT = "switch.energy_dispatcher_optimize_battery"
-SWITCH_OPT_EV = "switch.energy_dispatcher_optimize_ev"
-BUTTON_FORCE_30 = "button.energy_dispatcher_force_batt_charge_30m"
-BUTTON_FORCE_60 = "button.energy_dispatcher_force_batt_charge_60m"
-BUTTON_FORCE_120 = "button.energy_dispatcher_force_batt_charge_120m"
-SWITCH_PAUSE = "switch.energy_dispatcher_pause"
+# Attributnycklar.
+ATTR_PLAN: Final = "plan"
+ATTR_SOLAR_FORECAST: Final = "solar_forecast"
+ATTR_PRICE_SCHEDULE: Final = "price_schedule"
+ATTR_BATTERY_STATE: Final = "battery_state"
+ATTR_EV_STATE: Final = "ev_state"
+ATTR_HOUSE_STATE: Final = "house_state"
+ATTR_GENERATION_TIMESTAMP: Final = "generated_at"
 
-SERVICE_FORCE_CHARGE = "force_batt_charge"
-SERVICE_STOP_CHARGE = "stop_batt_charge"
+# Service-namn.
+SERVICE_FORCE_CHARGE: Final = "force_charge_battery"
+SERVICE_FORCE_DISCHARGE: Final = "force_discharge_battery"
+SERVICE_PAUSE_EV_CHARGING: Final = "pause_ev_charging"
+SERVICE_RESUME_EV_CHARGING: Final = "resume_ev_charging"
+SERVICE_SET_MANUAL_EV_SOC: Final = "set_manual_ev_soc"
+SERVICE_OVERRIDE_PLAN: Final = "override_plan"
+
+# Hemsnickrade konstanter för adapter-typer.
+BATTERY_ADAPTER_HUAWEI: Final = "huawei"
+BATTERY_ADAPTER_ENTITY: Final = "entity"
+
+EV_ADAPTER_MANUAL: Final = "manual"
+EV_ADAPTER_GENERIC_EVSE: Final = "generic_evse"
+
+# Metadata för storage.
+STORAGE_VERSION: Final = 1
+STORAGE_KEY_TEMPLATE: Final = "energy_dispatcher_{entry_id}"
+
+# Övriga gränsvärden.
+MIN_SOC_DEFAULT: Final = 0.1
+MAX_SOC_DEFAULT: Final = 0.95
+DEFAULT_EV_TARGET_SOC: Final = 0.8
+
+# Planner-konstanter.
+LOW_PRICE_THRESHOLD_FACTOR: Final = 0.85
+HIGH_PRICE_THRESHOLD_FACTOR: Final = 1.15
