@@ -1,35 +1,45 @@
+"""Adapter för manuell EV-hantering (t.ex. leasingbil utan API)."""
 from __future__ import annotations
-from homeassistant.core import HomeAssistant
 
-class ManualEVAdapter:
-    """
-    Manual EV SOC adapter: SOC and target provided via helpers.
-    Charging is executed via a generic EVSE adapter (optional).
-    """
-    def __init__(self, hass: HomeAssistant, soc_entity: str, target_entity: str, evse: 'EVSEAdapter' | None = None):
-        self.hass = hass
-        self.soc_entity = soc_entity
-        self.target_entity = target_entity
-        self.evse = evse
+import logging
+from datetime import UTC, datetime
 
-    def get_soc(self) -> float:
-        st = self.hass.states.get(self.soc_entity)
-        try:
-            return float(st.state) if st else 0.0
-        except Exception:
-            return 0.0
+from ..models import EVSettings, EVState
+from .base import EVAdapterBase
 
-    def get_target_soc(self) -> float:
-        st = self.hass.states.get(self.target_entity)
-        try:
-            return float(st.state) if st else 80.0
-        except Exception:
-            return 80.0
+_LOGGER = logging.getLogger(__name__)
 
-    async def start(self, amps: int | None = None):
-        if self.evse:
-            await self.evse.start(amps)
 
-    async def stop(self):
-        if self.evse:
-            await self.evse.stop()
+class ManualEVAdapter(EVAdapterBase):
+    """Bygger state från manuellt angivet SOC (lagras via helper)."""
+
+    def __init__(self, hass, settings: EVSettings) -> None:
+        super().__init__(hass, settings)
+        self._manual_soc: float = settings.default_target_soc
+
+    async def async_get_state(self) -> EVState:
+        soc = self._manual_soc
+        required_kwh = max(
+            self.settings.capacity_kwh * (self.settings.default_target_soc - soc), 0
+        )
+        estimate_hours = required_kwh / ((self.settings.default_ampere * 230 / 1000) * self.settings.efficiency)
+        now = datetime.now(UTC)
+
+        return EVState(
+            soc=soc,
+            target_soc=self.settings.default_target_soc,
+            required_kwh=required_kwh,
+            estimated_charge_time=estimate_hours,
+            charger_available=True,
+            last_update=now,
+        )
+
+    async def async_set_manual_soc(self, soc: float) -> None:
+        self._manual_soc = soc
+        _LOGGER.info("Manuellt EV-SOC satt till %.2f", soc)
+
+    async def async_pause(self, duration_minutes: int | None = None) -> None:
+        _LOGGER.info("Manuell EV adapter: pause (duration=%s)", duration_minutes)
+
+    async def async_resume(self) -> None:
+        _LOGGER.info("Manuell EV adapter: resume")
