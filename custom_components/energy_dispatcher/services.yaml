@@ -1,27 +1,88 @@
-force_batt_charge:
-  name: Force Battery Charge
-  description: Force battery charge for X minutes at Y kW
+force_charge_battery:
+  name: Force battery charge
+  description: Tvinga batteriet att ladda en viss tid.
   fields:
-    minutes:
-      required: true
-      example: 60
+    duration_minutes:
+      description: Hur länge laddningen ska pågå.
+      example: 120
+      required: false
+      selector:
+        number:
+          min: 15
+          max: 240
+          unit_of_measurement: minutes
+          mode: box
+    ampere:
+      description: Valfritt – begränsa laddströmmen.
+      required: false
+      selector:
+        number:
+          min: 6
+          max: 32
+          unit_of_measurement: A
+
+force_discharge_battery:
+  name: Force battery discharge
+  description: Tvinga batteriet att ladda ur (om stöds).
+  fields:
+    duration_minutes:
+      description: Hur länge urladdning ska pågå.
+      required: false
+      selector:
+        number:
+          min: 15
+          max: 240
+          unit_of_measurement: minutes
+
+pause_ev_charging:
+  name: Pause EV charging
+  description: Pausa elbilsladdningen.
+  fields:
+    duration_minutes:
+      description: Hur länge laddningen ska pausas.
+      required: false
       selector:
         number:
           min: 5
           max: 240
-          step: 5
-          unit_of_measurement: min
-    power_kw:
-      required: true
-      example: 8
+          unit_of_measurement: minutes
+
+resume_ev_charging:
+  name: Resume EV charging
+  description: Återuppta elbilsladdningen.
+
+set_manual_ev_soc:
+  name: Set manual EV SOC
+  description: Sätt manuellt SOC för EV (manual-adapter).
+  fields:
+    soc:
+      description: SOC (0-1 eller 0-100%).
       selector:
         number:
-          min: 0.5
-          max: 15
-          step: 0.5
-          unit_of_measurement: kW
+          min: 0
+          max: 1
+          step: 0.01
 
-stop_batt_charge:
-  name: Stop Battery Charge
-  description: Stop battery charging (best effort)
-  fields: {}
+override_plan:
+  name: Override plan
+  description: Lägg till en manuell override i planeringen.
+  fields:
+    action_type:
+      selector:
+        select:
+          options:
+            - charge_ev
+            - charge_battery
+            - pause_ev
+            - resume_ev
+            - notify
+    start:
+      selector:
+        datetime:
+    end:
+      selector:
+        datetime:
+    notes:
+      selector:
+        text:
+          multiline: true
