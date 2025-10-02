@@ -1,30 +1,44 @@
 {
   "config": {
     "step": {
-      "user": {
+      "general": {
         "title": "Energy Dispatcher",
-        "description": "Select your battery brand and map entities.",
-        "data": {
-          "battery_brand": "Battery brand",
-          "battery_soc_entity": "Battery SoC entity",
-          "price_today_entity": "Price list (today) entity",
-          "price_tomorrow_entity": "Price list (tomorrow) entity",
-          "pv_power_entity": "PV power (W) entity (optional)",
-          "house_load_entity": "House load (W) entity (optional)",
-          "huawei_device_id": "Huawei device_id (for services)"
-        }
+        "description": "Enter general settings."
+      }
+    },
+    "error": {
+      "json_error": "Invalid JSON structure."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "plan_summary": {
+        "name": "Plan summary"
       },
-      "details": {
-        "title": "Targets and limits",
-        "data": {
-          "battery_capacity_kwh": "Battery capacity (kWh)",
-          "battery_eff": "Round-trip efficiency (0.9–0.98)",
-          "morning_soc_target": "Morning SoC target (%)",
-          "soc_floor": "SoC floor (%)",
-          "max_grid_charge_kw": "Max grid charge (kW)",
-          "bec_margin": "Discharge margin above BEC (kr/kWh)",
-          "price_low_percentile": "Night cheap percentile (%)"
-        }
+      "price_schedule": {
+        "name": "Price schedule"
+      },
+      "solar_forecast": {
+        "name": "Solar forecast"
+      },
+      "battery_status": {
+        "name": "Battery status"
+      },
+      "ev_status": {
+        "name": "EV status"
+      }
+    },
+    "switch": {
+      "auto_dispatch": {
+        "name": "Auto dispatch"
+      }
+    },
+    "button": {
+      "force_battery_charge": {
+        "name": "Force battery charge"
+      },
+      "force_battery_discharge": {
+        "name": "Force battery discharge"
       }
     }
   }
