@@ -238,6 +238,19 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(step_id=STEP_OPTIONS, data_schema=schema)
 
+    async def async_step_general(self, user_input: dict[str, Any] | None = None):
+       errors: dict[str, str] = {}
+
+       if user_input is not None:
+           self._data.update(user_input)
+           return await self.async_step_finalize()
+
+       return self.async_show_form(
+           step_id="general",
+           data_schema=self._build_general_schema(),
+           errors=errors,
+       )
+        
     def _create_entry(self) -> config_entries.FlowResult:
         """Skapa config entry."""
         config_data, options = parse_config_entry_from_flow_data(self._data)
