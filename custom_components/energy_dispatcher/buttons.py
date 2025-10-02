@@ -1,22 +1,70 @@
+"""Buttons för manuella kommandon."""
 from __future__ import annotations
-from homeassistant.core import HomeAssistant
+
 from homeassistant.components.button import ButtonEntity
-from .const import DOMAIN
+from homeassistant.core import ServiceCall
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
-    batt = hass.data[DOMAIN][entry.entry_id]["batt"]
-    async_add_entities([
-        ForceChargeButton("Force charge 30m", "button.energy_dispatcher_force_batt_charge_30m", batt, 30),
-        ForceChargeButton("Force charge 60m", "button.energy_dispatcher_force_batt_charge_60m", batt, 60),
-        ForceChargeButton("Force charge 120m", "button.energy_dispatcher_force_batt_charge_120m", batt, 120),
-    ])
+from .const import DOMAIN, SERVICE_FORCE_CHARGE, SERVICE_FORCE_DISCHARGE
+from .coordinator import EnergyDispatcherCoordinator
+from .dispatcher import ActionDispatcher
 
-class ForceChargeButton(ButtonEntity):
-    def __init__(self, name: str, unique_id: str, batt_adapter, minutes: int):
-        self._attr_name = name
-        self._attr_unique_id = unique_id
-        self.batt = batt_adapter
-        self.minutes = minutes
 
-    async def async_press(self) -> None:
-        await self.batt.force_charge(self.minutes, power_kw=6.0)  # default 6 kW, can be made configurable
+async def async_setup_entry(hass, entry, async_add_entities):
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    coordinator: EnergyDispatcherCoordinator = runtime.coordinator
+    dispatcher: ActionDispatcher = runtime.dispatcher
+
+    async_add_entities(
+        [
+            ForceChargeButton(coordinator, dispatcher, entry.entry_id),
+            ForceDischargeButton(coordinator, dispatcher, entry.entry_id),
+        ]
+    )
+
+
+class BaseActionButton(CoordinatorEntity[EnergyDispatcherCoordinator], ButtonEntity):
+    """Bas för knappar."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: EnergyDispatcherCoordinator,
+        dispatcher: ActionDispatcher,
+        entry_id: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry_id = entry_id
+        self._dispatcher = dispatcher
+
+    @property
+    def device_info(self):
+        config = self.coordinator.config
+        return {
+            "identifiers": {(DOMAIN, self._entry_id)},
+            "name": config.name,
+            "manufacturer": "Energy Dispatcher",
+        }
+
+
+class ForceChargeButton(BaseActionButton):
+    _attr_name = "Force battery charge"
+
+    @property
+    def unique_id(self):
+        return f"{self._entry_id}_btn_force_charge"
+
+    async def async_press(self):
+        await self._dispatcher.async_force_battery_charge({"duration_minutes": 60})
+
+
+class ForceDischargeButton(BaseActionButton):
+    _attr_name = "Force battery discharge"
+
+    @property
+    def unique_id(self):
+        return f"{self._entry_id}_btn_force_discharge"
+
+    async def async_press(self):
+        await self._dispatcher.async_force_battery_discharge({"duration_minutes": 60})
