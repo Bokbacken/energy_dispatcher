@@ -1,12 +1,17 @@
 {
   "domain": "energy_dispatcher",
   "name": "Energy Dispatcher",
-  "version": "0.2.7",
-  "documentation": "https://github.com/REPLACE_ME/energy_dispatcher",
-  "issue_tracker": "https://github.com/REPLACE_ME/energy_dispatcher/issues",
-  "requirements": [],
-  "codeowners": ["@Bokbacken"],
+  "version": "0.3.0",
+  "documentation": "https://github.com/Bokbacken/energy_dispatcher",
+  "issue_tracker": "https://github.com/Bokbacken/energy_dispatcher/issues",
+  "codeowners": [
+    "@Bokbacken"
+  ],
+  "iot_class": "cloud_polling",
+  "integration_type": "hub",
   "config_flow": true,
-  "iot_class": "local_push",
-  "loggers": ["custom_components.energy_dispatcher"]
+  "requirements": [],
+  "loggers": [
+    "energy_dispatcher"
+  ]
 }
