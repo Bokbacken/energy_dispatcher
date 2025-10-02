@@ -1,8 +1,11 @@
 {
   "name": "Energy Dispatcher",
   "content_in_root": false,
+  "filename": "custom_components/energy_dispatcher/manifest.json",
   "render_readme": true,
-  "domains": ["energy_dispatcher"],
-  "country": ["SE", "NO", "FI", "DK", "EE", "LV", "LT"],
+  "domains": [
+    "energy_dispatcher"
+  ],
+  "country": "SE",
   "homeassistant": "2024.6.0"
 }
