@@ -52,23 +52,20 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: Mapping[str, Any] | None = None):
         """Första steget."""
+        return await self.async_step_general(user_input)
+
+    async def async_step_general(
+        self, user_input: Mapping[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Grundinställningar."""
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_pv()
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_NAME, default="Energy Dispatcher"): str,
-                vol.Required(CONF_FORECAST_API_KEY): str,
-                vol.Required(CONF_FORECAST_LAT, default=56.6967): vol.Coerce(float),
-                vol.Required(CONF_FORECAST_LON, default=13.0196): vol.Coerce(float),
-                vol.Optional(
-                    CONF_FORECAST_HORIZON,
-                    default=get_default_horizon_string(),
-                ): str,
-            }
+        return self.async_show_form(
+            step_id=STEP_GENERAL,
+            data_schema=self._general_schema(),
         )
-        return self.async_show_form(step_id=STEP_GENERAL, data_schema=schema)
 
     async def async_step_pv(self, user_input: Mapping[str, Any] | None = None):
         """Steg: PV-konfiguration."""
@@ -238,19 +235,6 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(step_id=STEP_OPTIONS, data_schema=schema)
 
-    async def async_step_general(self, user_input: dict[str, Any] | None = None):
-       errors: dict[str, str] = {}
-
-       if user_input is not None:
-           self._data.update(user_input)
-           return await self.async_step_finalize()
-
-       return self.async_show_form(
-           step_id="general",
-           data_schema=self._build_general_schema(),
-           errors=errors,
-       )
-        
     def _create_entry(self) -> config_entries.FlowResult:
         """Skapa config entry."""
         config_data, options = parse_config_entry_from_flow_data(self._data)
@@ -261,11 +245,20 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     @staticmethod
-    @callback
-    def async_get_options_flow(config_entry: ConfigEntry):
-        return EnergyDispatcherOptionsFlow(config_entry)
+    def _general_schema() -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Required(CONF_NAME, default="Energy Dispatcher"): str,
+                vol.Required(CONF_FORECAST_API_KEY): str,
+                vol.Required(CONF_FORECAST_LAT, default=56.6967): vol.Coerce(float),
+                vol.Required(CONF_FORECAST_LON, default=13.0196): vol.Coerce(float),
+                vol.Optional(
+                    CONF_FORECAST_HORIZON,
+                    default=get_default_horizon_string(),
+                ): str,
+            }
+        )
 
-    # ----------------- Scheman -----------------
     @staticmethod
     def _pv_schema() -> vol.Schema:
         return vol.Schema(
@@ -334,6 +327,11 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional("allow_manual_soc_entry", default=True): bool,
             }
         )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry):
+        return EnergyDispatcherOptionsFlow(config_entry)
 
 
 class EnergyDispatcherOptionsFlow(config_entries.OptionsFlow):
