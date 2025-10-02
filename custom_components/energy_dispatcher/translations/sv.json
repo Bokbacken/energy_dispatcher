@@ -1,30 +1,44 @@
 {
   "config": {
     "step": {
-      "user": {
+      "general": {
         "title": "Energy Dispatcher",
-        "description": "Välj batterifabrikat och mappa entiteter.",
-        "data": {
-          "battery_brand": "Batterifabrikat",
-          "battery_soc_entity": "Batteri SoC‑entitet",
-          "price_today_entity": "Prislista (idag) entitet",
-          "price_tomorrow_entity": "Prislista (imorgon) entitet",
-          "pv_power_entity": "PV‑effekt (W) entitet (valfritt)",
-          "house_load_entity": "Huslast (W) entitet (valfritt)",
-          "huawei_device_id": "Huawei device_id (för tjänster)"
-        }
+        "description": "Ange grundläggande inställningar."
+      }
+    },
+    "error": {
+      "json_error": "Ogiltig JSON-struktur."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "plan_summary": {
+        "name": "Planöversikt"
       },
-      "details": {
-        "title": "Mål och gränser",
-        "data": {
-          "battery_capacity_kwh": "Batterikapacitet (kWh)",
-          "battery_eff": "Verkningsgrad tur/retur (0.9–0.98)",
-          "morning_soc_target": "Morgonmål SoC (%)",
-          "soc_floor": "SoC‑golv (%)",
-          "max_grid_charge_kw": "Max nätladdning (kW)",
-          "bec_margin": "Marginal över BEC för urladdning (kr/kWh)",
-          "price_low_percentile": "Billig‑percentil för natt (%)"
-        }
+      "price_schedule": {
+        "name": "Prisplan"
+      },
+      "solar_forecast": {
+        "name": "Solprognos"
+      },
+      "battery_status": {
+        "name": "Batteristatus"
+      },
+      "ev_status": {
+        "name": "EV-status"
+      }
+    },
+    "switch": {
+      "auto_dispatch": {
+        "name": "Automatisk dispatch"
+      }
+    },
+    "button": {
+      "force_battery_charge": {
+        "name": "Forcera batteriladdning"
+      },
+      "force_battery_discharge": {
+        "name": "Forcera urladdning"
       }
     }
   }
