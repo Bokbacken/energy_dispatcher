@@ -1,27 +1,49 @@
+"""Switch-entity för att toggla auto-dispatch."""
 from __future__ import annotations
-from homeassistant.core import HomeAssistant
+
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
-    async_add_entities([
-        SimpleSwitch("Energy Dispatcher Optimize Battery", "switch.energy_dispatcher_optimize_battery", True),
-        SimpleSwitch("Energy Dispatcher Pause", "switch.energy_dispatcher_pause", False),
-    ])
+from .const import CONF_ENABLE_AUTO_DISPATCH, DOMAIN
+from .coordinator import EnergyDispatcherCoordinator
 
-class SimpleSwitch(SwitchEntity):
-    def __init__(self, name: str, unique_id: str, initial: bool):
-        self._attr_name = name
-        self._attr_unique_id = unique_id
-        self._is_on = initial
+
+async def async_setup_entry(hass, entry, async_add_entities):
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    coordinator: EnergyDispatcherCoordinator = runtime.coordinator
+    async_add_entities(
+        [AutoDispatchSwitch(coordinator, entry.entry_id)],
+        update_before_add=True,
+    )
+
+
+class AutoDispatchSwitch(CoordinatorEntity[EnergyDispatcherCoordinator], SwitchEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Auto dispatch"
+
+    def __init__(self, coordinator: EnergyDispatcherCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator)
+        self._entry_id = entry_id
 
     @property
-    def is_on(self) -> bool:
-        return self._is_on
+    def unique_id(self):
+        return f"{self._entry_id}_auto_dispatch"
 
-    async def async_turn_on(self, **kwargs) -> None:
-        self._is_on = True
-        self.async_write_ha_state()
+    @property
+    def is_on(self):
+        return self.coordinator.config.auto_dispatch
 
-    async def async_turn_off(self, **kwargs) -> None:
-        self._is_on = False
-        self.async_write_ha_state()
+    async def async_turn_on(self, **kwargs):
+        await self._set_auto_dispatch(True)
+
+    async def async_turn_off(self, **kwargs):
+        await self._set_auto_dispatch(False)
+
+    async def _set_auto_dispatch(self, value: bool):
+        # Uppdatera options
+        options = dict(self.coordinator.entry.options)
+        options[CONF_ENABLE_AUTO_DISPATCH] = value
+        self.coordinator.hass.config_entries.async_update_entry(
+            self.coordinator.entry, options=options
+        )
+        await self.coordinator.async_request_refresh()
