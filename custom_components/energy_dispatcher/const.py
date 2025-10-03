@@ -2,7 +2,8 @@ from homeassistant.const import Platform
 
 DOMAIN = "energy_dispatcher"
 
-PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON]
+# Lägg till NUMBER och SELECT
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON, Platform.NUMBER, Platform.SELECT]
 
 # Prisrelaterat
 CONF_NORDPOOL_ENTITY = "nordpool_entity"
@@ -46,16 +47,16 @@ CONF_FS_LON = "fs_lon"
 CONF_FS_PLANES = "fs_planes"
 CONF_FS_HORIZON = "fs_horizon"
 
-# Faktiska produktionssensorer (frivilliga)
+# PV actual (frivilligt)
 CONF_PV_POWER_ENTITY = "pv_power_entity"               # W/kW/MW
 CONF_PV_ENERGY_TODAY_ENTITY = "pv_energy_today_entity" # Wh/kWh/MWh
 
-# Huslast-baseline (nytt i 0.5.2)
+# Huslast-baseline
 CONF_RUNTIME_SOURCE = "runtime_source"  # counter_kwh | power_w | manual_dayparts
-CONF_RUNTIME_COUNTER_ENTITY = "runtime_counter_entity"  # kWh-räknare (t.ex. Consumption today)
-CONF_RUNTIME_POWER_ENTITY = "runtime_power_entity"      # W-sensor (fallback)
-CONF_RUNTIME_ALPHA = "runtime_alpha"                    # EMA vikt
-CONF_RUNTIME_WINDOW_MIN = "runtime_window_min"          # ej kritisk, reserverad
+CONF_RUNTIME_COUNTER_ENTITY = "runtime_counter_entity"
+CONF_RUNTIME_POWER_ENTITY = "runtime_power_entity"
+CONF_RUNTIME_ALPHA = "runtime_alpha"
+CONF_RUNTIME_WINDOW_MIN = "runtime_window_min"
 CONF_RUNTIME_EXCLUDE_EV = "runtime_exclude_ev"
 CONF_RUNTIME_EXCLUDE_BATT_GRID = "runtime_exclude_batt_grid"
 CONF_RUNTIME_SOC_FLOOR = "runtime_soc_floor"
@@ -65,3 +66,20 @@ CONF_RUNTIME_SOC_CEILING = "runtime_soc_ceiling"
 CONF_LOAD_POWER_ENTITY = "load_power_entity"           # W
 CONF_BATT_POWER_ENTITY = "batt_power_entity"           # W (+/-)
 CONF_GRID_IMPORT_TODAY_ENTITY = "grid_import_today_entity"  # kWh (frivillig)
+
+# Internt store
+STORE_ENTITIES = "entities"  # {"ev_target_number": "number.xxx", ...}
+STORE_MANUAL = "manual"      # manuella värden för EV/batteri/EVSE
+
+# Nycklar i STORE_MANUAL (unik nyckel → Number/Select uppdaterar/läser dessa)
+M_EV_BATT_KWH = "ev_batt_kwh"
+M_EV_CURRENT_SOC = "ev_current_soc"
+M_EV_TARGET_SOC = "ev_target_soc"
+M_HOME_BATT_CAP_KWH = "home_batt_cap_kwh"
+M_HOME_BATT_SOC_FLOOR = "home_batt_soc_floor"
+M_EVSE_MAX_A = "evse_max_a"
+M_EVSE_PHASES = "evse_phases"
+M_EVSE_VOLTAGE = "evse_voltage"
+
+# Eventnamn för loggning
+EVENT_ACTION = "energy_dispatcher.action"
