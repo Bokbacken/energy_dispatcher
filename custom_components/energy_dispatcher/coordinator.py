@@ -195,23 +195,28 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             return None
 
     def _is_ev_charging(self) -> bool:
+        # Om vi har ström-siffran, använd den som primär indikator
         if not bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_EV, True)):
             return False
-        start_sw = self._get_cfg(CONF_EVSE_START_SWITCH, "")
         num_current = self._get_cfg(CONF_EVSE_CURRENT_NUMBER, "")
-        if start_sw:
-            st = self.hass.states.get(start_sw)
-            is_on = (st and str(st.state).lower() == "on")
-        else:
-            is_on = False
         amps = 0.0
         if num_current:
+            st = self.hass.states.get(num_current)
             try:
-                amps = float(self.hass.states.get(num_current).state)
+                amps = float(st.state) if st and st.state not in ("unknown", "unavailable", None, "") else 0.0
             except Exception:
                 amps = 0.0
         min_a = int(self._get_cfg(CONF_EVSE_MIN_A, 6))
-        return bool(is_on and amps >= min_a)
+        if amps >= min_a:
+            return True
+
+        # Fallback: bara om start-entity är en switch/input_boolean och står ON
+        start_sw = self._get_cfg(CONF_EVSE_START_SWITCH, "")
+        if start_sw and start_sw.split(".")[0] in ("switch", "input_boolean"):
+            st = self.hass.states.get(start_sw)
+            return bool(st and str(st.state).lower() == "on")
+
+        return False
 
     def _is_batt_charging_from_grid(self) -> bool:
         if not bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)):
