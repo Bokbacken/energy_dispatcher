@@ -1,9 +1,7 @@
 """
 Energy Dispatcher - config_flow.py
 
-Minimal konfigflöde (en-steg) för MVP.
-Tar emot strängar för entity_ids och siffror för parametrar.
-Du kan förbättra detta till fler steg och selectors senare.
+Konfigflöde (en-steg) + OptionsFlow med dynamiska defaults.
 """
 
 from __future__ import annotations
@@ -45,6 +43,8 @@ from .const import (
     CONF_FS_LON,
     CONF_FS_PLANES,
     CONF_FS_HORIZON,
+    CONF_PV_POWER_ENTITY,
+    CONF_PV_ENERGY_TODAY_ENTITY,
 )
 
 DEFAULTS = {
@@ -67,45 +67,49 @@ DEFAULTS = {
     CONF_EVSE_PHASES: 3,
     CONF_EVSE_VOLTAGE: 230,
     CONF_FS_USE: True,
+    CONF_PV_POWER_ENTITY: "",
+    CONF_PV_ENERGY_TODAY_ENTITY: "",
 }
 
 
-def _schema_user() -> vol.Schema:
+def _schema_user(defaults: dict | None = None) -> vol.Schema:
+    d = defaults or DEFAULTS
     return vol.Schema(
         {
             vol.Required(CONF_NORDPOOL_ENTITY): str,
-            vol.Optional(CONF_PRICE_TAX, default=DEFAULTS[CONF_PRICE_TAX]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_TRANSFER, default=DEFAULTS[CONF_PRICE_TRANSFER]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_SURCHARGE, default=DEFAULTS[CONF_PRICE_SURCHARGE]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_VAT, default=DEFAULTS[CONF_PRICE_VAT]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_FIXED_MONTHLY, default=DEFAULTS[CONF_PRICE_FIXED_MONTHLY]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_INCLUDE_FIXED, default=DEFAULTS[CONF_PRICE_INCLUDE_FIXED]): bool,
-            vol.Required(CONF_BATT_CAP_KWH, default=DEFAULTS[CONF_BATT_CAP_KWH]): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_TAX, default=d[CONF_PRICE_TAX]): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_TRANSFER, default=d[CONF_PRICE_TRANSFER]): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_SURCHARGE, default=d[CONF_PRICE_SURCHARGE]): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_VAT, default=d[CONF_PRICE_VAT]): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_FIXED_MONTHLY, default=d[CONF_PRICE_FIXED_MONTHLY]): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_INCLUDE_FIXED, default=d[CONF_PRICE_INCLUDE_FIXED]): bool,
+            vol.Required(CONF_BATT_CAP_KWH, default=d[CONF_BATT_CAP_KWH]): vol.Coerce(float),
             vol.Required(CONF_BATT_SOC_ENTITY): str,
-            vol.Optional(CONF_BATT_MAX_CHARGE_W, default=DEFAULTS[CONF_BATT_MAX_CHARGE_W]): vol.Coerce(int),
-            vol.Optional(CONF_BATT_MAX_DISCH_W, default=DEFAULTS[CONF_BATT_MAX_DISCH_W]): vol.Coerce(int),
-            vol.Optional(CONF_BATT_ADAPTER, default=DEFAULTS[CONF_BATT_ADAPTER]): vol.In(["huawei"]),
+            vol.Optional(CONF_BATT_MAX_CHARGE_W, default=d[CONF_BATT_MAX_CHARGE_W]): vol.Coerce(int),
+            vol.Optional(CONF_BATT_MAX_DISCH_W, default=d[CONF_BATT_MAX_DISCH_W]): vol.Coerce(int),
+            vol.Optional(CONF_BATT_ADAPTER, default=d[CONF_BATT_ADAPTER]): vol.In(["huawei"]),
             vol.Optional(CONF_HUAWEI_DEVICE_ID, default=""): str,
             vol.Optional(CONF_HOUSE_CONS_SENSOR, default=""): str,
-            vol.Optional(CONF_EV_MODE, default=DEFAULTS[CONF_EV_MODE]): vol.In(["manual"]),
-            vol.Optional(CONF_EV_BATT_KWH, default=DEFAULTS[CONF_EV_BATT_KWH]): vol.Coerce(float),
-            vol.Optional(CONF_EV_CURRENT_SOC, default=DEFAULTS[CONF_EV_CURRENT_SOC]): vol.Coerce(float),
-            vol.Optional(CONF_EV_TARGET_SOC, default=DEFAULTS[CONF_EV_TARGET_SOC]): vol.Coerce(float),
+            vol.Optional(CONF_EV_MODE, default=d[CONF_EV_MODE]): vol.In(["manual"]),
+            vol.Optional(CONF_EV_BATT_KWH, default=d[CONF_EV_BATT_KWH]): vol.Coerce(float),
+            vol.Optional(CONF_EV_CURRENT_SOC, default=d[CONF_EV_CURRENT_SOC]): vol.Coerce(float),
+            vol.Optional(CONF_EV_TARGET_SOC, default=d[CONF_EV_TARGET_SOC]): vol.Coerce(float),
             vol.Optional(CONF_EVSE_START_SWITCH, default=""): str,
             vol.Optional(CONF_EVSE_STOP_SWITCH, default=""): str,
             vol.Optional(CONF_EVSE_CURRENT_NUMBER, default=""): str,
-            vol.Optional(CONF_EVSE_MIN_A, default=DEFAULTS[CONF_EVSE_MIN_A]): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_MAX_A, default=DEFAULTS[CONF_EVSE_MAX_A]): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_PHASES, default=DEFAULTS[CONF_EVSE_PHASES]): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_VOLTAGE, default=DEFAULTS[CONF_EVSE_VOLTAGE]): vol.Coerce(int),
-            vol.Optional(CONF_FS_USE, default=DEFAULTS[CONF_FS_USE]): bool,
+            vol.Optional(CONF_EVSE_MIN_A, default=d[CONF_EVSE_MIN_A]): vol.Coerce(int),
+            vol.Optional(CONF_EVSE_MAX_A, default=d[CONF_EVSE_MAX_A]): vol.Coerce(int),
+            vol.Optional(CONF_EVSE_PHASES, default=d[CONF_EVSE_PHASES]): vol.Coerce(int),
+            vol.Optional(CONF_EVSE_VOLTAGE, default=d[CONF_EVSE_VOLTAGE]): vol.Coerce(int),
+            vol.Optional(CONF_FS_USE, default=d[CONF_FS_USE]): bool,
             vol.Optional(CONF_FS_APIKEY, default=""): str,
             vol.Optional(CONF_FS_LAT, default=56.6967208731): vol.Coerce(float),
             vol.Optional(CONF_FS_LON, default=13.0196173488): vol.Coerce(float),
-            # PLANES: för MVP: ange som JSON-sträng, ex: [{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]
             vol.Optional(CONF_FS_PLANES, default='[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]'): str,
-            # Horizon CSV enligt Forecast.Solar: "18,16,11,7,5,4,3,2,2,4,7,10"
             vol.Optional(CONF_FS_HORIZON, default="18,16,11,7,5,4,3,2,2,4,7,10"): str,
+            # NYTT: faktiska produktionssensorer
+            vol.Optional(CONF_PV_POWER_ENTITY, default=d[CONF_PV_POWER_ENTITY]): str,
+            vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d[CONF_PV_ENERGY_TODAY_ENTITY]): str,
         }
     )
 
@@ -116,7 +120,6 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         errors = {}
         if user_input is not None:
-            # Minimal validering
             try:
                 float(user_input.get(CONF_FS_LAT, 0))
                 float(user_input.get(CONF_FS_LON, 0))
@@ -142,9 +145,7 @@ class EnergyDispatcherOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Visa samma schema som för user, med befintliga värden som default
+        # Dynamiska defaults från data + options
         current = {**self.config_entry.data, **(self.config_entry.options or {})}
-        schema = _schema_user()
-        # OBS: Vi återanvänder schema men Home Assistant visar defaults från schema, ej current,
-        # så en fullständig options-UI hade satt dynamiska defaults. För MVP räcker detta.
+        schema = _schema_user(current)
         return self.async_show_form(step_id="init", data_schema=schema)
