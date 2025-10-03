@@ -20,13 +20,14 @@ from .const import (
     CONF_BATT_CAP_KWH,
     CONF_BATT_SOC_ENTITY,
     CONF_HOUSE_CONS_SENSOR,
-    # Forecast.Solar-konfig
     CONF_FS_USE,
     CONF_FS_APIKEY,
     CONF_FS_LAT,
     CONF_FS_LON,
     CONF_FS_PLANES,
     CONF_FS_HORIZON,
+    CONF_PV_POWER_ENTITY,
+    CONF_PV_ENERGY_TODAY_ENTITY,
 )
 from .models import PricePoint
 from .price_provider import PriceProvider, PriceFees
@@ -36,14 +37,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class EnergyDispatcherCoordinator(DataUpdateCoordinator):
-    """
-    Samlar:
-    - Timvisa priser (spot + enriched)
-    - Aktuellt berikat pris
-    - Batteriets uppskattade driftstid
-    - Solprognos (nu, idag, imorgon)
-    """
-
     def __init__(self, hass: HomeAssistant):
         super().__init__(
             hass,
@@ -51,7 +44,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             name=f"{DOMAIN}_coordinator",
             update_interval=timedelta(seconds=300),
         )
-        self.entry_id: Optional[str] = None  # sätts i __init__.py
+        self.entry_id: Optional[str] = None
         self.data: Dict[str, Any] = {
             "hourly_prices": [],            # List[PricePoint]
             "current_enriched": None,       # float
@@ -60,6 +53,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             "solar_now_w": None,            # float
             "solar_today_kwh": None,        # float
             "solar_tomorrow_kwh": None,     # float
+            "pv_now_w": None,               # float (aktuell produktion)
+            "pv_today_kwh": None,           # float (energi idag)
         }
 
     def _get_store(self) -> Dict[str, Any]:
@@ -72,16 +67,12 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         cfg = store.get("config", {})
         return cfg.get(key, default)
 
-    def _get_flag(self, key: str, default=None):
-        store = self._get_store()
-        flags = store.get("flags", {})
-        return flags.get(key, default)
-
     async def _async_update_data(self):
         try:
             await self._update_prices()
             await self._update_battery_runtime()
             await self._update_solar()
+            await self._update_pv_actual()
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Uppdatering misslyckades")
         return self.data
@@ -150,7 +141,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                       val, soc, batt_cap, avg_kwh_per_h)
 
     def _trapz_kwh(self, points):
-        # Trapezoidregel, kWh (points: list med .time och .watts)
         if not points or len(points) < 2:
             return 0.0
         pts = sorted(points, key=lambda p: p.time)
@@ -204,3 +194,47 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             "Forecast.Solar: points=%s, now=%s W, today=%s kWh, tomorrow=%s kWh",
             len(pts), self.data["solar_now_w"], self.data["solar_today_kwh"], self.data["solar_tomorrow_kwh"]
         )
+
+    async def _update_pv_actual(self):
+        """Läs faktiska produktionssensorer (om konfigurerade) och konvertera enheter."""
+        pv_power_entity = self._get_cfg(CONF_PV_POWER_ENTITY, "")
+        pv_energy_entity = self._get_cfg(CONF_PV_ENERGY_TODAY_ENTITY, "")
+
+        # Effekt (W eller kW)
+        pv_now = None
+        if pv_power_entity:
+            st = self.hass.states.get(pv_power_entity)
+            if st and st.state not in (None, "", "unknown", "unavailable"):
+                try:
+                    val = float(st.state)
+                    unit = str(st.attributes.get("unit_of_measurement", "")).lower()
+                    if "kw" in unit and "mw" not in unit:
+                        pv_now = round(val * 1000.0, 1)
+                    elif "mw" in unit:
+                        pv_now = round(val * 1_000_000.0, 1)
+                    else:
+                        pv_now = round(val, 1)  # antar W
+                except Exception:
+                    pv_now = None
+        self.data["pv_now_w"] = pv_now
+
+        # Energi idag (Wh eller kWh)
+        pv_today = None
+        if pv_energy_entity:
+            st = self.hass.states.get(pv_energy_entity)
+            if st and st.state not in (None, "", "unknown", "unavailable"):
+                try:
+                    val = float(st.state)
+                    unit = str(st.attributes.get("unit_of_measurement", "")).lower()
+                    if "wh" in unit and "kwh" not in unit and "mwh" not in unit:
+                        pv_today = round(val / 1000.0, 3)  # Wh -> kWh
+                    elif "mwh" in unit:
+                        pv_today = round(val * 1000.0, 3)
+                    else:
+                        pv_today = round(val, 3)  # antar kWh
+                except Exception:
+                    pv_today = None
+        self.data["pv_today_kwh"] = pv_today
+
+        _LOGGER.debug("PV actual: now=%s W, today=%s kWh (power_entity=%s, energy_entity=%s)",
+                      pv_now, pv_today, pv_power_entity, pv_energy_entity)
