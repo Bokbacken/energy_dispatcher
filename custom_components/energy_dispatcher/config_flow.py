@@ -44,6 +44,19 @@ from .const import (
     CONF_FS_HORIZON,
     CONF_PV_POWER_ENTITY,
     CONF_PV_ENERGY_TODAY_ENTITY,
+    # Baseline
+    CONF_RUNTIME_SOURCE,
+    CONF_RUNTIME_COUNTER_ENTITY,
+    CONF_RUNTIME_POWER_ENTITY,
+    CONF_RUNTIME_ALPHA,
+    CONF_RUNTIME_WINDOW_MIN,
+    CONF_RUNTIME_EXCLUDE_EV,
+    CONF_RUNTIME_EXCLUDE_BATT_GRID,
+    CONF_RUNTIME_SOC_FLOOR,
+    CONF_RUNTIME_SOC_CEILING,
+    CONF_LOAD_POWER_ENTITY,
+    CONF_BATT_POWER_ENTITY,
+    CONF_GRID_IMPORT_TODAY_ENTITY,
 )
 
 DEFAULTS = {
@@ -68,6 +81,19 @@ DEFAULTS = {
     CONF_FS_USE: True,
     CONF_PV_POWER_ENTITY: "",
     CONF_PV_ENERGY_TODAY_ENTITY: "",
+    # Baseline defaults
+    CONF_RUNTIME_SOURCE: "counter_kwh",
+    CONF_RUNTIME_COUNTER_ENTITY: "",
+    CONF_RUNTIME_POWER_ENTITY: "",
+    CONF_RUNTIME_ALPHA: 0.2,
+    CONF_RUNTIME_WINDOW_MIN: 15,
+    CONF_RUNTIME_EXCLUDE_EV: True,
+    CONF_RUNTIME_EXCLUDE_BATT_GRID: True,
+    CONF_RUNTIME_SOC_FLOOR: 10,
+    CONF_RUNTIME_SOC_CEILING: 95,
+    CONF_LOAD_POWER_ENTITY: "",
+    CONF_BATT_POWER_ENTITY: "",
+    CONF_GRID_IMPORT_TODAY_ENTITY: "",
 }
 
 
@@ -115,6 +141,20 @@ def _schema_user(defaults: dict | None = None) -> vol.Schema:
 
             vol.Optional(CONF_PV_POWER_ENTITY, default=d.get(CONF_PV_POWER_ENTITY, "")): str,
             vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d.get(CONF_PV_ENERGY_TODAY_ENTITY, "")): str,
+
+            # Baseline och exkludering
+            vol.Optional(CONF_RUNTIME_SOURCE, default=d.get(CONF_RUNTIME_SOURCE, "counter_kwh")): vol.In(["counter_kwh", "power_w", "manual_dayparts"]),
+            vol.Optional(CONF_RUNTIME_COUNTER_ENTITY, default=d.get(CONF_RUNTIME_COUNTER_ENTITY, "")): str,
+            vol.Optional(CONF_RUNTIME_POWER_ENTITY, default=d.get(CONF_RUNTIME_POWER_ENTITY, "")): str,
+            vol.Optional(CONF_LOAD_POWER_ENTITY, default=d.get(CONF_LOAD_POWER_ENTITY, "")): str,
+            vol.Optional(CONF_BATT_POWER_ENTITY, default=d.get(CONF_BATT_POWER_ENTITY, "")): str,
+            vol.Optional(CONF_GRID_IMPORT_TODAY_ENTITY, default=d.get(CONF_GRID_IMPORT_TODAY_ENTITY, "")): str,
+            vol.Optional(CONF_RUNTIME_ALPHA, default=d.get(CONF_RUNTIME_ALPHA, 0.2)): vol.Coerce(float),
+            vol.Optional(CONF_RUNTIME_WINDOW_MIN, default=d.get(CONF_RUNTIME_WINDOW_MIN, 15)): vol.Coerce(int),
+            vol.Optional(CONF_RUNTIME_EXCLUDE_EV, default=d.get(CONF_RUNTIME_EXCLUDE_EV, True)): bool,
+            vol.Optional(CONF_RUNTIME_EXCLUDE_BATT_GRID, default=d.get(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)): bool,
+            vol.Optional(CONF_RUNTIME_SOC_FLOOR, default=d.get(CONF_RUNTIME_SOC_FLOOR, 10)): vol.Coerce(float),
+            vol.Optional(CONF_RUNTIME_SOC_CEILING, default=d.get(CONF_RUNTIME_SOC_CEILING, 95)): vol.Coerce(float),
         }
     )
 
