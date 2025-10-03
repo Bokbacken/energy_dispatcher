@@ -1,44 +1,10 @@
 {
+  "title": "Energy Dispatcher",
   "config": {
     "step": {
-      "general": {
-        "title": "Energy Dispatcher",
-        "description": "Ange grundläggande inställningar."
-      }
-    },
-    "error": {
-      "json_error": "Ogiltig JSON-struktur."
-    }
-  },
-  "entity": {
-    "sensor": {
-      "plan_summary": {
-        "name": "Planöversikt"
-      },
-      "price_schedule": {
-        "name": "Prisplan"
-      },
-      "solar_forecast": {
-        "name": "Solprognos"
-      },
-      "battery_status": {
-        "name": "Batteristatus"
-      },
-      "ev_status": {
-        "name": "EV-status"
-      }
-    },
-    "switch": {
-      "auto_dispatch": {
-        "name": "Automatisk dispatch"
-      }
-    },
-    "button": {
-      "force_battery_charge": {
-        "name": "Forcera batteriladdning"
-      },
-      "force_battery_discharge": {
-        "name": "Forcera urladdning"
+      "user": {
+        "title": "Grundinställningar",
+        "description": "Konfigurera prisberikning, batteri, EV och prognos."
       }
     }
   }
