@@ -16,6 +16,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
 
     entities = [
         EnrichedPriceSensor(coordinator, entry.entry_id),
+        HouseBaselineSensor(coordinator, entry.entry_id),
         BatteryRuntimeSensor(coordinator, entry.entry_id),
         BatteryCostSensor(coordinator, entry.entry_id),
         BatteryVsGridDeltaSensor(coordinator, entry.entry_id),
@@ -77,6 +78,31 @@ class EnrichedPriceSensor(BaseEDSensor):
         }
 
 
+class HouseBaselineSensor(BaseEDSensor):
+    _attr_name = "House Load Baseline Now"
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:home-lightning-bolt"
+    _attr_device_class = "power"
+    _attr_state_class = "measurement"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_house_baseline_w_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("house_baseline_w")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "method": self.coordinator.data.get("baseline_method"),
+            "source_value": self.coordinator.data.get("baseline_source_value"),
+            "baseline_kwh_per_h": self.coordinator.data.get("baseline_kwh_per_h"),
+            "exclusion_reason": self.coordinator.data.get("baseline_exclusion_reason"),
+        }
+
+
 class BatteryRuntimeSensor(BaseEDSensor):
     _attr_name = "Battery Runtime Estimate"
     _attr_native_unit_of_measurement = "h"
@@ -89,6 +115,13 @@ class BatteryRuntimeSensor(BaseEDSensor):
     @property
     def native_value(self) -> Optional[float]:
         return self.coordinator.data.get("battery_runtime_h")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "baseline_kwh_per_h": self.coordinator.data.get("baseline_kwh_per_h"),
+            "house_baseline_w": self.coordinator.data.get("house_baseline_w"),
+        }
 
 
 class BatteryCostSensor(BaseEDSensor):
