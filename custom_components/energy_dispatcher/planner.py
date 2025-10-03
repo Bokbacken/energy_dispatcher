@@ -1,126 +1,68 @@
-"""Enkel planeringslogik (kan byggas ut)."""
-from __future__ import annotations
+from datetime import datetime, timedelta
+from typing import List
+from .models import PlanAction, PricePoint, ForecastPoint
 
-import logging
-from datetime import datetime, timedelta, UTC
-from typing import Iterable, Optional
+def simple_plan(
+    now: datetime,
+    horizon_hours: int,
+    prices: List[PricePoint],
+    solar: List[ForecastPoint],
+    batt_soc_pct: float,
+    batt_capacity_kwh: float,
+    batt_max_charge_w: int,
+    ev_need_kwh: float,
+    cheap_threshold: float,
+) -> List[PlanAction]:
+    """
+    Very simple heuristic:
+    - Mark hours with price <= threshold as 'charge windows'
+    - Prefer charging battery on cheap hours unless big solar next hour
+    - Allocate EV charging to cheapest set of hours first until energy met
+    """
+    plan: List[PlanAction] = []
+    price_map = {p.time.replace(minute=0, second=0, microsecond=0): p for p in prices}
+    solar_map = {s.time.replace(minute=0, second=0, microsecond=0): s for s in solar}
+    end = now + timedelta(hours=horizon_hours)
+    cursor = now.replace(minute=0, second=0, microsecond=0)
 
-from .bec import PriceAndCostHelper
-from .const import (
-    HIGH_PRICE_THRESHOLD_FACTOR,
-    LOW_PRICE_THRESHOLD_FACTOR,
-)
-from .models import (
-    BatteryState,
-    EnergyDispatcherConfig,
-    EnergyPlan,
-    EnergyPlanAction,
-    EVState,
-    HouseState,
-    PricePoint,
-    SolarForecastPoint,
-)
+    # Pick EV hours by lowest enriched price
+    hourly_prices = []
+    t = cursor
+    while t < end:
+        pp = price_map.get(t)
+        if pp:
+            hourly_prices.append((t, pp.enriched_sek_per_kwh))
+        t += timedelta(hours=1)
+    ev_hours_sorted = sorted(hourly_prices, key=lambda x: x[1])
 
-_LOGGER = logging.getLogger(__name__)
+    # naive EV allocation: first N cheapest hours
+    ev_selected = set()
+    ev_energy_remaining = ev_need_kwh
+    ev_power_kw_assumed = 11.0  # example, will be adjusted by dispatcher EV adapter set_current
+    for t, _ in ev_hours_sorted:
+        if ev_energy_remaining <= 0:
+            break
+        ev_selected.add(t)
+        ev_energy_remaining -= ev_power_kw_assumed
 
+    # Build actions
+    t = cursor
+    while t < end:
+        price = price_map.get(t)
+        sol = solar_map.get(t)
+        action = PlanAction(time=t)
 
-class EnergyPlanner:
-    """Planerar prioriterad energianvändning."""
+        if t in ev_selected:
+            # Dispatcher will start EV and set amps accordingly
+            action.ev_charge_a = 16
 
-    def build_plan(
-        self,
-        config: EnergyDispatcherConfig,
-        forecast: Iterable[SolarForecastPoint],
-        price_points: list[PricePoint],
-        battery_state: BatteryState | None,
-        ev_state: EVState | None,
-        house_state: HouseState,
-        price_helper: PriceAndCostHelper,
-    ) -> EnergyPlan:
-        """Bygg en plan baserat på känd data."""
-        plan = EnergyPlan(
-            generated_at=datetime.now(UTC),
-            horizon_hours=48,
-        )
+        # Battery: charge on cheap hours unless high solar next hour (avoid double-charging)
+        if price and price.enriched_sek_per_kwh <= cheap_threshold:
+            next_sol = solar_map.get(t + timedelta(hours=1))
+            if not next_sol or next_sol.watts < 500:  # small solar, top-up battery
+                action.charge_batt_w = batt_max_charge_w
 
-        price_stats = price_helper.get_price_statistics(price_points)
-        low_threshold = price_stats["average"] * LOW_PRICE_THRESHOLD_FACTOR
-        high_threshold = price_stats["average"] * HIGH_PRICE_THRESHOLD_FACTOR
+        plan.append(action)
+        t += timedelta(hours=1)
 
-        if battery_state and battery_state.price_per_kwh:
-            _LOGGER.debug("Battery price per kWh: %s", battery_state.price_per_kwh)
-
-        # Batteri: ladda vid lågpris, håll reserv vid högpris.
-        if battery_state:
-            for point in price_points:
-                if point.price <= low_threshold and battery_state.soc < config.battery.max_soc:
-                    action = EnergyPlanAction(
-                        action_type="charge_battery",
-                        start=point.start,
-                        end=point.end,
-                        target_value=config.battery.max_soc,
-                        notes=f"Lågt pris ({point.price:.2f} {config.prices.currency}/kWh)",
-                    )
-                    plan.battery_actions.append(action)
-                elif point.price >= high_threshold and battery_state.soc > config.battery.min_soc:
-                    action = EnergyPlanAction(
-                        action_type="reserve_battery",
-                        start=point.start,
-                        end=point.end,
-                        target_value=config.battery.min_soc,
-                        notes=f"Högt pris ({point.price:.2f}) - behåll laddning",
-                    )
-                    plan.battery_actions.append(action)
-
-        # EV: planera laddning så att den är klar före departure.
-        if ev_state:
-            ready_time = price_helper.get_departure_time(config.ev)
-            if ready_time:
-                # Hitta billigaste block innan ready_time
-                sorted_prices = sorted(
-                    [p for p in price_points if p.end <= ready_time],
-                    key=lambda p: p.price,
-                )
-                remaining_kwh = max(ev_state.required_kwh, 0)
-                for block in sorted_prices:
-                    if remaining_kwh <= 0:
-                        break
-                    action = EnergyPlanAction(
-                        action_type="charge_ev",
-                        start=block.start,
-                        end=block.end,
-                        target_value=config.ev.default_ampere,
-                        notes=f"Ladda EV (mål {ev_state.target_soc*100:.0f}%)",
-                        metadata={
-                            "price": block.price,
-                            "kwh_block_est": price_helper.estimate_ev_block_kwh(block, config.ev),
-                        },
-                    )
-                    remaining_kwh -= action.metadata["kwh_block_est"]
-                    plan.ev_actions.append(action)
-
-        # Hushållslaster: föreslå att flytta tunga laster till soliga/lågpris timmar.
-        forecast_map = {p.timestamp: p for p in forecast}
-        for action in list(plan.battery_actions):
-            # Om solprognos är hög under samma period, markera synergi.
-            solar = forecast_map.get(action.start)
-            if solar and solar.watts > 1000:
-                action.notes += " (hög solproduktion)"
-
-        # Exempel: föreslå diskmaskin under lågpris.
-        if house_state and price_points:
-            cheapest = min(price_points, key=lambda p: p.price)
-            plan.household_actions.append(
-                EnergyPlanAction(
-                    action_type="suggest_shift_load",
-                    start=cheapest.start,
-                    end=cheapest.end,
-                    notes=f"Kör tunga laster (t.ex. diskmaskin) {cheapest.start}",
-                    metadata={
-                        "price": cheapest.price,
-                        "reason": "Lägsta pris kommande dygn",
-                    },
-                )
-            )
-
-        return plan
+    return plan
