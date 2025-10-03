@@ -9,10 +9,12 @@ from .const import DOMAIN
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     st = hass.data[DOMAIN][entry.entry_id]
     flags = st["flags"]
-    async_add_entities([
-        AutoEVSwitch(hass, entry.entry_id, flags),
-        AutoPlannerSwitch(hass, entry.entry_id, flags),
-    ])
+    async_add_entities(
+        [
+            AutoEVSwitch(hass, entry.entry_id, flags),
+            AutoPlannerSwitch(hass, entry.entry_id, flags),
+        ]
+    )
 
 
 class BaseEDSwitch(SwitchEntity):
@@ -28,10 +30,12 @@ class BaseEDSwitch(SwitchEntity):
 
 class AutoEVSwitch(BaseEDSwitch):
     @property
-    def name(self): return "Energy Dispatcher - Auto EV"
+    def name(self):
+        return "Energy Dispatcher - Auto EV"
 
     @property
-    def unique_id(self): return f"{DOMAIN}_switch_auto_ev_{self._entry_id}"
+    def unique_id(self):
+        return f"{DOMAIN}_switch_auto_ev_{self._entry_id}"
 
     @property
     def is_on(self) -> bool:
@@ -48,10 +52,12 @@ class AutoEVSwitch(BaseEDSwitch):
 
 class AutoPlannerSwitch(BaseEDSwitch):
     @property
-    def name(self): return "Energy Dispatcher - Auto Planner"
+    def name(self):
+        return "Energy Dispatcher - Auto Planner"
 
     @property
-    def unique_id(self): return f"{DOMAIN}_switch_auto_planner_{self._entry_id}"
+    def unique_id(self):
+        return f"{DOMAIN}_switch_auto_planner_{self._entry_id}"
 
     @property
     def is_on(self) -> bool:
