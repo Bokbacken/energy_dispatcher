@@ -1,64 +1,86 @@
-energy_dispatcher.set_manual_ev:
-  name: Set Manual EV SOC and Target
+set_manual_ev:
+  name: Set manual EV SOC
+  description: Uppdatera manuell EV SOC
   fields:
     soc_current:
-      example: 45
+      name: Current SOC
+      description: Nuvarande EV-batteri %
+      example: 40
+      required: false
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
+          mode: box
     soc_target:
+      name: Target SOC
+      description: Mål-SoC för EV %
       example: 80
+      required: false
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
+          mode: box
 
-energy_dispatcher.ev_force_charge:
-  name: EV Force Charge
+ev_force_charge:
+  name: EV force charge
+  description: Starta EV-laddning en tid med visst strömvärde
   fields:
     duration:
+      name: Duration (minuter)
       example: 60
+      required: false
       selector:
         number:
-          min: 5
-          max: 180
-          unit_of_measurement: min
+          min: 1
+          max: 480
+          unit_of_measurement: "min"
     current:
+      name: Laddström (A)
       example: 16
+      required: false
       selector:
         number:
           min: 6
-          max: 16
-          unit_of_measurement: A
+          max: 32
+          unit_of_measurement: "A"
 
-energy_dispatcher.ev_pause:
-  name: EV Pause
+ev_pause:
+  name: EV pause
+  description: Pausa EV-laddning i angivet antal minuter
   fields:
     duration:
+      name: Duration (minuter)
       example: 30
+      required: false
       selector:
         number:
-          min: 5
-          max: 180
-          unit_of_measurement: min
+          min: 1
+          max: 240
+          unit_of_measurement: "min"
 
-energy_dispatcher.force_battery_charge:
-  name: Battery Force Charge
+force_battery_charge:
+  name: Force battery charge
+  description: Ladda batteriet med angiven effekt om adapter stödjer det
   fields:
     power_w:
+      name: Effekt (W)
       example: 10000
+      required: false
       selector:
         number:
-          min: 1000
+          min: 500
           max: 20000
-          unit_of_measurement: W
+          unit_of_measurement: "W"
     duration:
-      example: 90
+      name: Duration (minuter)
+      example: 60
+      required: false
       selector:
         number:
-          min: 5
-          max: 240
-          unit_of_measurement: min
+          min: 1
+          max: 480
+          unit_of_measurement: "min"
