@@ -45,3 +45,7 @@ CONF_FS_LAT = "fs_lat"
 CONF_FS_LON = "fs_lon"
 CONF_FS_PLANES = "fs_planes"
 CONF_FS_HORIZON = "fs_horizon"
+
+# NYTT: faktiska produktionssensorer (frivilliga)
+CONF_PV_POWER_ENTITY = "pv_power_entity"               # t.ex. sensor.inverter_pv_power (W eller kW)
+CONF_PV_ENERGY_TODAY_ENTITY = "pv_energy_today_entity" # t.ex. sensor.pv_energy_today (Wh eller kWh)
