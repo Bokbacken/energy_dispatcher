@@ -18,11 +18,17 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         EnrichedPriceSensor(coordinator, entry.entry_id),
         BatteryRuntimeSensor(coordinator, entry.entry_id),
         BatteryCostSensor(coordinator, entry.entry_id),
+        BatteryVsGridDeltaSensor(coordinator, entry.entry_id),
         SolarPowerNowSensor(coordinator, entry.entry_id),
         SolarEnergyTodaySensor(coordinator, entry.entry_id),
         SolarEnergyTomorrowSensor(coordinator, entry.entry_id),
         PVPowerNowSensor(coordinator, entry.entry_id),
         PVEnergyTodaySensor(coordinator, entry.entry_id),
+        SolarDelta15mSensor(coordinator, entry.entry_id),
+        EVTimeUntilChargeSensor(coordinator, entry.entry_id),
+        EVChargeReasonSensor(coordinator, entry.entry_id),
+        BattTimeUntilChargeSensor(coordinator, entry.entry_id),
+        BattChargeReasonSensor(coordinator, entry.entry_id),
     ]
     async_add_entities(entities)
 
@@ -65,7 +71,10 @@ class EnrichedPriceSensor(BaseEDSensor):
             }
             for p in hourly
         ]
-        return {"hourly": out}
+        return {
+            "hourly": out,
+            "cheap_threshold": self.coordinator.data.get("cheap_threshold"),
+        }
 
 
 class BatteryRuntimeSensor(BaseEDSensor):
@@ -95,6 +104,28 @@ class BatteryCostSensor(BaseEDSensor):
     def native_value(self) -> float:
         store = self.coordinator.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
         return float(store.get("wace", 0.0))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        store = self.coordinator.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        return {
+            "total_energy_kwh": float(store.get("wace_tot_energy_kwh", 0.0)),
+            "total_cost_sek": float(store.get("wace_tot_cost_sek", 0.0)),
+        }
+
+
+class BatteryVsGridDeltaSensor(BaseEDSensor):
+    _attr_name = "Battery vs Grid Price Delta"
+    _attr_native_unit_of_measurement = "SEK/kWh"
+    _attr_icon = "mdi:scale-balance"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_batt_vs_grid_delta_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("grid_vs_batt_delta_sek_per_kwh")
 
 
 class SolarPowerNowSensor(BaseEDSensor):
@@ -180,3 +211,83 @@ class PVEnergyTodaySensor(BaseEDSensor):
     @property
     def native_value(self):
         return self.coordinator.data.get("pv_today_kwh")
+
+
+class SolarDelta15mSensor(BaseEDSensor):
+    _attr_name = "Solar Forecast Delta 15m"
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:chart-line"
+    _attr_state_class = "measurement"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_solar_delta_15m_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("solar_delta_15m_w")
+
+    @property
+    def extra_state_attributes(self):
+        return {"percent_of_forecast": self.coordinator.data.get("solar_delta_15m_pct")}
+
+
+class EVTimeUntilChargeSensor(BaseEDSensor):
+    _attr_name = "EV Time Until Charge"
+    _attr_native_unit_of_measurement = "min"
+    _attr_icon = "mdi:clock-start"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_ev_time_until_charge_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("time_until_charge_ev_min")
+
+
+class EVChargeReasonSensor(BaseEDSensor):
+    _attr_name = "EV Charge Reason"
+    _attr_icon = "mdi:information-outline"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_ev_charge_reason_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("auto_ev_reason")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "setpoint_a": self.coordinator.data.get("auto_ev_setpoint_a"),
+            "cheap_threshold": self.coordinator.data.get("cheap_threshold"),
+        }
+
+
+class BattTimeUntilChargeSensor(BaseEDSensor):
+    _attr_name = "Battery Time Until Charge"
+    _attr_native_unit_of_measurement = "min"
+    _attr_icon = "mdi:clock-start"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_batt_time_until_charge_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("time_until_charge_batt_min")
+
+
+class BattChargeReasonSensor(BaseEDSensor):
+    _attr_name = "Battery Charge Reason"
+    _attr_icon = "mdi:information-outline"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_batt_charge_reason_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("batt_charge_reason")
