@@ -1,49 +1,66 @@
-"""Switch-entity för att toggla auto-dispatch."""
 from __future__ import annotations
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.core import HomeAssistant
 
-from .const import CONF_ENABLE_AUTO_DISPATCH, DOMAIN
-from .coordinator import EnergyDispatcherCoordinator
-
-
-async def async_setup_entry(hass, entry, async_add_entities):
-    runtime = hass.data[DOMAIN][entry.entry_id]
-    coordinator: EnergyDispatcherCoordinator = runtime.coordinator
-    async_add_entities(
-        [AutoDispatchSwitch(coordinator, entry.entry_id)],
-        update_before_add=True,
-    )
+from .const import DOMAIN
 
 
-class AutoDispatchSwitch(CoordinatorEntity[EnergyDispatcherCoordinator], SwitchEntity):
-    _attr_has_entity_name = True
-    _attr_name = "Auto dispatch"
+async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
+    st = hass.data[DOMAIN][entry.entry_id]
+    flags = st["flags"]
+    async_add_entities([
+        AutoEVSwitch(hass, entry.entry_id, flags),
+        AutoPlannerSwitch(hass, entry.entry_id, flags),
+    ])
 
-    def __init__(self, coordinator: EnergyDispatcherCoordinator, entry_id: str) -> None:
-        super().__init__(coordinator)
+
+class BaseEDSwitch(SwitchEntity):
+    def __init__(self, hass: HomeAssistant, entry_id: str, flags: dict):
+        self.hass = hass
         self._entry_id = entry_id
+        self._flags = flags
 
     @property
-    def unique_id(self):
-        return f"{self._entry_id}_auto_dispatch"
+    def device_info(self):
+        return {"identifiers": {(DOMAIN, "energy_dispatcher")}}
+
+
+class AutoEVSwitch(BaseEDSwitch):
+    @property
+    def name(self): return "Energy Dispatcher - Auto EV"
 
     @property
-    def is_on(self):
-        return self.coordinator.config.auto_dispatch
+    def unique_id(self): return f"{DOMAIN}_switch_auto_ev_{self._entry_id}"
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self._flags.get("auto_ev_enabled", True))
 
     async def async_turn_on(self, **kwargs):
-        await self._set_auto_dispatch(True)
+        self._flags["auto_ev_enabled"] = True
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs):
-        await self._set_auto_dispatch(False)
+        self._flags["auto_ev_enabled"] = False
+        self.async_write_ha_state()
 
-    async def _set_auto_dispatch(self, value: bool):
-        # Uppdatera options
-        options = dict(self.coordinator.entry.options)
-        options[CONF_ENABLE_AUTO_DISPATCH] = value
-        self.coordinator.hass.config_entries.async_update_entry(
-            self.coordinator.entry, options=options
-        )
-        await self.coordinator.async_request_refresh()
+
+class AutoPlannerSwitch(BaseEDSwitch):
+    @property
+    def name(self): return "Energy Dispatcher - Auto Planner"
+
+    @property
+    def unique_id(self): return f"{DOMAIN}_switch_auto_planner_{self._entry_id}"
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self._flags.get("auto_planner_enabled", True))
+
+    async def async_turn_on(self, **kwargs):
+        self._flags["auto_planner_enabled"] = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs):
+        self._flags["auto_planner_enabled"] = False
+        self.async_write_ha_state()
