@@ -1,5 +1,5 @@
 """
-Energy Dispatcher - __init__.py (uppdaterad)
+Energy Dispatcher - __init__.py
 
 Initierar integrationen, registrerar tjänster och event-lyssnare,
 sätter upp adapters, dispatcher och koordinatorn.
@@ -45,9 +45,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-# ... (imports of unchanged sections above)
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    # Grundstruktur i hass.data
     hass.data.setdefault(DOMAIN, {})
     store = hass.data[DOMAIN].setdefault(
         entry.entry_id,
@@ -58,10 +57,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         },
     )
 
-    # Uppdateras när options ändras
+    # Uppdatera config automatiskt när options ändras
     async def _update_listener(hass: HomeAssistant, updated_entry: ConfigEntry):
         st = hass.data[DOMAIN].get(updated_entry.entry_id)
-        if st:
+        if st is not None:
             st["config"] = {**updated_entry.data, **updated_entry.options}
             coord = st.get("coordinator")
             if coord:
@@ -69,60 +68,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.async_on_unload(entry.add_update_listener(_update_listener))
 
+    # Koordinator – utan config-argument
     coordinator = EnergyDispatcherCoordinator(hass)
     coordinator.entry_id = entry.entry_id
     store["coordinator"] = coordinator
     await coordinator.async_config_entry_first_refresh()
 
-    # ...resten av din setup (adapters, dispatcher, services, forward_entry_setups) oförändrat...
-    # 1) Koordinator – utan config-argument
-    coordinator = EnergyDispatcherCoordinator(hass)
-    coordinator.entry_id = entry.entry_id
-    store["coordinator"] = coordinator
-    await coordinator.async_config_entry_first_refresh()
-
-    # 2) Batteri-adapter (Huawei i MVP)
+    # Batteri-adapter (Huawei i MVP)
     battery_adapter: Optional[BatteryAdapter] = None
-    batt_adapter_type = entry.data.get(CONF_BATT_ADAPTER, "huawei")
+    batt_adapter_type = store["config"].get(CONF_BATT_ADAPTER, "huawei")
     if batt_adapter_type == "huawei":
-        device_id = entry.data.get(CONF_HUAWEI_DEVICE_ID)
+        device_id = store["config"].get(CONF_HUAWEI_DEVICE_ID)
         if not device_id:
             _LOGGER.warning("Huawei device_id saknas; forced charge fungerar ej.")
         battery_adapter = HuaweiBatteryAdapter(hass, device_id=device_id or "")
 
-    # 3) EVSE-adapter (generisk: start/stop-switch + current number)
+    # EVSE-adapter (generisk: start/stop-switch + current number)
     evse_adapter: Optional[EVSEAdapter] = None
-    start_sw = entry.data.get(CONF_EVSE_START_SWITCH)
-    stop_sw = entry.data.get(CONF_EVSE_STOP_SWITCH)
-    num_current = entry.data.get(CONF_EVSE_CURRENT_NUMBER)
+    start_sw = store["config"].get(CONF_EVSE_START_SWITCH)
+    stop_sw = store["config"].get(CONF_EVSE_STOP_SWITCH)
+    num_current = store["config"].get(CONF_EVSE_CURRENT_NUMBER)
     if start_sw and stop_sw and num_current:
         evse_adapter = GenericEVSEAdapter(
             hass,
             start_switch=start_sw,
             stop_switch=stop_sw,
             current_number=num_current,
-            min_a=int(entry.data.get(CONF_EVSE_MIN_A, 6)),
-            max_a=int(entry.data.get(CONF_EVSE_MAX_A, 16)),
+            min_a=int(store["config"].get(CONF_EVSE_MIN_A, 6)),
+            max_a=int(store["config"].get(CONF_EVSE_MAX_A, 16)),
         )
     else:
-        _LOGGER.warning("EVSE-entities ej konfigurerade; EV-styrning avaktiverad i MVP.")
+        _LOGGER.info("EVSE-entities ej konfigurerade; EV-styrning avaktiverad i MVP.")
 
-    # 4) EV manual
+    # EV manual
     ev_manual = None
-    if entry.data.get(CONF_EV_MODE, "manual") == "manual":
+    if store["config"].get(CONF_EV_MODE, "manual") == "manual":
         ev_manual = EVManualAdapter(
-            ev_batt_kwh=float(entry.data.get(CONF_EV_BATT_KWH, 75.0)),
-            ev_current_soc=float(entry.data.get(CONF_EV_CURRENT_SOC, 40.0)),
-            ev_target_soc=float(entry.data.get(CONF_EV_TARGET_SOC, 80.0)),
-            phases=int(entry.data.get(CONF_EVSE_PHASES, 3)),
-            voltage=int(entry.data.get(CONF_EVSE_VOLTAGE, 230)),
-            max_a=int(entry.data.get(CONF_EVSE_MAX_A, 16)),
+            ev_batt_kwh=float(store["config"].get(CONF_EV_BATT_KWH, 75.0)),
+            ev_current_soc=float(store["config"].get(CONF_EV_CURRENT_SOC, 40.0)),
+            ev_target_soc=float(store["config"].get(CONF_EV_TARGET_SOC, 80.0)),
+            phases=int(store["config"].get(CONF_EVSE_PHASES, 3)),
+            voltage=int(store["config"].get(CONF_EVSE_VOLTAGE, 230)),
+            max_a=int(store["config"].get(CONF_EVSE_MAX_A, 16)),
         )
 
-    # 5) Dispatcher
+    # Dispatcher
     dispatcher = Dispatcher(hass, battery=battery_adapter, evse=evse_adapter)
 
-    # 6) Uppdatera store med referenser (utan att skriva över hela dict:en)
+    # Uppdatera store
     store.update(
         {
             "battery": battery_adapter,
@@ -132,7 +125,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         }
     )
 
-    # 7) Override-event
+    # Override-event
     @callback
     def _on_override_event(event):
         data = event.data
@@ -153,7 +146,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.bus.async_listen("energy_dispatcher/override", _on_override_event)
 
-    # 8) Services
+    # Services
     async def _svc_set_manual_ev(call):
         soc_current = float(call.data.get("soc_current", 40))
         soc_target = float(call.data.get("soc_target", 80))
@@ -208,7 +201,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.services.async_register(DOMAIN, "force_battery_charge", _svc_force_battery_charge)
 
-    # 9) Ladda plattformar
+    # Ladda plattformar
     await hass.config_entries.async_forward_entry_setups(
         entry, [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON]
     )
