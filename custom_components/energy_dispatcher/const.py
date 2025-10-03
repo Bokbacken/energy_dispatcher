@@ -1,75 +1,47 @@
-"""Konstanter och nycklar som används i Energy Dispatcher."""
-from __future__ import annotations
+DOMAIN = "energy_dispatcher"
+PLATFORMS = ["sensor", "switch", "button"]
 
-from datetime import timedelta
-from typing import Final
+CONF_NORDPOOL_ENTITY = "nordpool_entity"
+CONF_PRICE_TAX = "price_tax"           # kr/kWh
+CONF_PRICE_TRANSFER = "price_transfer" # kr/kWh
+CONF_PRICE_SURCHARGE = "price_surcharge"  # kr/kWh (alt %: se TODO)
+CONF_PRICE_VAT = "price_vat"           # 0.25 e.g.
+CONF_PRICE_FIXED_MONTHLY = "price_fixed_monthly"  # kr/mån
+CONF_PRICE_INCLUDE_FIXED = "price_include_fixed"
 
-from homeassistant.const import Platform
+CONF_HOUSE_CONS_SENSOR = "house_avg_consumption_entity"  # kWh/h
 
-DOMAIN: Final = "energy_dispatcher"
-NAME: Final = "Energy Dispatcher"
+# Forecast.solar
+CONF_FS_USE = "fs_use"
+CONF_FS_APIKEY = "fs_apikey"
+CONF_FS_LAT = "fs_lat"
+CONF_FS_LON = "fs_lon"
+CONF_FS_PLANES = "fs_planes"  # list of dicts: {dec, az, kwp}
+CONF_FS_HORIZON = "fs_horizon"  # optional CSV numbers
 
-PLATFORMS: Final[list[Platform]] = [
-    Platform.SENSOR,
-    Platform.SWITCH,
-    Platform.BUTTON,
-]
+# Battery
+CONF_BATT_CAP_KWH = "batt_capacity_kwh"
+CONF_BATT_SOC_ENTITY = "batt_soc_entity"
+CONF_BATT_MAX_CHARGE_W = "batt_max_charge_w"
+CONF_BATT_MAX_DISCH_W = "batt_max_discharge_w"
+CONF_BATT_ADAPTER = "batt_adapter"
+CONF_HUAWEI_DEVICE_ID = "huawei_device_id"
 
-# Standardintervall för uppdateringar om inget annat anges i options.
-DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=5)
+# EV/EVSE
+CONF_EV_MODE = "ev_mode"  # "manual" | "integration"
+CONF_EV_TARGET_SOC = "ev_target_soc"
+CONF_EV_CURRENT_SOC = "ev_current_soc"
+CONF_EV_BATT_KWH = "ev_batt_kwh"
+CONF_EV_DEADLINE = "ev_deadline"  # e.g. "07:00"
+CONF_EVSE_START_SWITCH = "evse_start_switch"
+CONF_EVSE_STOP_SWITCH = "evse_stop_switch"
+CONF_EVSE_CURRENT_NUMBER = "evse_current_number"
+CONF_EVSE_MIN_A = "evse_min_a"
+CONF_EVSE_MAX_A = "evse_max_a"
+CONF_EVSE_PHASES = "evse_phases"
+CONF_EVSE_VOLTAGE = "evse_voltage"
 
-# Konfigurationsnycklar (config_flow, config entry data/options).
-CONF_FORECAST_API_KEY: Final = "forecast_api_key"
-CONF_FORECAST_LAT: Final = "forecast_lat"
-CONF_FORECAST_LON: Final = "forecast_lon"
-CONF_FORECAST_HORIZON: Final = "forecast_horizon"
-CONF_PV_ARRAYS: Final = "pv_arrays"
+# Coordinator intervals (seconds)
+DEFAULT_UPDATE_INTERVAL = 300
 
-CONF_PRICE_AREA: Final = "price_area"
-CONF_PRICE_CURRENCY: Final = "price_currency"
-CONF_PRICE_API_TOKEN: Final = "price_api_token"
-CONF_PRICE_SENSOR: Final = "price_sensor_entity_id"
-
-CONF_BATTERY_SETTINGS: Final = "battery_settings"
-CONF_EV_SETTINGS: Final = "ev_settings"
-CONF_HOUSE_SETTINGS: Final = "house_settings"
-
-CONF_ENABLE_AUTO_DISPATCH: Final = "enable_auto_dispatch"
-CONF_SCAN_INTERVAL: Final = "scan_interval_seconds"
-
-# Attributnycklar.
-ATTR_PLAN: Final = "plan"
-ATTR_SOLAR_FORECAST: Final = "solar_forecast"
-ATTR_PRICE_SCHEDULE: Final = "price_schedule"
-ATTR_BATTERY_STATE: Final = "battery_state"
-ATTR_EV_STATE: Final = "ev_state"
-ATTR_HOUSE_STATE: Final = "house_state"
-ATTR_GENERATION_TIMESTAMP: Final = "generated_at"
-
-# Service-namn.
-SERVICE_FORCE_CHARGE: Final = "force_charge_battery"
-SERVICE_FORCE_DISCHARGE: Final = "force_discharge_battery"
-SERVICE_PAUSE_EV_CHARGING: Final = "pause_ev_charging"
-SERVICE_RESUME_EV_CHARGING: Final = "resume_ev_charging"
-SERVICE_SET_MANUAL_EV_SOC: Final = "set_manual_ev_soc"
-SERVICE_OVERRIDE_PLAN: Final = "override_plan"
-
-# Hemsnickrade konstanter för adapter-typer.
-BATTERY_ADAPTER_HUAWEI: Final = "huawei"
-BATTERY_ADAPTER_ENTITY: Final = "entity"
-
-EV_ADAPTER_MANUAL: Final = "manual"
-EV_ADAPTER_GENERIC_EVSE: Final = "generic_evse"
-
-# Metadata för storage.
-STORAGE_VERSION: Final = 1
-STORAGE_KEY_TEMPLATE: Final = "energy_dispatcher_{entry_id}"
-
-# Övriga gränsvärden.
-MIN_SOC_DEFAULT: Final = 0.1
-MAX_SOC_DEFAULT: Final = 0.95
-DEFAULT_EV_TARGET_SOC: Final = 0.8
-
-# Planner-konstanter.
-LOW_PRICE_THRESHOLD_FACTOR: Final = 0.85
-HIGH_PRICE_THRESHOLD_FACTOR: Final = 1.15
+ATTR_PLAN = "plan"
