@@ -338,8 +338,18 @@ class BattChargeReasonSensor(BaseEDSensor):
     def native_value(self):
         return self.coordinator.data.get("batt_charge_reason")
 
-# ====== NYA PLANERINGSSENSORER (v0.5.4) ======
-class _BasePlanSensor(CoordinatorEntity, SensorEntity):
+# ====== v0.5.4: PLANERING + DIAGNOSTIK ======
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from .const import (
+    DOMAIN, STORE_MANUAL,
+    M_EV_BATT_KWH, M_EV_CURRENT_SOC, M_EV_TARGET_SOC,
+    M_HOME_BATT_CAP_KWH, M_HOME_BATT_SOC_FLOOR,
+    M_EVSE_MAX_A, M_EVSE_PHASES, M_EVSE_VOLTAGE,
+)
+
+class _BasePlan(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, entry_id: str, name: str, unit: str | None = None, icon: str | None = None):
         super().__init__(coordinator)
         self._entry_id = entry_id
@@ -349,7 +359,7 @@ class _BasePlanSensor(CoordinatorEntity, SensorEntity):
             self._attr_icon = icon
 
     @property
-    def device_info(self):
+    def device_info(self) -> DeviceInfo:
         return DeviceInfo(identifiers={(DOMAIN, "energy_dispatcher")}, name="Energy Dispatcher", manufacturer="Bokbacken")
 
     def _m(self, key: str, default: float) -> float:
@@ -357,7 +367,6 @@ class _BasePlanSensor(CoordinatorEntity, SensorEntity):
         return float(st.get(STORE_MANUAL, {}).get(key, default))
 
     def _pv_now_w(self) -> float:
-        # använd faktisk PV om finns, annars prognos
         pv = self.coordinator.data.get("pv_now_w")
         if pv is None:
             pv = self.coordinator.data.get("solar_now_w") or 0.0
@@ -366,14 +375,11 @@ class _BasePlanSensor(CoordinatorEntity, SensorEntity):
     def _house_w(self) -> float:
         return float(self.coordinator.data.get("house_baseline_w") or 0.0)
 
-
-class EVEnergyNeedSensor(_BasePlanSensor):
+class EVEnergyNeedSensor(_BasePlan):
     _attr_icon = "mdi:battery-clock"
-
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_ev_need_kwh_{self._entry_id}"
-
     @property
     def native_value(self):
         cap = self._m(M_EV_BATT_KWH, 75.0)
@@ -382,29 +388,23 @@ class EVEnergyNeedSensor(_BasePlanSensor):
         need = max(0.0, (tgt - cur) * cap)
         return round(need, 2)
 
-
-class PVSurplusNowSensor(_BasePlanSensor):
+class PVSurplusNowSensor(_BasePlan):
     _attr_icon = "mdi:solar-power"
     _attr_native_unit_of_measurement = "kW"
-
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_pv_surplus_kw_{self._entry_id}"
-
     @property
     def native_value(self):
         surplus_w = max(0.0, self._pv_now_w() - self._house_w())
         return round(surplus_w / 1000.0, 2)
 
-
-class EVChargeTimePVOnlySensor(_BasePlanSensor):
+class EVChargeTimePVOnlySensor(_BasePlan):
     _attr_icon = "mdi:timer-outline"
     _attr_native_unit_of_measurement = "h"
-
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_ev_time_pv_only_h_{self._entry_id}"
-
     @property
     def native_value(self):
         need = EVEnergyNeedSensor(self.coordinator, self._entry_id, "tmp").native_value or 0.0
@@ -418,15 +418,12 @@ class EVChargeTimePVOnlySensor(_BasePlanSensor):
             return round(need / eff_kw, 2)
         return None
 
-
-class HomeBattAvailableSensor(_BasePlanSensor):
+class HomeBattAvailableSensor(_BasePlan):
     _attr_icon = "mdi:battery-home"
     _attr_native_unit_of_measurement = "kWh"
-
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_home_batt_avail_kwh_{self._entry_id}"
-
     @property
     def native_value(self):
         cap = self._m(M_HOME_BATT_CAP_KWH, 30.0)
@@ -439,15 +436,12 @@ class HomeBattAvailableSensor(_BasePlanSensor):
         usable = max(0.0, (soc - floor) / 100.0)
         return round(max(0.0, usable * cap), 2)
 
-
-class BattNeededTo80Sensor(_BasePlanSensor):
+class BattNeededTo80Sensor(_BasePlan):
     _attr_icon = "mdi:battery-80"
     _attr_native_unit_of_measurement = "kWh"
-
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_batt_needed_80_kwh_{self._entry_id}"
-
     @property
     def native_value(self):
         cap = self._m(M_EV_BATT_KWH, 75.0)
@@ -456,15 +450,12 @@ class BattNeededTo80Sensor(_BasePlanSensor):
         avail = HomeBattAvailableSensor(self.coordinator, self._entry_id, "tmp").native_value or 0.0
         return round(min(need, float(avail)), 2)
 
-
-class BattNeededTo100Sensor(_BasePlanSensor):
+class BattNeededTo100Sensor(_BasePlan):
     _attr_icon = "mdi:battery"
     _attr_native_unit_of_measurement = "kWh"
-
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_batt_needed_100_kwh_{self._entry_id}"
-
     @property
     def native_value(self):
         cap = self._m(M_EV_BATT_KWH, 75.0)
@@ -473,12 +464,24 @@ class BattNeededTo100Sensor(_BasePlanSensor):
         avail = HomeBattAvailableSensor(self.coordinator, self._entry_id, "tmp").native_value or 0.0
         return round(min(need, float(avail)), 2)
 
+class EDDiagnosticsSensor(CoordinatorEntity, SensorEntity):
+    _attr_icon = "mdi:information-outline"
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_diagnostics_{self.coordinator.entry_id}"
+    @property
+    def name(self) -> str:
+        return "ED Diagnostics"
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("diag_status", "ok")
+    @property
+    def extra_state_attributes(self):
+        return self.coordinator.data.get("diag_attrs", {})
 
-# Registrera de nya planeringssensorerna i setup
-async def async_setup_entry(hass, entry, async_add_entities):  # type: ignore[override]
+async def async_setup_entry(hass, entry, async_add_entities):
     st = hass.data[DOMAIN][entry.entry_id]
     coordinator = st["coordinator"]
-
     new_entities = [
         EVEnergyNeedSensor(coordinator, entry.entry_id, "EV Energibehov (till mål)", "kWh", "mdi:battery-clock"),
         PVSurplusNowSensor(coordinator, entry.entry_id, "PV-överskott nu", "kW", "mdi:solar-power"),
@@ -486,6 +489,6 @@ async def async_setup_entry(hass, entry, async_add_entities):  # type: ignore[ov
         HomeBattAvailableSensor(coordinator, entry.entry_id, "Hemmabatteri energi tillgänglig", "kWh", "mdi:battery-home"),
         BattNeededTo80Sensor(coordinator, entry.entry_id, "Batterienergi som krävs till 80%", "kWh", "mdi:battery-80"),
         BattNeededTo100Sensor(coordinator, entry.entry_id, "Batterienergi som krävs till 100%", "kWh", "mdi:battery"),
+        EDDiagnosticsSensor(coordinator),
     ]
-    # Lägg även till dina existerande sensorer här om du ersätter hela filen.
     async_add_entities(new_entities, True)
