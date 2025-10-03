@@ -8,20 +8,40 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, CONF_NORDPOOL_ENTITY, CONF_PRICE_TAX, CONF_PRICE_TRANSFER, CONF_PRICE_SURCHARGE, CONF_PRICE_VAT, CONF_PRICE_FIXED_MONTHLY, CONF_PRICE_INCLUDE_FIXED, CONF_BATT_CAP_KWH, CONF_BATT_SOC_ENTITY, CONF_HOUSE_CONS_SENSOR
+from .const import (
+    DOMAIN,
+    CONF_NORDPOOL_ENTITY,
+    CONF_PRICE_TAX,
+    CONF_PRICE_TRANSFER,
+    CONF_PRICE_SURCHARGE,
+    CONF_PRICE_VAT,
+    CONF_PRICE_FIXED_MONTHLY,
+    CONF_PRICE_INCLUDE_FIXED,
+    CONF_BATT_CAP_KWH,
+    CONF_BATT_SOC_ENTITY,
+    CONF_HOUSE_CONS_SENSOR,
+    # Forecast.Solar-konfig
+    CONF_FS_USE,
+    CONF_FS_APIKEY,
+    CONF_FS_LAT,
+    CONF_FS_LON,
+    CONF_FS_PLANES,
+    CONF_FS_HORIZON,
+)
 from .models import PricePoint
 from .price_provider import PriceProvider, PriceFees
+from .forecast_provider import ForecastSolarProvider
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class EnergyDispatcherCoordinator(DataUpdateCoordinator):
     """
-    Hämtar och sammanställer:
+    Samlar:
     - Timvisa priser (spot + enriched)
-    - Aktuellt berikat pris (just nu)
-    - Batteriets driftstid (h) givet husets snittförbrukning
-    - (Plats för WACE m.m. i framtida uppdateringar)
+    - Aktuellt berikat pris
+    - Batteriets uppskattade driftstid
+    - Solprognos (nu, idag, imorgon)
     """
 
     def __init__(self, hass: HomeAssistant):
@@ -36,19 +56,24 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             "hourly_prices": [],            # List[PricePoint]
             "current_enriched": None,       # float
             "battery_runtime_h": None,      # float
+            "solar_points": [],             # List[ForecastPoint]
+            "solar_now_w": None,            # float
+            "solar_today_kwh": None,        # float
+            "solar_tomorrow_kwh": None,     # float
         }
 
-    def _get_cfg(self, key: str, default=None):
+    def _get_store(self) -> Dict[str, Any]:
         if not self.entry_id:
-            return default
-        store = self.hass.data.get(DOMAIN, {}).get(self.entry_id, {})
+            return {}
+        return self.hass.data.get(DOMAIN, {}).get(self.entry_id, {})
+
+    def _get_cfg(self, key: str, default=None):
+        store = self._get_store()
         cfg = store.get("config", {})
         return cfg.get(key, default)
 
     def _get_flag(self, key: str, default=None):
-        if not self.entry_id:
-            return default
-        store = self.hass.data.get(DOMAIN, {}).get(self.entry_id, {})
+        store = self._get_store()
         flags = store.get("flags", {})
         return flags.get(key, default)
 
@@ -56,6 +81,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         try:
             await self._update_prices()
             await self._update_battery_runtime()
+            await self._update_solar()
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Uppdatering misslyckades")
         return self.data
@@ -65,6 +91,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         if not nordpool_entity:
             self.data["hourly_prices"] = []
             self.data["current_enriched"] = None
+            _LOGGER.debug("Ingen Nordpool-entity konfigurerad")
             return
 
         fees = PriceFees(
@@ -80,6 +107,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         hourly: List[PricePoint] = provider.get_hourly_prices()
         self.data["hourly_prices"] = hourly
         self.data["current_enriched"] = provider.get_current_enriched(hourly)
+        _LOGGER.debug("Priser uppdaterade: %s rader, current_enriched=%s",
+                      len(hourly), self.data["current_enriched"])
 
     async def _update_battery_runtime(self):
         batt_cap = float(self._get_cfg(CONF_BATT_CAP_KWH, 0.0))
@@ -115,4 +144,63 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         else:
             runtime_h = None
 
-        self.data["battery_runtime_h"] = None if runtime_h is None else round(runtime_h, 2)
+        val = None if runtime_h is None else round(runtime_h, 2)
+        self.data["battery_runtime_h"] = val
+        _LOGGER.debug("Battery runtime estimate: %s h (SOC=%s%%, cap=%s kWh, avg=%s kWh/h)",
+                      val, soc, batt_cap, avg_kwh_per_h)
+
+    def _trapz_kwh(self, points):
+        # Trapezoidregel, kWh (points: list med .time och .watts)
+        if not points or len(points) < 2:
+            return 0.0
+        pts = sorted(points, key=lambda p: p.time)
+        energy_wh = 0.0
+        for a, b in zip(pts, pts[1:]):
+            dt_h = (b.time - a.time).total_seconds() / 3600.0
+            w_avg = (a.watts + b.watts) / 2.0
+            energy_wh += w_avg * dt_h
+        return round(energy_wh / 1000.0, 3)
+
+    async def _update_solar(self):
+        use = bool(self._get_cfg(CONF_FS_USE, True))
+        if not use:
+            self.data.update({
+                "solar_points": [],
+                "solar_now_w": None,
+                "solar_today_kwh": None,
+                "solar_tomorrow_kwh": None,
+            })
+            _LOGGER.debug("Forecast.Solar avstängt (fs_use=False)")
+            return
+
+        apikey = self._get_cfg(CONF_FS_APIKEY, "")
+        lat = float(self._get_cfg(CONF_FS_LAT, 0.0))
+        lon = float(self._get_cfg(CONF_FS_LON, 0.0))
+        planes = self._get_cfg(CONF_FS_PLANES, "[]")
+        horizon = self._get_cfg(CONF_FS_HORIZON, "")
+
+        provider = ForecastSolarProvider(
+            self.hass, lat=lat, lon=lon, planes_json=planes, apikey=apikey, horizon_csv=horizon
+        )
+        pts = await provider.async_fetch_watts()
+        self.data["solar_points"] = pts
+
+        now = dt_util.now().replace(second=0, microsecond=0)
+        if pts:
+            nearest = min(pts, key=lambda p: abs((p.time - now).total_seconds()))
+            self.data["solar_now_w"] = round(nearest.watts, 1)
+        else:
+            self.data["solar_now_w"] = 0.0
+
+        today = now.date()
+        tomorrow = (now + timedelta(days=1)).date()
+        today_pts = [p for p in pts if p.time.date() == today]
+        tomo_pts = [p for p in pts if p.time.date() == tomorrow]
+
+        self.data["solar_today_kwh"] = self._trapz_kwh(today_pts) if today_pts else 0.0
+        self.data["solar_tomorrow_kwh"] = self._trapz_kwh(tomo_pts) if tomo_pts else 0.0
+
+        _LOGGER.debug(
+            "Forecast.Solar: points=%s, now=%s W, today=%s kWh, tomorrow=%s kWh",
+            len(pts), self.data["solar_now_w"], self.data["solar_today_kwh"], self.data["solar_tomorrow_kwh"]
+        )
