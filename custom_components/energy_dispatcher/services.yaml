@@ -1,88 +1,64 @@
-force_charge_battery:
-  name: Force battery charge
-  description: Tvinga batteriet att ladda en viss tid.
+energy_dispatcher.set_manual_ev:
+  name: Set Manual EV SOC and Target
   fields:
-    duration_minutes:
-      description: Hur länge laddningen ska pågå.
-      example: 120
-      required: false
+    soc_current:
+      example: 45
       selector:
         number:
-          min: 15
-          max: 240
-          unit_of_measurement: minutes
-          mode: box
-    ampere:
-      description: Valfritt – begränsa laddströmmen.
-      required: false
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    soc_target:
+      example: 80
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+
+energy_dispatcher.ev_force_charge:
+  name: EV Force Charge
+  fields:
+    duration:
+      example: 60
+      selector:
+        number:
+          min: 5
+          max: 180
+          unit_of_measurement: min
+    current:
+      example: 16
       selector:
         number:
           min: 6
-          max: 32
+          max: 16
           unit_of_measurement: A
 
-force_discharge_battery:
-  name: Force battery discharge
-  description: Tvinga batteriet att ladda ur (om stöds).
+energy_dispatcher.ev_pause:
+  name: EV Pause
   fields:
-    duration_minutes:
-      description: Hur länge urladdning ska pågå.
-      required: false
+    duration:
+      example: 30
       selector:
         number:
-          min: 15
-          max: 240
-          unit_of_measurement: minutes
+          min: 5
+          max: 180
+          unit_of_measurement: min
 
-pause_ev_charging:
-  name: Pause EV charging
-  description: Pausa elbilsladdningen.
+energy_dispatcher.force_battery_charge:
+  name: Battery Force Charge
   fields:
-    duration_minutes:
-      description: Hur länge laddningen ska pausas.
-      required: false
+    power_w:
+      example: 10000
+      selector:
+        number:
+          min: 1000
+          max: 20000
+          unit_of_measurement: W
+    duration:
+      example: 90
       selector:
         number:
           min: 5
           max: 240
-          unit_of_measurement: minutes
-
-resume_ev_charging:
-  name: Resume EV charging
-  description: Återuppta elbilsladdningen.
-
-set_manual_ev_soc:
-  name: Set manual EV SOC
-  description: Sätt manuellt SOC för EV (manual-adapter).
-  fields:
-    soc:
-      description: SOC (0-1 eller 0-100%).
-      selector:
-        number:
-          min: 0
-          max: 1
-          step: 0.01
-
-override_plan:
-  name: Override plan
-  description: Lägg till en manuell override i planeringen.
-  fields:
-    action_type:
-      selector:
-        select:
-          options:
-            - charge_ev
-            - charge_battery
-            - pause_ev
-            - resume_ev
-            - notify
-    start:
-      selector:
-        datetime:
-    end:
-      selector:
-        datetime:
-    notes:
-      selector:
-        text:
-          multiline: true
+          unit_of_measurement: min
