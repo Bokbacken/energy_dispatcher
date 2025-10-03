@@ -48,11 +48,21 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMION := DOMAIN, {})
 
-    # 1) Koordinator
-    coordinator = EnergyDispatcherCoordinator(hass)
-    coordinator.entry_id = entry.entry_id  # NOTE: set entry_id så coordinator kan läsa config och state
+    # Lägg in config och flags först
+    store = {
+        "config": dict(entry.data),
+        "flags": {"auto_ev_enabled": True, "auto_planner_enabled": True},
+        "wace": 0.0,
+    }
+    hass.data[DOMAIN][entry.entry_id] = store
+
+    # Skapa koordinator med config, sätt entry_id och kör first refresh
+    coordinator = EnergyDispatcherCoordinator(hass, config=store["config"])
+    coordinator.entry_id = entry.entry_id
+    store["coordinator"] = coordinator
     await coordinator.async_config_entry_first_refresh()
 
+    # ...därefter bygger du adapters, dispatcher osv och stoppar in i store
     # 2) Batteri-adapter
     battery_adapter: Optional[BatteryAdapter] = None
     batt_adapter_type = entry.data.get(CONF_BATT_ADAPTER, "huawei")
