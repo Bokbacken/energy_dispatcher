@@ -1,56 +1,60 @@
-### Energy Dispatcher
+# Energy Dispatcher (HACS)
 
-Energy Dispatcher är en modulär Home Assistant-integration som planerar och styr energiflöden baserat på solprognos, spotpris, batteri och elbilsladdning. Fokus ligger på att optimera för lågkostnadsperioder, nyttja solkraft och göra manuella överstyrningar enkla via dashboard.
+Ett modulärt Home Assistant-tillägg för smart styrning av batteri och EV-laddning baserat på elpris, solprognos och husets förbrukning – med tydliga over-ride-knappar.
 
-#### Funktioner
-- Hämtar solprognos direkt via Forecast.Solar med stöd för flera panelsträngar och horisont-profiler.
-- Hämtar aktuella och framtida elpriser via Nord Pool API eller befintlig Nord Pool-sensor (fallback).
-- Planerar batteriladdning/urladdning, EV-laddning och tunga hushållslaster.
-- Tjänster för att forcera laddning/urladdning av batteri, pausa/återuppta EV-laddning, sätta manuellt SOC m.m.
-- Auto-dispatch kan slås av/på via switch (till exempel för att låta familjen styra manuellt).
-- Sensorer, knappar och switchar som gör det lätt att bygga ett snyggt Lovelace-dashboard.
+## Funktioner (MVP)
+- Prisberikning: Spot (Nordpool custom) + energiskatt, överföring, påslag, moms (+ valfri fast avgift/h).
+- Battery WACE: Snittkostnad (SEK/kWh) för energin i batteriet (“price battery power”).
+- Huawei LUNA2K: Stöd för forcible_charge via adapter (grid force charge).
+- EV manual: Ange SoC current/target och få energi- och tidsestimat. Styr generisk EVSE (start/stop + 6–16A).
+- Planner: Enkel heuristik för 24–48h med billiga timmar + solprognos.
+- Over-rides: Force EV charge X min, Pause EV X min, Force battery charge X min.
 
-#### Installation via HACS
-1. Lägg koden i en GitHub-repository, t.ex. `https://github.com/dittkonto/energy_dispatcher`.
-2. I Home Assistant, gå in i HACS → Integrations → Custom repositories → lägg till URL och välj kategori `Integration`.
-3. Installera och starta om Home Assistant.
+## Installation
+- Lägg till detta repo i HACS som “Custom repository”.
+- Installera “Energy Dispatcher”.
+- Starta om Home Assistant.
 
-#### Konfiguration
-1. Gå till **Inställningar → Enheter & Tjänster → Lägg till integration**.
-2. Sök efter **Energy Dispatcher**.
-3. Följ flödet:
-   - Ange Forecast.Solar key och koordinater.
-   - Ange PV-strängar som JSON-lista (exempel visas).
-   - Ange Nord Pool area, valuta och valfritt API-token eller sensor-entity.
-   - Konfigurera batteri (Huawei eller generella entiteter).
-   - Konfigurera EV (generell EVSE eller manuell).
-   - Ange hushållssensorer och standardlaster.
-   - Ställ in uppdateringsintervall och om auto-dispatch ska vara aktiv.
+## Konfiguration
+Gå till Inställningar → Enheter & tjänster → Lägg till integration → Energy Dispatcher
 
-> **Tips:** Nord Pool API kräver åtkomst via deras dataportal. Läs mer i [API | Nord Pool](https://www.nordpoolgroup.com/en/trading/api/).
+Du kommer kunna ange:
+- Spot-priskälla (sensor.nordpool_*), avgifter/moms/fast.
+- Batteri: kapacitet, SoC-entity, max charge/discharge, Huawei device_id.
+- EV/EVSE: manuellt läge (SoC/target, batt kWh), EVSE start/stop-entities + “number” för Ampere, faser/volt.
+- Forecast: Forecast.Solar (lat/lon, plane(s), horizon); ev. API-key.
 
-#### Dashboard-exempel
-Skapa en ny Lovelace-sida (t.ex. “Energi”) och lägg till kort:
-
+## Dashboard-exempel (Mushroom)
 ```yaml
 type: vertical-stack
-title: Energiöversikt
 cards:
   - type: entities
-    title: Plan
+    title: Energi & Pris
     entities:
-      - sensor.energy_dispatcher_plan_summary
-      - sensor.energy_dispatcher_price_schedule
-      - switch.energy_dispatcher_auto_dispatch
-      - button.energy_dispatcher_force_battery_charge
-      - button.energy_dispatcher_force_battery_discharge
-  - type: history-graph
-    entities:
-      - sensor.energy_dispatcher_price_schedule
-      - sensor.energy_dispatcher_solar_forecast
-    hours_to_show: 48
-  - type: entities
-    title: Batteri & EV
-    entities:
-      - sensor.energy_dispatcher_battery_status
-      - sensor.energy_dispatcher_ev_status
+      - entity: sensor.energy_dispatcher_enriched_price
+        name: Berikat elpris (SEK/kWh)
+      - entity: sensor.energy_dispatcher_battery_cost
+        name: Batteriets snittkostnad (SEK/kWh)
+      - entity: sensor.energy_dispatcher_battery_runtime
+        name: Batteriets driftstid (h)
+
+  - type: horizontal-stack
+    cards:
+      - type: button
+        name: EV Force 60m
+        tap_action:
+          action: call-service
+          service: energy_dispatcher.ev_force_charge
+          service_data: {duration: 60, current: 16}
+      - type: button
+        name: EV Pause 30m
+        tap_action:
+          action: call-service
+          service: energy_dispatcher.ev_pause
+          service_data: {duration: 30}
+      - type: button
+        name: Batt Force 60m
+        tap_action:
+          action: call-service
+          service: energy_dispatcher.force_battery_charge
+          service_data: {power_w: 10000, duration: 60}
