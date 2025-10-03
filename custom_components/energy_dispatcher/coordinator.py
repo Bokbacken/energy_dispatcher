@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from homeassistant.core import HomeAssistant
@@ -119,6 +119,31 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         self._sf_history: List[Tuple[Any, float, float]] = []  # (ts, forecast_w, actual_w)
 
     # ---------- helpers ----------
+    def _safe_float(v, default=None):
+    try:
+        if v is None:
+            return default
+        if isinstance(v, (int, float)):
+            return float(v)
+        s = str(v).strip().replace(",", ".")
+        return float(s)
+    except Exception:
+        return default
+
+    def _as_watts(value, unit: str | None):
+        """Konvertera till W om möjligt. Om unit är kW → *1000. Saknas unit, använd heuristik."""
+        val = _safe_float(value)
+        if val is None:
+            return None
+        if unit:
+            u = unit.lower()
+            if u == "kw":
+                return val * 1000.0
+            if u in ("w", "watt"):
+                return val
+        # Heuristik: om val < 60 och inte är en hushållslast, kan det vara kW; men undvik gissning.
+        # Vi lämnar som är för att inte överkorrigera.
+        return val
     def _get_store(self) -> Dict[str, Any]:
         if not self.entry_id:
             return {}
