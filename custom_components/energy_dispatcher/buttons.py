@@ -1,70 +1,49 @@
-"""Buttons för manuella kommandon."""
-from __future__ import annotations
-
 from homeassistant.components.button import ButtonEntity
-from homeassistant.core import ServiceCall
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.core import HomeAssistant
+from datetime import datetime, timedelta
+from .const import DOMAIN
 
-from .const import DOMAIN, SERVICE_FORCE_CHARGE, SERVICE_FORCE_DISCHARGE
-from .coordinator import EnergyDispatcherCoordinator
-from .dispatcher import ActionDispatcher
+async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
+    async_add_entities([
+        ForceEV60Button(hass),
+        PauseEV30Button(hass),
+        ForceBatt60Button(hass),
+    ])
 
-
-async def async_setup_entry(hass, entry, async_add_entities):
-    runtime = hass.data[DOMAIN][entry.entry_id]
-    coordinator: EnergyDispatcherCoordinator = runtime.coordinator
-    dispatcher: ActionDispatcher = runtime.dispatcher
-
-    async_add_entities(
-        [
-            ForceChargeButton(coordinator, dispatcher, entry.entry_id),
-            ForceDischargeButton(coordinator, dispatcher, entry.entry_id),
-        ]
-    )
-
-
-class BaseActionButton(CoordinatorEntity[EnergyDispatcherCoordinator], ButtonEntity):
-    """Bas för knappar."""
-
-    _attr_has_entity_name = True
-
-    def __init__(
-        self,
-        coordinator: EnergyDispatcherCoordinator,
-        dispatcher: ActionDispatcher,
-        entry_id: str,
-    ) -> None:
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-        self._dispatcher = dispatcher
+class BaseEDButton(ButtonEntity):
+    def __init__(self, hass: HomeAssistant):
+        self.hass = hass
 
     @property
     def device_info(self):
-        config = self.coordinator.config
-        return {
-            "identifiers": {(DOMAIN, self._entry_id)},
-            "name": config.name,
-            "manufacturer": "Energy Dispatcher",
-        }
+        return {"identifiers": {(DOMAIN, "energy_dispatcher")}}
 
-
-class ForceChargeButton(BaseActionButton):
-    _attr_name = "Force battery charge"
-
+class ForceEV60Button(BaseEDButton):
     @property
-    def unique_id(self):
-        return f"{self._entry_id}_btn_force_charge"
+    def name(self): return "EV Force Charge 60m"
+    @property
+    def unique_id(self): return "ed_btn_ev_force_60"
 
     async def async_press(self):
-        await self._dispatcher.async_force_battery_charge({"duration_minutes": 60})
+        until = datetime.now() + timedelta(minutes=60)
+        self.hass.bus.async_fire("energy_dispatcher/override", {"key": "ev_force_until", "until": until.isoformat()})
 
-
-class ForceDischargeButton(BaseActionButton):
-    _attr_name = "Force battery discharge"
-
+class PauseEV30Button(BaseEDButton):
     @property
-    def unique_id(self):
-        return f"{self._entry_id}_btn_force_discharge"
+    def name(self): return "EV Pause 30m"
+    @property
+    def unique_id(self): return "ed_btn_ev_pause_30"
 
     async def async_press(self):
-        await self._dispatcher.async_force_battery_discharge({"duration_minutes": 60})
+        until = datetime.now() + timedelta(minutes=30)
+        self.hass.bus.async_fire("energy_dispatcher/override", {"key": "ev_pause_until", "until": until.isoformat()})
+
+class ForceBatt60Button(BaseEDButton):
+    @property
+    def name(self): return "Battery Force Charge 60m"
+    @property
+    def unique_id(self): return "ed_btn_batt_force_60"
+
+    async def async_press(self):
+        until = datetime.now() + timedelta(minutes=60)
+        self.hass.bus.async_fire("energy_dispatcher/override", {"key": "battery_force_until", "until": until.isoformat()})
