@@ -21,6 +21,8 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         SolarPowerNowSensor(coordinator, entry.entry_id),
         SolarEnergyTodaySensor(coordinator, entry.entry_id),
         SolarEnergyTomorrowSensor(coordinator, entry.entry_id),
+        PVPowerNowSensor(coordinator, entry.entry_id),
+        PVEnergyTodaySensor(coordinator, entry.entry_id),
     ]
     async_add_entities(entities)
 
@@ -111,7 +113,6 @@ class SolarPowerNowSensor(BaseEDSensor):
     @property
     def extra_state_attributes(self):
         pts = self.coordinator.data.get("solar_points") or []
-        # visa max ~2 dagar för att hålla attributen rimliga
         return {"points": [{"time": p.time.isoformat(), "watts": p.watts} for p in pts[:96]]}
 
 
@@ -141,3 +142,31 @@ class SolarEnergyTomorrowSensor(BaseEDSensor):
     @property
     def native_value(self):
         return self.coordinator.data.get("solar_tomorrow_kwh")
+
+
+class PVPowerNowSensor(BaseEDSensor):
+    _attr_name = "Solar Production Now"
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:solar-power"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_pv_now_w_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("pv_now_w")
+
+
+class PVEnergyTodaySensor(BaseEDSensor):
+    _attr_name = "Solar Production Today"
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_icon = "mdi:solar-power"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_pv_today_kwh_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("pv_today_kwh")
