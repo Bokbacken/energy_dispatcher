@@ -21,7 +21,7 @@ CONF_BATT_MAX_DISCH_W = "batt_max_disch_w"
 CONF_BATT_ADAPTER = "batt_adapter"
 CONF_HUAWEI_DEVICE_ID = "huawei_device_id"
 
-# Husförbrukning
+# Husförbrukning (legacy)
 CONF_HOUSE_CONS_SENSOR = "house_cons_sensor"
 
 # EV / EVSE
@@ -49,3 +49,19 @@ CONF_FS_HORIZON = "fs_horizon"
 # Faktiska produktionssensorer (frivilliga)
 CONF_PV_POWER_ENTITY = "pv_power_entity"               # W/kW/MW
 CONF_PV_ENERGY_TODAY_ENTITY = "pv_energy_today_entity" # Wh/kWh/MWh
+
+# Huslast-baseline (nytt i 0.5.2)
+CONF_RUNTIME_SOURCE = "runtime_source"  # counter_kwh | power_w | manual_dayparts
+CONF_RUNTIME_COUNTER_ENTITY = "runtime_counter_entity"  # kWh-räknare (t.ex. Consumption today)
+CONF_RUNTIME_POWER_ENTITY = "runtime_power_entity"      # W-sensor (fallback)
+CONF_RUNTIME_ALPHA = "runtime_alpha"                    # EMA vikt
+CONF_RUNTIME_WINDOW_MIN = "runtime_window_min"          # ej kritisk, reserverad
+CONF_RUNTIME_EXCLUDE_EV = "runtime_exclude_ev"
+CONF_RUNTIME_EXCLUDE_BATT_GRID = "runtime_exclude_batt_grid"
+CONF_RUNTIME_SOC_FLOOR = "runtime_soc_floor"
+CONF_RUNTIME_SOC_CEILING = "runtime_soc_ceiling"
+
+# Kontextsensors för exkludering
+CONF_LOAD_POWER_ENTITY = "load_power_entity"           # W
+CONF_BATT_POWER_ENTITY = "batt_power_entity"           # W (+/-)
+CONF_GRID_IMPORT_TODAY_ENTITY = "grid_import_today_entity"  # kWh (frivillig)
