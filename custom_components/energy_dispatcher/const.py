@@ -2,8 +2,14 @@ from homeassistant.const import Platform
 
 DOMAIN = "energy_dispatcher"
 
-# Lägg till NUMBER och SELECT
-PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON, Platform.NUMBER, Platform.SELECT]
+# Viktigt: PLATFORMS inkluderar NUMBER och SELECT i 0.5.4
+PLATFORMS = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.BUTTON,
+    Platform.NUMBER,
+    Platform.SELECT,
+]
 
 # Prisrelaterat
 CONF_NORDPOOL_ENTITY = "nordpool_entity"
@@ -22,7 +28,7 @@ CONF_BATT_MAX_DISCH_W = "batt_max_disch_w"
 CONF_BATT_ADAPTER = "batt_adapter"
 CONF_HUAWEI_DEVICE_ID = "huawei_device_id"
 
-# Husförbrukning (legacy)
+# Legacy house consumption (fallback)
 CONF_HOUSE_CONS_SENSOR = "house_cons_sensor"
 
 # EV / EVSE
@@ -52,7 +58,7 @@ CONF_PV_POWER_ENTITY = "pv_power_entity"               # W/kW/MW
 CONF_PV_ENERGY_TODAY_ENTITY = "pv_energy_today_entity" # Wh/kWh/MWh
 
 # Huslast-baseline
-CONF_RUNTIME_SOURCE = "runtime_source"  # counter_kwh | power_w | manual_dayparts
+CONF_RUNTIME_SOURCE = "runtime_source"  # power_w | counter_kwh | manual_dayparts
 CONF_RUNTIME_COUNTER_ENTITY = "runtime_counter_entity"
 CONF_RUNTIME_POWER_ENTITY = "runtime_power_entity"
 CONF_RUNTIME_ALPHA = "runtime_alpha"
@@ -63,15 +69,15 @@ CONF_RUNTIME_SOC_FLOOR = "runtime_soc_floor"
 CONF_RUNTIME_SOC_CEILING = "runtime_soc_ceiling"
 
 # Kontextsensors för exkludering
-CONF_LOAD_POWER_ENTITY = "load_power_entity"           # W
-CONF_BATT_POWER_ENTITY = "batt_power_entity"           # W (+/-)
+CONF_LOAD_POWER_ENTITY = "load_power_entity"  # W
+CONF_BATT_POWER_ENTITY = "batt_power_entity"  # W (+ ladd, - urladd)
 CONF_GRID_IMPORT_TODAY_ENTITY = "grid_import_today_entity"  # kWh (frivillig)
 
 # Internt store
-STORE_ENTITIES = "entities"  # {"ev_target_number": "number.xxx", ...}
+STORE_ENTITIES = "entities"  # {"number_ev_target_soc": "number.xxx", ...}
 STORE_MANUAL = "manual"      # manuella värden för EV/batteri/EVSE
 
-# Nycklar i STORE_MANUAL (unik nyckel → Number/Select uppdaterar/läser dessa)
+# Nycklar i STORE_MANUAL (uppdateras av Number/Select)
 M_EV_BATT_KWH = "ev_batt_kwh"
 M_EV_CURRENT_SOC = "ev_current_soc"
 M_EV_TARGET_SOC = "ev_target_soc"
@@ -81,5 +87,5 @@ M_EVSE_MAX_A = "evse_max_a"
 M_EVSE_PHASES = "evse_phases"
 M_EVSE_VOLTAGE = "evse_voltage"
 
-# Eventnamn för loggning
+# Events
 EVENT_ACTION = "energy_dispatcher.action"
