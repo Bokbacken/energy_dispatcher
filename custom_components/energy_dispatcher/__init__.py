@@ -53,7 +53,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         {
             "config": {**entry.data, **entry.options},
             "flags": {"auto_ev_enabled": True, "auto_planner_enabled": True},
+            # Battery Energy Cost (WACE)
             "wace": 0.0,
+            "wace_tot_energy_kwh": 0.0,
+            "wace_tot_cost_sek": 0.0,
         },
     )
 
@@ -68,7 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.async_on_unload(entry.add_update_listener(_update_listener))
 
-    # Koordinator – utan config-argument
+    # Koordinator
     coordinator = EnergyDispatcherCoordinator(hass)
     coordinator.entry_id = entry.entry_id
     store["coordinator"] = coordinator
@@ -200,6 +203,53 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning("Battery adapter saknas eller stödjer ej forced charge.")
 
     hass.services.async_register(DOMAIN, "force_battery_charge", _svc_force_battery_charge)
+
+    # Battery Energy Cost (manuellt tills vi har auto)
+    async def _svc_battery_cost_reset(call):
+        st = hass.data[DOMAIN][entry.entry_id]
+        st["wace"] = 0.0
+        st["wace_tot_energy_kwh"] = 0.0
+        st["wace_tot_cost_sek"] = 0.0
+        _LOGGER.info("Battery Energy Cost återställd.")
+        await coordinator.async_request_refresh()
+
+    async def _svc_battery_cost_add(call):
+        """
+        Parametrar:
+          - energy_kwh: float (krävs)
+          - price_sek_per_kwh: float (valfritt)
+          - total_cost_sek: float (valfritt om price saknas)
+        """
+        st = hass.data[DOMAIN][entry.entry_id]
+        energy_kwh = float(call.data.get("energy_kwh", 0.0))
+        price = call.data.get("price_sek_per_kwh")
+        total_cost = call.data.get("total_cost_sek")
+
+        if energy_kwh <= 0.0:
+            _LOGGER.warning("battery_cost_add: energy_kwh måste vara > 0")
+            return
+
+        if price is None and total_cost is None:
+            _LOGGER.warning("battery_cost_add: ange price_sek_per_kwh eller total_cost_sek")
+            return
+
+        if total_cost is None:
+            total_cost = float(price) * energy_kwh
+        else:
+            total_cost = float(total_cost)
+
+        st["wace_tot_energy_kwh"] = float(st.get("wace_tot_energy_kwh", 0.0)) + energy_kwh
+        st["wace_tot_cost_sek"] = float(st.get("wace_tot_cost_sek", 0.0)) + total_cost
+        if st["wace_tot_energy_kwh"] > 0:
+            st["wace"] = round(st["wace_tot_cost_sek"] / st["wace_tot_energy_kwh"], 6)
+        _LOGGER.info(
+            "Battery Energy Cost uppdaterad: +%.3f kWh, +%.2f SEK ⇒ WACE=%.4f (E=%.3f kWh, C=%.2f SEK)",
+            energy_kwh, total_cost, st["wace"], st["wace_tot_energy_kwh"], st["wace_tot_cost_sek"]
+        )
+        await coordinator.async_request_refresh()
+
+    hass.services.async_register(DOMAIN, "battery_cost_reset", _svc_battery_cost_reset)
+    hass.services.async_register(DOMAIN, "battery_cost_add", _svc_battery_cost_add)
 
     # Ladda plattformar
     await hass.config_entries.async_forward_entry_setups(
