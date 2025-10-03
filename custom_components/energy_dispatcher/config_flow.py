@@ -1,7 +1,6 @@
 """
 Energy Dispatcher - config_flow.py
-
-Konfigflöde (en-steg) + OptionsFlow med dynamiska defaults.
+Konfigflöde (en-steg) + OptionsFlow med dynamiska defaults (kommer ihåg dina val).
 """
 
 from __future__ import annotations
@@ -76,40 +75,46 @@ def _schema_user(defaults: dict | None = None) -> vol.Schema:
     d = defaults or DEFAULTS
     return vol.Schema(
         {
-            vol.Required(CONF_NORDPOOL_ENTITY): str,
-            vol.Optional(CONF_PRICE_TAX, default=d[CONF_PRICE_TAX]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_TRANSFER, default=d[CONF_PRICE_TRANSFER]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_SURCHARGE, default=d[CONF_PRICE_SURCHARGE]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_VAT, default=d[CONF_PRICE_VAT]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_FIXED_MONTHLY, default=d[CONF_PRICE_FIXED_MONTHLY]): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_INCLUDE_FIXED, default=d[CONF_PRICE_INCLUDE_FIXED]): bool,
-            vol.Required(CONF_BATT_CAP_KWH, default=d[CONF_BATT_CAP_KWH]): vol.Coerce(float),
-            vol.Required(CONF_BATT_SOC_ENTITY): str,
-            vol.Optional(CONF_BATT_MAX_CHARGE_W, default=d[CONF_BATT_MAX_CHARGE_W]): vol.Coerce(int),
-            vol.Optional(CONF_BATT_MAX_DISCH_W, default=d[CONF_BATT_MAX_DISCH_W]): vol.Coerce(int),
-            vol.Optional(CONF_BATT_ADAPTER, default=d[CONF_BATT_ADAPTER]): vol.In(["huawei"]),
-            vol.Optional(CONF_HUAWEI_DEVICE_ID, default=""): str,
-            vol.Optional(CONF_HOUSE_CONS_SENSOR, default=""): str,
-            vol.Optional(CONF_EV_MODE, default=d[CONF_EV_MODE]): vol.In(["manual"]),
-            vol.Optional(CONF_EV_BATT_KWH, default=d[CONF_EV_BATT_KWH]): vol.Coerce(float),
-            vol.Optional(CONF_EV_CURRENT_SOC, default=d[CONF_EV_CURRENT_SOC]): vol.Coerce(float),
-            vol.Optional(CONF_EV_TARGET_SOC, default=d[CONF_EV_TARGET_SOC]): vol.Coerce(float),
-            vol.Optional(CONF_EVSE_START_SWITCH, default=""): str,
-            vol.Optional(CONF_EVSE_STOP_SWITCH, default=""): str,
-            vol.Optional(CONF_EVSE_CURRENT_NUMBER, default=""): str,
-            vol.Optional(CONF_EVSE_MIN_A, default=d[CONF_EVSE_MIN_A]): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_MAX_A, default=d[CONF_EVSE_MAX_A]): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_PHASES, default=d[CONF_EVSE_PHASES]): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_VOLTAGE, default=d[CONF_EVSE_VOLTAGE]): vol.Coerce(int),
-            vol.Optional(CONF_FS_USE, default=d[CONF_FS_USE]): bool,
-            vol.Optional(CONF_FS_APIKEY, default=""): str,
-            vol.Optional(CONF_FS_LAT, default=56.6967208731): vol.Coerce(float),
-            vol.Optional(CONF_FS_LON, default=13.0196173488): vol.Coerce(float),
-            vol.Optional(CONF_FS_PLANES, default='[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]'): str,
-            vol.Optional(CONF_FS_HORIZON, default="18,16,11,7,5,4,3,2,2,4,7,10"): str,
-            # NYTT: faktiska produktionssensorer
-            vol.Optional(CONF_PV_POWER_ENTITY, default=d[CONF_PV_POWER_ENTITY]): str,
-            vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d[CONF_PV_ENERGY_TODAY_ENTITY]): str,
+            vol.Required(CONF_NORDPOOL_ENTITY, default=d.get(CONF_NORDPOOL_ENTITY, "")): str,
+
+            vol.Optional(CONF_PRICE_TAX, default=d.get(CONF_PRICE_TAX, 0.0)): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_TRANSFER, default=d.get(CONF_PRICE_TRANSFER, 0.0)): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_SURCHARGE, default=d.get(CONF_PRICE_SURCHARGE, 0.0)): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_VAT, default=d.get(CONF_PRICE_VAT, 0.25)): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_FIXED_MONTHLY, default=d.get(CONF_PRICE_FIXED_MONTHLY, 0.0)): vol.Coerce(float),
+            vol.Optional(CONF_PRICE_INCLUDE_FIXED, default=d.get(CONF_PRICE_INCLUDE_FIXED, False)): bool,
+
+            vol.Required(CONF_BATT_CAP_KWH, default=d.get(CONF_BATT_CAP_KWH, 15.0)): vol.Coerce(float),
+            vol.Required(CONF_BATT_SOC_ENTITY, default=d.get(CONF_BATT_SOC_ENTITY, "")): str,
+            vol.Optional(CONF_BATT_MAX_CHARGE_W, default=d.get(CONF_BATT_MAX_CHARGE_W, 4000)): vol.Coerce(int),
+            vol.Optional(CONF_BATT_MAX_DISCH_W, default=d.get(CONF_BATT_MAX_DISCH_W, 4000)): vol.Coerce(int),
+            vol.Optional(CONF_BATT_ADAPTER, default=d.get(CONF_BATT_ADAPTER, "huawei")): vol.In(["huawei"]),
+            vol.Optional(CONF_HUAWEI_DEVICE_ID, default=d.get(CONF_HUAWEI_DEVICE_ID, "")): str,
+
+            vol.Optional(CONF_HOUSE_CONS_SENSOR, default=d.get(CONF_HOUSE_CONS_SENSOR, "")): str,
+
+            vol.Optional(CONF_EV_MODE, default=d.get(CONF_EV_MODE, "manual")): vol.In(["manual"]),
+            vol.Optional(CONF_EV_BATT_KWH, default=d.get(CONF_EV_BATT_KWH, 75.0)): vol.Coerce(float),
+            vol.Optional(CONF_EV_CURRENT_SOC, default=d.get(CONF_EV_CURRENT_SOC, 40.0)): vol.Coerce(float),
+            vol.Optional(CONF_EV_TARGET_SOC, default=d.get(CONF_EV_TARGET_SOC, 80.0)): vol.Coerce(float),
+
+            vol.Optional(CONF_EVSE_START_SWITCH, default=d.get(CONF_EVSE_START_SWITCH, "")): str,
+            vol.Optional(CONF_EVSE_STOP_SWITCH, default=d.get(CONF_EVSE_STOP_SWITCH, "")): str,
+            vol.Optional(CONF_EVSE_CURRENT_NUMBER, default=d.get(CONF_EVSE_CURRENT_NUMBER, "")): str,
+            vol.Optional(CONF_EVSE_MIN_A, default=d.get(CONF_EVSE_MIN_A, 6)): vol.Coerce(int),
+            vol.Optional(CONF_EVSE_MAX_A, default=d.get(CONF_EVSE_MAX_A, 16)): vol.Coerce(int),
+            vol.Optional(CONF_EVSE_PHASES, default=d.get(CONF_EVSE_PHASES, 3)): vol.Coerce(int),
+            vol.Optional(CONF_EVSE_VOLTAGE, default=d.get(CONF_EVSE_VOLTAGE, 230)): vol.Coerce(int),
+
+            vol.Optional(CONF_FS_USE, default=d.get(CONF_FS_USE, True)): bool,
+            vol.Optional(CONF_FS_APIKEY, default=d.get(CONF_FS_APIKEY, "")): str,
+            vol.Optional(CONF_FS_LAT, default=d.get(CONF_FS_LAT, 56.6967208731)): vol.Coerce(float),
+            vol.Optional(CONF_FS_LON, default=d.get(CONF_FS_LON, 13.0196173488)): vol.Coerce(float),
+            vol.Optional(CONF_FS_PLANES, default=d.get(CONF_FS_PLANES, '[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]')): str,
+            vol.Optional(CONF_FS_HORIZON, default=d.get(CONF_FS_HORIZON, "18,16,11,7,5,4,3,2,2,4,7,10")): str,
+
+            vol.Optional(CONF_PV_POWER_ENTITY, default=d.get(CONF_PV_POWER_ENTITY, "")): str,
+            vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d.get(CONF_PV_ENERGY_TODAY_ENTITY, "")): str,
         }
     )
 
