@@ -45,18 +45,36 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+# ... (imports of unchanged sections above)
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    # 0) Grundstruktur i hass.data
     hass.data.setdefault(DOMAIN, {})
     store = hass.data[DOMAIN].setdefault(
         entry.entry_id,
         {
-            "config": dict(entry.data),
+            "config": {**entry.data, **entry.options},
             "flags": {"auto_ev_enabled": True, "auto_planner_enabled": True},
             "wace": 0.0,
         },
     )
 
+    # Uppdateras när options ändras
+    async def _update_listener(hass: HomeAssistant, updated_entry: ConfigEntry):
+        st = hass.data[DOMAIN].get(updated_entry.entry_id)
+        if st:
+            st["config"] = {**updated_entry.data, **updated_entry.options}
+            coord = st.get("coordinator")
+            if coord:
+                await coord.async_request_refresh()
+
+    entry.async_on_unload(entry.add_update_listener(_update_listener))
+
+    coordinator = EnergyDispatcherCoordinator(hass)
+    coordinator.entry_id = entry.entry_id
+    store["coordinator"] = coordinator
+    await coordinator.async_config_entry_first_refresh()
+
+    # ...resten av din setup (adapters, dispatcher, services, forward_entry_setups) oförändrat...
     # 1) Koordinator – utan config-argument
     coordinator = EnergyDispatcherCoordinator(hass)
     coordinator.entry_id = entry.entry_id
