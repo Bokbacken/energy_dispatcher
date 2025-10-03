@@ -22,14 +22,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     coordinator = EnergyDispatcherCoordinator(hass)
     coordinator.entry_id = entry.entry_id
 
-    dispatcher = EVDispatcher(
-        hass=hass,
-        cfg_lookup=lambda key, default=None: hass.data[DOMAIN][entry.entry_id]["config"].get(key, default),
-    )
+    cfg_lookup = lambda key, default=None: hass.data[DOMAIN][entry.entry_id]["config"].get(key, default)
+    dispatcher = EVDispatcher(hass=hass, cfg_lookup=cfg_lookup)
 
     hass.data[DOMAIN][entry.entry_id] = {
         "config": config,
-        "flags": {"auto_ev_enabled": True},
+        "flags": {"auto_ev_enabled": True, "auto_planner_enabled": True},
         "coordinator": coordinator,
         "dispatcher": dispatcher,
         # WACE m.m. lagras här om du använder tjänsterna
@@ -39,7 +37,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     }
 
     await coordinator.async_config_entry_first_refresh()
-
     entry.async_on_unload(entry.add_update_listener(async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
