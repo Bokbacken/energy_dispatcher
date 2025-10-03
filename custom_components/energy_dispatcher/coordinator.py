@@ -2,17 +2,43 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Tuple, List
+from datetime import timedelta, datetime
+from typing import Any, Dict, List, Optional, Tuple
 
-from homeassistant.core import HomeAssistant, State, callback
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
-    # Baseline/Runtime
+    CONF_NORDPOOL_ENTITY,
+    CONF_PRICE_TAX,
+    CONF_PRICE_TRANSFER,
+    CONF_PRICE_SURCHARGE,
+    CONF_PRICE_VAT,
+    CONF_PRICE_FIXED_MONTHLY,
+    CONF_PRICE_INCLUDE_FIXED,
+    CONF_BATT_CAP_KWH,
+    CONF_BATT_SOC_ENTITY,
+    CONF_HOUSE_CONS_SENSOR,
+    # Forecast.Solar-konfig
+    CONF_FS_USE,
+    CONF_FS_APIKEY,
+    CONF_FS_LAT,
+    CONF_FS_LON,
+    CONF_FS_PLANES,
+    CONF_FS_HORIZON,
+    # PV actual
+    CONF_PV_POWER_ENTITY,
+    CONF_PV_ENERGY_TODAY_ENTITY,
+    # EV/EVSE param
+    CONF_EVSE_MIN_A,
+    CONF_EVSE_MAX_A,
+    CONF_EVSE_PHASES,
+    CONF_EVSE_VOLTAGE,
+    CONF_EVSE_START_SWITCH,
+    CONF_EVSE_CURRENT_NUMBER,
+    # Baseline
     CONF_RUNTIME_SOURCE,
     CONF_RUNTIME_COUNTER_ENTITY,
     CONF_RUNTIME_POWER_ENTITY,
@@ -25,31 +51,26 @@ from .const import (
     CONF_LOAD_POWER_ENTITY,
     CONF_BATT_POWER_ENTITY,
     CONF_GRID_IMPORT_TODAY_ENTITY,
-    # EV/EVSE (för enklare EV-exkludering om ingen direkt EV-power finns)
-    CONF_EVSE_CURRENT_NUMBER,
-    CONF_EVSE_PHASES,
-    CONF_EVSE_VOLTAGE,
-    # PV (för pv_now_w om användaren pekat ut faktisk produktion)
-    CONF_PV_POWER_ENTITY,
-    # Batteri SOC entitet (används av sensorer)
-    CONF_BATT_SOC_ENTITY,
 )
+from .models import PricePoint
+from .price_provider import PriceProvider, PriceFees
+from .forecast_provider import ForecastSolarProvider
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _safe_float(v: Any, default: Optional[float] = None) -> Optional[float]:
-    """Best effort: parse value to float, handling None, 'unknown', 'unavailable' and decimal commas."""
+    """Tolerant parse till float. Hanterar None, unknown/unavailable och decimal‑komma."""
+    if v is None:
+        return default
     try:
-        if v is None:
-            return default
         if isinstance(v, (int, float)):
             f = float(v)
             if math.isnan(f):
                 return default
             return f
         s = str(v).strip()
-        if s in ("unknown", "unavailable", "", "None"):
+        if s in ("", "unknown", "unavailable", "None", "nan"):
             return default
         s = s.replace(",", ".")
         f = float(s)
@@ -61,341 +82,562 @@ def _safe_float(v: Any, default: Optional[float] = None) -> Optional[float]:
 
 
 def _as_watts(value: Any, unit: Optional[str]) -> Optional[float]:
-    """Convert to Watts if possible. If unit is 'kW', multiply by 1000; if 'W' or unknown, return as-is."""
+    """Konvertera till W om möjligt. kW→W, MW→W. Saknas unit -> anta W."""
     val = _safe_float(value)
     if val is None:
         return None
-    if unit:
-        u = str(unit).lower()
-        if u == "kw":
-            return val * 1000.0
-        if u in ("w", "watt"):
-            return val
-    # If we don't know the unit, return the numeric value (assumed W).
+    u = (unit or "").lower()
+    if u == "kw":
+        return val * 1000.0
+    if u == "mw":
+        return val * 1_000_000.0
+    # "w", "watt" eller okänt → returnera som är (antar W)
     return val
 
 
-@dataclass
-class _RuntimeSample:
-    ts: datetime
-    value_w: float
+class EnergyDispatcherCoordinator(DataUpdateCoordinator):
+    """
+    Samlar:
+    - Priser (spot + enriched)
+    - Aktuellt berikat pris
+    - Huslast-baseline (W) och runtime-estimat
+    - Solprognos + faktisk PV
+    - Auto EV v0 + ETA
+    - Ekonomi (grid vs batt)
+    - Forecast vs Actual-delta (15m)
 
-
-class EnergyDispatcherCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
-    """Central coordinator for Energy Dispatcher.
-
-    0.5.4 highlights in this file:
-    - Robust baseline computation with graceful degradation of excludes (EV/Battery).
-    - Power (W) is recommended/default source; Counter (kWh) supported with simple derivative.
-    - Bootstrap baseline from Recorder history on cold start to avoid 'unknown'.
-    - Tolerant parsing (kW→W, decimal commas).
-    - Diagnostics in self.data['diag_status'] and ['diag_attrs'].
+    0.5.4 patchar baseline:
+    - Robust exkluderingar (EV/batteri) → inga "unknown"
+    - Bootstrap från Recorder-historik vid omstart (power_w)
+    - Tolerant parsing och kW/MW→W
     """
 
-    def __init__(self, hass: HomeAssistant, entry) -> None:
+    def __init__(self, hass: HomeAssistant):
         super().__init__(
             hass,
-            _LOGGER,
-            name="Energy Dispatcher Coordinator",
-            update_interval=timedelta(seconds=30),
+            logger=_LOGGER,
+            name=f"{DOMAIN}_coordinator",
+            update_interval=timedelta(seconds=300),
         )
-        self.hass = hass
-        self.entry = entry
-        self.entry_id = entry.entry_id
+        self.entry_id: Optional[str] = None
+        self.data: Dict[str, Any] = {
+            "hourly_prices": [],
+            "current_enriched": None,
+            # Baseline
+            "house_baseline_w": None,
+            "baseline_method": None,
+            "baseline_source_value": None,
+            "baseline_kwh_per_h": None,
+            "baseline_exclusion_reason": "",
+            # Runtime + batteri
+            "battery_runtime_h": None,
+            # Sol
+            "solar_points": [],
+            "solar_now_w": None,
+            "solar_today_kwh": None,
+            "solar_tomorrow_kwh": None,
+            # PV actual
+            "pv_now_w": None,
+            "pv_today_kwh": None,
+            # Auto EV status
+            "cheap_threshold": None,
+            "auto_ev_setpoint_a": 0,
+            "auto_ev_reason": "",
+            "time_until_charge_ev_min": None,
+            # Batteri placeholder
+            "time_until_charge_batt_min": None,
+            "batt_charge_reason": "not_implemented",
+            # Ekonomi
+            "grid_vs_batt_delta_sek_per_kwh": None,
+            # Forecast vs actual (15m)
+            "solar_delta_15m_w": None,
+            "solar_delta_15m_pct": None,
+        }
 
-        # Runtime baseline state
-        self._runtime_samples: List[_RuntimeSample] = []
-        self._baseline_w: Optional[float] = None
-        self._baseline_ready: bool = False
-        self._bootstrap_done: bool = False
+        # Historik/EMA för baseline (counter_kwh/power_w)
+        self._baseline_prev_counter: Optional[Tuple[float, Any]] = None  # (kWh, ts)
+        self._baseline_ema_kwh_per_h: Optional[float] = None
+        self._sf_history: List[Tuple[Any, float, float]] = []  # (ts, forecast_w, actual_w)
 
-        # For counter_kwh derivative
-        self._prev_counter: Optional[float] = None
-        self._prev_counter_ts: Optional[datetime] = None
+        # Bootstrap flagga
+        self._baseline_bootstrapped: bool = False
 
-        # Data dict published to sensors/platforms
-        self.data: Dict[str, Any] = {}
+    # ---------- helpers ----------
+    def _get_store(self) -> Dict[str, Any]:
+        if not self.entry_id:
+            return {}
+        return self.hass.data.get(DOMAIN, {}).get(self.entry_id, {})
 
-    # ---------- Config helpers ----------
+    def _get_cfg(self, key: str, default=None):
+        store = self._get_store()
+        cfg = store.get("config", {})
+        return cfg.get(key, default)
 
-    def _cfg(self, key: str, default: Any = None) -> Any:
-        """Read config from options, fallback to data."""
-        if key in self.entry.options:
-            return self.entry.options.get(key, default)
-        return self.entry.data.get(key, default)
+    def _get_flag(self, key: str, default=None):
+        store = self._get_store()
+        flags = store.get("flags", {})
+        return flags.get(key, default)
 
-    # Backwards-compat alias used by some sensors
-    def _get_cfg(self, key: str, default: Any = None) -> Any:
-        return self._cfg(key, default)
-
-    # ---------- Entity helpers ----------
-
-    def _state(self, entity_id: Optional[str]) -> Optional[State]:
+    def _read_float(self, entity_id: str) -> Optional[float]:
+        """Legacy: läs numeriskt värde utan att titta på enhet."""
         if not entity_id:
             return None
-        try:
-            return self.hass.states.get(entity_id)
-        except Exception:
-            return None
-
-    def _num_state(self, entity_id: Optional[str]) -> Optional[float]:
-        st = self._state(entity_id)
-        if not st:
+        st = self.hass.states.get(entity_id)
+        if not st or st.state in (None, "", "unknown", "unavailable"):
             return None
         return _safe_float(st.state)
 
-    def _watts_from_entity(self, entity_id: Optional[str]) -> Optional[float]:
-        st = self._state(entity_id)
-        if not st:
+    def _read_watts(self, entity_id: str) -> Optional[float]:
+        """Läs effekt i W, med automatisk konvertering kW/MW→W."""
+        if not entity_id:
+            return None
+        st = self.hass.states.get(entity_id)
+        if not st or st.state in (None, "", "unknown", "unavailable"):
             return None
         unit = st.attributes.get("unit_of_measurement")
         return _as_watts(st.state, unit)
 
-    # ---------- Public methods ----------
-
-    async def async_initialize(self) -> None:
-        """Call once from __init__.py after creating the coordinator."""
-        # First refresh
-        await self.async_config_entry_first_refresh()
-
-    # ---------- Update loop ----------
-
-    async def _async_update_data(self) -> Dict[str, Any]:
-        """Main periodic update. Compute baseline and other live diagnostics."""
+    # ---------- update loop ----------
+    async def _async_update_data(self):
         try:
-            now = dt_util.utcnow()
+            await self._update_prices()
+            await self._update_baseline_and_runtime()
+            await self._update_solar()
+            await self._update_pv_actual()
+            await self._auto_ev_tick()
+            self._update_grid_vs_batt_delta()
+            self._update_solar_delta_15m()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Uppdatering misslyckades")
+        return self.data
 
-            # 1) Resolve runtime source and inputs
-            src = str(self._cfg(CONF_RUNTIME_SOURCE, "power_w"))
-            alpha = float(self._cfg(CONF_RUNTIME_ALPHA, 0.4))
-            window_min = int(self._cfg(CONF_RUNTIME_WINDOW_MIN, 10))
-            exclude_ev = bool(self._cfg(CONF_RUNTIME_EXCLUDE_EV, False))
-            exclude_batt = bool(self._cfg(CONF_RUNTIME_EXCLUDE_BATT_GRID, False))
+    # ---------- prices ----------
+    async def _update_prices(self):
+        nordpool_entity = self._get_cfg(CONF_NORDPOOL_ENTITY, "")
+        if not nordpool_entity:
+            self.data["hourly_prices"] = []
+            self.data["current_enriched"] = None
+            self.data["cheap_threshold"] = None
+            _LOGGER.debug("Ingen Nordpool-entity konfigurerad")
+            return
 
-            # Inputs for power_w
-            power_ent = self._cfg(CONF_RUNTIME_POWER_ENTITY) or self._cfg(CONF_LOAD_POWER_ENTITY) or self._cfg("house_cons_sensor")
-            load_w: Optional[float] = None
+        fees = PriceFees(
+            tax=float(self._get_cfg(CONF_PRICE_TAX, 0.0)),
+            transfer=float(self._get_cfg(CONF_PRICE_TRANSFER, 0.0)),
+            surcharge=float(self._get_cfg(CONF_PRICE_SURCHARGE, 0.0)),
+            vat=float(self._get_cfg(CONF_PRICE_VAT, 0.25)),
+            fixed_monthly=float(self._get_cfg(CONF_PRICE_FIXED_MONTHLY, 0.0)),
+            include_fixed=bool(self._get_cfg(CONF_PRICE_INCLUDE_FIXED, False)),
+        )
 
-            # Inputs for counter_kwh
-            counter_ent = self._cfg(CONF_RUNTIME_COUNTER_ENTITY)
+        provider = PriceProvider(self.hass, nordpool_entity=nordpool_entity, fees=fees)
+        hourly: List[PricePoint] = provider.get_hourly_prices()
+        self.data["hourly_prices"] = hourly
+        self.data["current_enriched"] = provider.get_current_enriched(hourly)
 
-            # EV exclude heuristics inputs
-            evse_current_number = self._cfg(CONF_EVSE_CURRENT_NUMBER)
-            evse_phases = _safe_float(self._cfg(CONF_EVSE_PHASES, 3)) or 3.0
-            evse_voltage = _safe_float(self._cfg(CONF_EVSE_VOLTAGE, 230)) or 230.0
+        # P25-tröskel 24h framåt
+        now = dt_util.now().replace(minute=0, second=0, microsecond=0)
+        next24 = [p for p in hourly if 0 <= (p.time - now).total_seconds() < 24 * 3600]
+        if next24:
+            enriched = sorted([p.enriched_sek_per_kwh for p in next24])
+            p25_idx = max(0, int(len(enriched) * 0.25) - 1)
+            self.data["cheap_threshold"] = round(enriched[p25_idx], 4)
+        else:
+            self.data["cheap_threshold"] = None
 
-            # Battery exclude inputs
-            batt_power_ent = self._cfg(CONF_BATT_POWER_ENTITY)
-            grid_import_today_ent = self._cfg(CONF_GRID_IMPORT_TODAY_ENTITY)
+    # ---------- baseline + runtime ----------
+    def _is_ev_charging(self) -> bool:
+        # Om vi har ström-siffran, använd den som primär indikator
+        if not bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_EV, True)):
+            return False
+        num_current = self._get_cfg(CONF_EVSE_CURRENT_NUMBER, "")
+        amps = 0.0
+        if num_current:
+            st = self.hass.states.get(num_current)
+            amps = _safe_float(st.state, 0.0) if st and st.state not in ("unknown", "unavailable", None, "") else 0.0
+        min_a = int(self._get_cfg(CONF_EVSE_MIN_A, 6))
+        if amps and amps >= min_a:
+            return True
 
-            # 2) Acquire sample value (house load) depending on source
-            sample_w: Optional[float] = None
-            reasons: List[str] = []
+        # Fallback: bara om start-entity är en switch/input_boolean och står ON
+        start_sw = self._get_cfg(CONF_EVSE_START_SWITCH, "")
+        if start_sw and start_sw.split(".")[0] in ("switch", "input_boolean"):
+            st = self.hass.states.get(start_sw)
+            return bool(st and str(st.state).lower() == "on")
 
-            if src == "power_w":
-                load_w = self._watts_from_entity(power_ent)
-                if load_w is None:
-                    reasons.append("load_w_none")
-            elif src == "counter_kwh":
-                # Derive power from energy counter
-                sample_w = await self._derive_w_from_counter(counter_ent, now, reasons)
-            else:
-                # manual_dayparts or unknown → currently not implemented baseline here
-                reasons.append(f"runtime_source_unsupported:{src}")
+        return False
 
-            # If power_w, sample is load_w minus excludes (apply below)
-            if src == "power_w" and load_w is not None:
-                sample_w = load_w
+    def _is_batt_charging_from_grid(self) -> bool:
+        """Konservativ heuristik: om batterisensorn visar laddning och PV-överskott inte täcker, anta grid."""
+        if not bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)):
+            return False
 
-            # 3) Compute excludes robustly (errors degrade to 0 W)
-            ev_excl_w = 0.0
-            if exclude_ev:
-                ev_excl_w = self._estimate_ev_power_w(evse_current_number, evse_phases, evse_voltage)
+        batt_pw = self._read_float(self._get_cfg(CONF_BATT_POWER_ENTITY, ""))  # legacy tecken-konvention
+        load_pw = self._read_watts(self._get_cfg(CONF_LOAD_POWER_ENTITY, "")) or self._read_watts(self._get_cfg(CONF_RUNTIME_POWER_ENTITY, ""))  # W
+        pv_pw = self._read_watts(self._get_cfg(CONF_PV_POWER_ENTITY, ""))
 
-            batt_excl_w = 0.0
-            if exclude_batt:
-                batt_excl_w = self._estimate_batt_grid_charge_w(batt_power_ent, grid_import_today_ent)
+        if batt_pw is None or load_pw is None or pv_pw is None:
+            # Saknas data ⇒ var försiktig: returnera False (låt inte exkludering döda baseline)
+            return False
 
-            if sample_w is not None:
-                sample_w = max(0.0, sample_w - ev_excl_w - batt_excl_w)
+        # I legacy Huawei-konvention: negativt = laddning
+        batt_charge_w = max(0.0, -batt_pw)
+        pv_surplus_w = max(0.0, pv_pw - load_pw)
+        grid_charge_w = max(0.0, batt_charge_w - pv_surplus_w)
+        return grid_charge_w > 100.0
 
-            # 4) Bootstrap baseline from Recorder history if we still don't have a sample
-            if not self._bootstrap_done and (sample_w is None):
-                boot = await self._bootstrap_from_history(power_ent, window_min)
-                if boot is not None:
-                    self._baseline_w = boot
-                    self._baseline_ready = True
-                    self._bootstrap_done = True
-                    sample_w = boot
-                    reasons.append("bootstrapped")
-
-            # 5) EMA smoothing + windowing
-            if sample_w is not None:
-                self._runtime_samples.append(_RuntimeSample(now, sample_w))
-                cutoff = now - timedelta(minutes=window_min if window_min > 0 else 1)
-                self._runtime_samples = [s for s in self._runtime_samples if s.ts >= cutoff]
-
-                if self._baseline_w is None:
-                    self._baseline_w = sample_w
-                else:
-                    a = max(0.0, min(1.0, alpha))
-                    self._baseline_w = a * sample_w + (1.0 - a) * self._baseline_w
-
-                # Consider baseline ready when we have at least one sample (fast start)
-                self._baseline_ready = len(self._runtime_samples) >= 1
-
-            # 6) Publish diagnostics
-            diag_status = "ok" if self._baseline_ready else "pending"
-            diag_attrs = {
-                "source": src,
-                "ready": self._baseline_ready,
-                "sample_count": len(self._runtime_samples),
-                "last_sample_w": sample_w,
-                "baseline_w": self._baseline_w,
-                "alpha": alpha,
-                "window_min": window_min,
-                "ev_exclude_w": ev_excl_w if exclude_ev else 0.0,
-                "batt_exclude_w": batt_excl_w if exclude_batt else 0.0,
-                "reasons": reasons,
-            }
-
-            # 7) Also publish PV now (if user has actual PV sensor configured)
-            pv_now_w = self._watts_from_entity(self._cfg(CONF_PV_POWER_ENTITY))
-
-            # 8) Expose values to the integration
-            self.data["house_baseline_w"] = self._baseline_w if self._baseline_ready else None
-            self.data["pv_now_w"] = pv_now_w  # can be None
-            # solar_now_w left as-is if some forecast provider populates it elsewhere; otherwise leave None
-            self.data.setdefault("solar_now_w", None)
-
-            self.data["diag_status"] = diag_status
-            self.data["diag_attrs"] = diag_attrs
-
-            return self.data
-
-        except Exception as exc:
-            raise UpdateFailed(f"Coordinator update failed: {exc}") from exc
-
-    # ---------- Helper routines ----------
-
-    async def _derive_w_from_counter(self, counter_entity: Optional[str], now: datetime, reasons: List[str]) -> Optional[float]:
-        """Simple derivative from an energy counter (kWh)."""
-        if not counter_entity:
-            reasons.append("no_counter_entity")
+    async def _bootstrap_from_history_power(self, minutes: int) -> Optional[float]:
+        """Bootstrap av baseline (kWh/h) från Recorder-historik för runtime_power_entity."""
+        if minutes <= 0:
             return None
-
-        st = self._state(counter_entity)
-        if not st:
-            reasons.append("counter_state_none")
-            return None
-
-        cur = _safe_float(st.state)
-        if cur is None:
-            reasons.append("counter_not_numeric")
-            return None
-
-        if self._prev_counter is None or self._prev_counter_ts is None:
-            self._prev_counter = cur
-            self._prev_counter_ts = now
-            reasons.append("counter_first_sample")
-            return None
-
-        dt = (now - self._prev_counter_ts).total_seconds()
-        if dt <= 0:
-            reasons.append("counter_dt_zero")
-            return None
-
-        delta_kwh = cur - self._prev_counter
-        # Guard against midnattshopp/återställning
-        if delta_kwh < -0.001:
-            # reset – treat as first sample again
-            self._prev_counter = cur
-            self._prev_counter_ts = now
-            reasons.append("counter_reset_detected")
-            return None
-
-        self._prev_counter = cur
-        self._prev_counter_ts = now
-
-        # W = kWh * 3600_000 / s
-        w = (delta_kwh * 3_600_000.0) / dt
-        if w < 0:
-            reasons.append("counter_negative_derivative")
-            return None
-        return w
-
-    def _estimate_ev_power_w(self, current_number_entity: Optional[str], phases: float, voltage: float) -> float:
-        """Estimate EV charging power from EVSE current, if available. Gracefully degrade to 0."""
-        try:
-            cur_a = self._num_state(current_number_entity)
-            if cur_a is None or cur_a <= 0:
-                return 0.0
-            ph = max(1.0, float(phases or 1.0))
-            volt = max(100.0, float(voltage or 230.0))
-            return max(0.0, ph * volt * float(cur_a))
-        except Exception:
-            return 0.0
-
-    def _estimate_batt_grid_charge_w(self, batt_power_entity: Optional[str], grid_import_today_entity: Optional[str]) -> float:
-        """Estimate power to exclude when battery is charging from grid. Conservative: any positive battery charge is excluded."""
-        try:
-            st = self._state(batt_power_entity)
-            if not st:
-                return 0.0
-            unit = st.attributes.get("unit_of_measurement")
-            batt_w = _as_watts(st.state, unit)
-            if batt_w is None:
-                return 0.0
-            # Positive → charging. We conservatively exclude full positive charging power.
-            if batt_w > 0:
-                return batt_w
-            return 0.0
-        except Exception:
-            return 0.0
-
-    async def _bootstrap_from_history(self, power_entity: Optional[str], window_min: int) -> Optional[float]:
-        """Try to build an initial baseline from Recorder history."""
-        if not power_entity or window_min <= 0:
+        ent = self._get_cfg(CONF_RUNTIME_POWER_ENTITY, "") or self._get_cfg(CONF_LOAD_POWER_ENTITY, "") or self._get_cfg(CONF_HOUSE_CONS_SENSOR, "")
+        if not ent:
             return None
         try:
-            # Import inside function to avoid hard dependency for users without recorder
+            # Importera lokalt för att undvika hårt beroende när Recorder saknas
             from homeassistant.components.recorder import history
 
             end = dt_util.utcnow()
-            start = end - timedelta(minutes=window_min)
+            start = end - timedelta(minutes=minutes)
             hist = await self.hass.async_add_executor_job(
-                history.state_changes_during_period,
-                self.hass,
-                start,
-                end,
-                {power_entity},
+                history.state_changes_during_period, self.hass, start, end, {ent}
             )
-            samples = []
-            for s in hist.get(power_entity, []):
-                unit = s.attributes.get("unit_of_measurement")
-                w = _as_watts(s.state, unit)
+            states = hist.get(ent, [])
+            vals_w: List[float] = []
+            for s in states:
+                w = _as_watts(s.state, s.attributes.get("unit_of_measurement"))
                 if w is not None and not math.isnan(w):
-                    samples.append(w)
-            if not samples:
+                    vals_w.append(w)
+            if not vals_w:
                 return None
-            return sum(samples) / len(samples)
+            avg_w = sum(vals_w) / len(vals_w)
+            return max(0.05, min(5.0, avg_w / 1000.0))  # kWh/h klippt i samma spann
         except Exception as e:
-            _LOGGER.debug("Bootstrap from history failed: %s", e)
+            _LOGGER.debug("Bootstrap från historik misslyckades: %s", e)
             return None
 
-    # ---------- Convenience for sensors ----------
+    async def _update_baseline_and_runtime(self):
+        """
+        Beräkna husets baseline (kWh/h) och Battery Runtime Estimate.
+        - counter_kwh: derivata på kWh-räknare (t.ex. Consumption today)
+        - power_w: W-sensor till kWh/h
+        - manual_dayparts: ej implementerad än (placeholder)
+        Exkluderar datapunkter vid EV-laddning och forcerad batteriladdning från grid.
+        - Nytt i 0.5.4: exkluderingar stoppar inte visning; bootstrap vid omstart.
+        """
+        method = self._get_cfg(CONF_RUNTIME_SOURCE, "counter_kwh")
+        alpha = float(self._get_cfg(CONF_RUNTIME_ALPHA, 0.2))
+        window_min = int(self._get_cfg(CONF_RUNTIME_WINDOW_MIN, 10))
+        now = dt_util.now()
 
-    @property
-    def batt_soc_entity(self) -> Optional[str]:
-        return self._cfg(CONF_BATT_SOC_ENTITY)
+        excluded_reason = ""
+        sample_kwh_per_h: Optional[float] = None
+        source_val = None
 
-    # ---------- Debug helpers ----------
+        if method == "counter_kwh":
+            ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
+            st = self.hass.states.get(ent) if ent else None
+            kwh = _safe_float(st.state) if st else None
+            source_val = kwh
+            if kwh is not None:
+                prev = self._baseline_prev_counter
+                self._baseline_prev_counter = (kwh, now)
+                if prev:
+                    prev_kwh, prev_ts = prev
+                    dt_h = max(0.0, (now - prev_ts).total_seconds() / 3600.0)
+                    delta = kwh - prev_kwh
+                    # hantera dygnsreset/negativa hopp
+                    if dt_h > 0 and delta >= -0.0005:
+                        # Om negativ litet hopp → nolla till 0
+                        delta = max(0.0, delta)
+                        sample_kwh_per_h = delta / dt_h
 
-    def dump_diag(self) -> Dict[str, Any]:
-        return {
-            "entry_id": self.entry_id,
-            "data": self.data,
-            "samples": len(self._runtime_samples),
-            "baseline": self._baseline_w,
-            "ready": self._baseline_ready,
-        }
+        elif method == "power_w":
+            ent = self._get_cfg(CONF_RUNTIME_POWER_ENTITY, "") or self._get_cfg(CONF_LOAD_POWER_ENTITY, "") or self._get_cfg(CONF_HOUSE_CONS_SENSOR, "")
+            st = self.hass.states.get(ent) if ent else None
+            w = _as_watts(st.state, st.attributes.get("unit_of_measurement")) if st else None
+            source_val = w
+            if w is not None and w >= 0:
+                sample_kwh_per_h = w / 1000.0
+
+        else:
+            # manual_dayparts (placeholder)
+            sample_kwh_per_h = None
+
+        # Fönster/klippning
+        if sample_kwh_per_h is not None:
+            sample_kwh_per_h = max(0.05, min(5.0, sample_kwh_per_h))
+
+        # Exkludera datapunkt för inlärning när EV eller grid-laddning pågår
+        if sample_kwh_per_h is not None:
+            ev_now = self._is_ev_charging()
+            batt_grid_now = self._is_batt_charging_from_grid()
+            if ev_now:
+                excluded_reason = "ev_charging"
+            elif batt_grid_now:
+                excluded_reason = "batt_grid_charge"
+
+            sample_for_ema = None if excluded_reason else sample_kwh_per_h
+        else:
+            sample_for_ema = None
+
+        # EMA inlärning
+        if sample_for_ema is not None:
+            if self._baseline_ema_kwh_per_h is None:
+                self._baseline_ema_kwh_per_h = sample_for_ema
+            else:
+                self._baseline_ema_kwh_per_h = (alpha * sample_for_ema) + ((1 - alpha) * self._baseline_ema_kwh_per_h)
+
+        # Bootstrap om baseline är tom efter omstart (power_w)
+        if self._baseline_ema_kwh_per_h is None and method == "power_w" and not self._baseline_bootstrapped:
+            boot = await self._bootstrap_from_history_power(max(1, window_min))
+            if boot is not None:
+                self._baseline_ema_kwh_per_h = boot
+                self._baseline_bootstrapped = True
+
+        # Publicera baseline data:
+        # - Visa EMA om den finns, annars visa aktuellt sample (även om exkluderat) så att UI aldrig står "Otillgänglig".
+        visible_kwh_h = self._baseline_ema_kwh_per_h if self._baseline_ema_kwh_per_h is not None else sample_kwh_per_h
+        baseline_w = None if visible_kwh_h is None else round(visible_kwh_h * 1000.0, 1)
+
+        self.data["house_baseline_w"] = baseline_w
+        self.data["baseline_method"] = method
+        self.data["baseline_source_value"] = source_val
+        self.data["baseline_kwh_per_h"] = None if self._baseline_ema_kwh_per_h is None else round(self._baseline_ema_kwh_per_h, 4)
+        self.data["baseline_exclusion_reason"] = excluded_reason
+
+        # Battery runtime
+        batt_cap = float(self._get_cfg(CONF_BATT_CAP_KWH, 0.0))
+        soc_ent = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
+        soc_state = self._read_float(soc_ent)
+        soc_floor = float(self._get_cfg(CONF_RUNTIME_SOC_FLOOR, 10))
+        soc_ceil = float(self._get_cfg(CONF_RUNTIME_SOC_CEILING, 95))
+
+        if batt_cap and soc_state is not None and visible_kwh_h and visible_kwh_h > 0:
+            span = max(1.0, soc_ceil - soc_floor)
+            usable = max(0.0, min(1.0, (soc_state - soc_floor) / span))
+            energy_kwh = usable * batt_cap
+            runtime_h = round(energy_kwh / visible_kwh_h, 2) if visible_kwh_h > 0 else None
+        else:
+            runtime_h = None
+
+        self.data["battery_runtime_h"] = runtime_h
+        _LOGGER.debug(
+            "Baseline: method=%s sample=%s kWh/h ema=%s kWh/h excl=%s | visible=%s kWh/h | Runtime=%s h",
+            method,
+            "None" if sample_kwh_per_h is None else f"{sample_kwh_per_h:.4f}",
+            "None" if self._baseline_ema_kwh_per_h is None else f"{self._baseline_ema_kwh_per_h:.4f}",
+            excluded_reason or "none",
+            "None" if visible_kwh_h is None else f"{visible_kwh_h:.4f}",
+            runtime_h,
+        )
+
+    # ---------- solar ----------
+    def _trapz_kwh(self, points):
+        if not points or len(points) < 2:
+            return 0.0
+        pts = sorted(points, key=lambda p: p.time)
+        energy_wh = 0.0
+        for a, b in zip(pts, pts[1:]):
+            dt_h = (b.time - a.time).total_seconds() / 3600.0
+            w_avg = (a.watts + b.watts) / 2.0
+            energy_wh += w_avg * dt_h
+        return round(energy_wh / 1000.0, 3)
+
+    async def _update_solar(self):
+        use = bool(self._get_cfg(CONF_FS_USE, True))
+        if not use:
+            self.data.update({
+                "solar_points": [],
+                "solar_now_w": None,
+                "solar_today_kwh": None,
+                "solar_tomorrow_kwh": None,
+            })
+            return
+
+        apikey = self._get_cfg(CONF_FS_APIKEY, "")
+        lat = float(self._get_cfg(CONF_FS_LAT, 0.0))
+        lon = float(self._get_cfg(CONF_FS_LON, 0.0))
+        planes = self._get_cfg(CONF_FS_PLANES, "[]")
+        horizon = self._get_cfg(CONF_FS_HORIZON, "")
+
+        provider = ForecastSolarProvider(
+            self.hass, lat=lat, lon=lon, planes_json=planes, apikey=apikey, horizon_csv=horizon
+        )
+        pts = await provider.async_fetch_watts()
+        self.data["solar_points"] = pts
+
+        now = dt_util.now().replace(second=0, microsecond=0)
+        if pts:
+            nearest = min(pts, key=lambda p: abs((p.time - now).total_seconds()))
+            self.data["solar_now_w"] = round(nearest.watts, 1)
+        else:
+            self.data["solar_now_w"] = 0.0
+
+        today = now.date()
+        tomorrow = (now + timedelta(days=1)).date()
+        today_pts = [p for p in pts if p.time.date() == today]
+        tomo_pts = [p for p in pts if p.time.date() == tomorrow]
+
+        self.data["solar_today_kwh"] = self._trapz_kwh(today_pts) if today_pts else 0.0
+        self.data["solar_tomorrow_kwh"] = self._trapz_kwh(tomo_pts) if tomo_pts else 0.0
+
+    # ---------- PV actual ----------
+    async def _update_pv_actual(self):
+        pv_power_entity = self._get_cfg(CONF_PV_POWER_ENTITY, "")
+        pv_energy_entity = self._get_cfg(CONF_PV_ENERGY_TODAY_ENTITY, "")
+
+        pv_now = None
+        if pv_power_entity:
+            st = self.hass.states.get(pv_power_entity)
+            if st and st.state not in (None, "", "unknown", "unavailable"):
+                pv_now = _as_watts(st.state, str(st.attributes.get("unit_of_measurement", "")).lower())
+                pv_now = None if pv_now is None else round(pv_now, 1)
+        self.data["pv_now_w"] = pv_now
+
+        pv_today = None
+        if pv_energy_entity:
+            st = self.hass.states.get(pv_energy_entity)
+            if st and st.state not in (None, "", "unknown", "unavailable"):
+                try:
+                    val = _safe_float(st.state)
+                    unit = str(st.attributes.get("unit_of_measurement", "")).lower()
+                    if val is not None:
+                        if "mwh" in unit:
+                            pv_today = round(val * 1000.0, 3)
+                        elif "wh" in unit and "kwh" not in unit:
+                            pv_today = round(val / 1000.0, 3)
+                        else:
+                            pv_today = round(val, 3)  # antar kWh
+                except Exception:
+                    pv_today = None
+        self.data["pv_today_kwh"] = pv_today
+
+    # ---------- Auto EV tick (oförändrad logik v0) ----------
+    async def _auto_ev_tick(self):
+        store = self._get_store()
+        dispatcher = store.get("dispatcher")
+        if not dispatcher:
+            return
+
+        now = dt_util.now()
+        if hasattr(dispatcher, "is_paused") and dispatcher.is_paused(now):
+            self.data["auto_ev_setpoint_a"] = 0
+            self.data["auto_ev_reason"] = "override_pause"
+            self.data["time_until_charge_ev_min"] = None
+            return
+
+        if hasattr(dispatcher, "is_forced") and dispatcher.is_forced(now):
+            amps = dispatcher.get_forced_ev_current() or int(self._get_cfg(CONF_EVSE_MIN_A, 6))
+            await dispatcher.async_apply_ev_setpoint(amps)
+            self.data["auto_ev_setpoint_a"] = amps
+            self.data["auto_ev_reason"] = "override_force"
+            self.data["time_until_charge_ev_min"] = 0
+            return
+
+        if not self._get_flag("auto_ev_enabled", True):
+            self.data["auto_ev_setpoint_a"] = 0
+            self.data["auto_ev_reason"] = "auto_ev_off"
+            self.data["time_until_charge_ev_min"] = None
+            return
+
+        phases = int(self._get_cfg(CONF_EVSE_PHASES, 3))
+        voltage = int(self._get_cfg(CONF_EVSE_VOLTAGE, 230))
+        min_a = int(self._get_cfg(CONF_EVSE_MIN_A, 6))
+        max_a = int(self._get_cfg(CONF_EVSE_MAX_A, 16))
+        max_w = phases * voltage * max_a
+
+        price = self.data.get("current_enriched")
+        p25 = self.data.get("cheap_threshold")
+
+        pv_now_w = self.data.get("pv_now_w")
+        if pv_now_w is None:
+            pv_now_w = self.data.get("solar_now_w") or 0.0
+
+        house_w = float(self.data.get("house_baseline_w") or 0.0)
+        surplus_w = max(0.0, pv_now_w - house_w)
+
+        def w_to_amps(w: float) -> int:
+            return max(0, math.ceil(w / max(1, phases * voltage)))
+
+        reason = "idle"
+        target_a = 0
+        solar_a = w_to_amps(surplus_w)
+        if solar_a >= min_a:
+            target_a = max(min_a, min(max_a, solar_a))
+            reason = "pv_surplus"
+        elif price is not None and p25 is not None and price <= p25:
+            target_a = min_a
+            reason = "cheap_hour"
+        else:
+            target_a = 0
+            reason = "expensive_or_no_need"
+
+        target_a = min(target_a, w_to_amps(max_w))
+        await dispatcher.async_apply_ev_setpoint(target_a)
+
+        self.data["auto_ev_setpoint_a"] = target_a
+        self.data["auto_ev_reason"] = reason
+        self.data["time_until_charge_ev_min"] = self._eta_until_next_charge(min_a, phases, voltage, p25, house_w)
+
+    def _eta_until_next_charge(self, min_a: int, phases: int, voltage: int, cheap_threshold: Optional[float], house_w: float):
+        now = dt_util.now()
+        if int(self.data.get("auto_ev_setpoint_a") or 0) >= min_a:
+            return 0
+
+        # Billig timme
+        t1 = None
+        if cheap_threshold is not None:
+            for p in self.data.get("hourly_prices") or []:
+                if p.time >= now and p.enriched_sek_per_kwh <= cheap_threshold:
+                    t1 = p.time
+                    break
+
+        # Solöverskott
+        need_w = min_a * phases * voltage
+        t2 = None
+        for sp in self.data.get("solar_points") or []:
+            if sp.time >= now and (sp.watts - house_w) >= need_w:
+                t2 = sp.time
+                break
+
+        candidates = [t for t in [t1, t2] if t is not None]
+        if not candidates:
+            return None
+        eta = min(candidates)
+        return max(0, int((eta - now).total_seconds() // 60))
+
+    # ---------- Ekonomi ----------
+    def _update_grid_vs_batt_delta(self):
+        store = self._get_store()
+        wace = float(store.get("wace", 0.0))
+        grid = self.data.get("current_enriched")
+        if grid is None:
+            self.data["grid_vs_batt_delta_sek_per_kwh"] = None
+            return
+        self.data["grid_vs_batt_delta_sek_per_kwh"] = round(grid - wace, 6)
+
+    # ---------- Forecast vs Actual 15m ----------
+    def _update_solar_delta_15m(self):
+        now = dt_util.now()
+        fc_w = self.data.get("solar_now_w") or 0.0
+        pv_w = self.data.get("pv_now_w")
+        if pv_w is None:
+            pv_w = fc_w
+
+        self._sf_history.append((now, float(fc_w), float(pv_w)))
+        cutoff = now - timedelta(minutes=15)
+        self._sf_history = [e for e in self._sf_history if e[0] >= cutoff]
+
+        if len(self._sf_history) < 2:
+            self.data["solar_delta_15m_w"] = 0.0
+            self.data["solar_delta_15m_pct"] = 0.0
+            return
+
+        deltas = [(pv - fc) for (_, fc, pv) in self._sf_history]
+        avg_delta = sum(deltas) / len(deltas)
+        avg_fc = sum([fc for (_, fc, _) in self._sf_history]) / len(self._sf_history)
+        pct = 0.0 if avg_fc == 0 else (avg_delta / avg_fc) * 100.0
+
+        self.data["solar_delta_15m_w"] = round(avg_delta, 1)
+        self.data["solar_delta_15m_pct"] = round(pct, 1)
