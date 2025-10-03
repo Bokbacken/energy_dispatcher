@@ -17,7 +17,10 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     entities = [
         EnrichedPriceSensor(coordinator, entry.entry_id),
         BatteryRuntimeSensor(coordinator, entry.entry_id),
-        BatteryCostSensor(coordinator, entry.entry_id),  # visar WACE om satt i hass.data
+        BatteryCostSensor(coordinator, entry.entry_id),
+        SolarPowerNowSensor(coordinator, entry.entry_id),
+        SolarEnergyTodaySensor(coordinator, entry.entry_id),
+        SolarEnergyTomorrowSensor(coordinator, entry.entry_id),
     ]
     async_add_entities(entities)
 
@@ -51,9 +54,7 @@ class EnrichedPriceSensor(BaseEDSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        # lägg till timlista som attribut (max 48h)
         hourly = self.coordinator.data.get("hourly_prices") or []
-        # serialisera
         out = [
             {
                 "time": p.time.isoformat(),
@@ -90,6 +91,53 @@ class BatteryCostSensor(BaseEDSensor):
 
     @property
     def native_value(self) -> float:
-        # WACE: läses från hass.data tills BEC kopplas in fullt ut
         store = self.coordinator.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
         return float(store.get("wace", 0.0))
+
+
+class SolarPowerNowSensor(BaseEDSensor):
+    _attr_name = "Solar Power Forecast Now"
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:solar-power"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_solar_now_w_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("solar_now_w")
+
+    @property
+    def extra_state_attributes(self):
+        pts = self.coordinator.data.get("solar_points") or []
+        # visa max ~2 dagar för att hålla attributen rimliga
+        return {"points": [{"time": p.time.isoformat(), "watts": p.watts} for p in pts[:96]]}
+
+
+class SolarEnergyTodaySensor(BaseEDSensor):
+    _attr_name = "Solar Energy Forecast Today"
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_icon = "mdi:solar-power"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_solar_today_kwh_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("solar_today_kwh")
+
+
+class SolarEnergyTomorrowSensor(BaseEDSensor):
+    _attr_name = "Solar Energy Forecast Tomorrow"
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_icon = "mdi:solar-power"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_solar_tomorrow_kwh_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("solar_tomorrow_kwh")
