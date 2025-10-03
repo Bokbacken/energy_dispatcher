@@ -1,87 +1,66 @@
-"""Bas-klasser för batteri- och EV-adaptrar."""
-from __future__ import annotations
-
-import logging
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime, timedelta
-from typing import Any
-
+from typing import Optional
 from homeassistant.core import HomeAssistant
 
-from ..models import BatterySettings, BatteryState, EVSettings, EVState
-
-_LOGGER = logging.getLogger(__name__)
-
-
-class BatteryAdapterBase(ABC):
-    """Abstrakt bas för batteriadaptrar."""
-
-    def __init__(self, hass: HomeAssistant, settings: BatterySettings) -> None:
+class BatteryAdapter(ABC):
+    def __init__(self, hass: HomeAssistant):
         self.hass = hass
-        self.settings = settings
 
     @abstractmethod
-    async def async_get_state(self) -> BatteryState:
+    def supports_forced_charge(self) -> bool:
         ...
-
-    async def async_force_charge(
-        self, duration_minutes: int, ampere: float | None = None
-    ) -> None:
-        _LOGGER.warning("Force charge ej implementerat för adapter %s", type(self))
-
-    async def async_force_discharge(self, duration_minutes: int) -> None:
-        _LOGGER.warning("Force discharge ej implementerat för adapter %s", type(self))
-
-    @classmethod
-    def from_entity(cls, hass: HomeAssistant, settings: BatterySettings):
-        """Fallback adapter som läser stat från angivna sensorer."""
-        return EntityBatteryAdapter(hass, settings)
-
-
-class EntityBatteryAdapter(BatteryAdapterBase):
-    """Simple batteriadapter vare sig det finns generella entiteter."""
-
-    async def async_get_state(self) -> BatteryState:
-        soc_state = self.hass.states.get(self.settings.soc_sensor_entity_id)
-        if not soc_state:
-            raise RuntimeError("SOC-sensor saknas")
-        soc = float(soc_state.state) / 100 if float(soc_state.state) > 1 else float(soc_state.state)
-
-        power_state = None
-        if self.settings.power_sensor_entity_id:
-            state = self.hass.states.get(self.settings.power_sensor_entity_id)
-            if state:
-                try:
-                    power_state = float(state.state)
-                except ValueError:
-                    power_state = None
-
-        now = datetime.now(UTC)
-        return BatteryState(
-            soc=soc,
-            power_kw=power_state,
-            estimated_hours_remaining=None,
-            price_per_kwh=None,
-            last_update=now,
-        )
-
-
-class EVAdapterBase(ABC):
-    """Bas-klass för EV-laddningsadapter."""
-
-    def __init__(self, hass: HomeAssistant, settings: EVSettings) -> None:
-        self.hass = hass
-        self.settings = settings
 
     @abstractmethod
-    async def async_get_state(self) -> EVState:
+    async def async_force_charge(self, power_w: int, duration_min: int) -> None:
         ...
 
-    async def async_pause(self, duration_minutes: int | None = None) -> None:
-        _LOGGER.warning("Pause ej implementerat i adapter %s", type(self))
+    @abstractmethod
+    async def async_cancel_force_charge(self) -> None:
+        ...
 
-    async def async_resume(self) -> None:
-        _LOGGER.warning("Resume ej implementerat i adapter %s", type(self))
+    async def async_set_target_soc(self, percent: int) -> None:
+        # Optional override
+        return
 
-    async def async_set_manual_soc(self, soc: float) -> None:
-        _LOGGER.debug("Manual SOC satt via adapter %s: %.2f", type(self), soc)
+class EVSEAdapter(ABC):
+    def __init__(self, hass: HomeAssistant):
+        self.hass = hass
+
+    @abstractmethod
+    async def async_start(self) -> None:
+        ...
+
+    @abstractmethod
+    async def async_stop(self) -> None:
+        ...
+
+    @abstractmethod
+    async def async_set_current(self, amps: int) -> None:
+        ...
+
+class EVManualAdapter:
+    """
+    Stores manual EV info and provides estimated energy/time to target.
+    """
+    def __init__(self, ev_batt_kwh: float, ev_current_soc: float, ev_target_soc: float,
+                 phases: int = 3, voltage: int = 230, max_a: int = 16):
+        self.ev_batt_kwh = ev_batt_kwh
+        self.ev_current_soc = ev_current_soc
+        self.ev_target_soc = ev_target_soc
+        self.phases = phases
+        self.voltage = voltage
+        self.max_a = max_a
+
+    def energy_needed_kwh(self) -> float:
+        delta = max(0.0, self.ev_target_soc - self.ev_current_soc) / 100.0
+        return delta * self.ev_batt_kwh
+
+    def power_kw_at(self, amps: int) -> float:
+        # Simple 3-phase power estimate: P = V * I * phases / 1000
+        return self.voltage * amps * self.phases / 1000.0
+
+    def hours_needed(self, amps: int) -> Optional[float]:
+        p = self.power_kw_at(amps)
+        if p <= 0:
+            return None
+        return self.energy_needed_kwh() / p
