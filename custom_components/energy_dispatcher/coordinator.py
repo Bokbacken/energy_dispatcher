@@ -31,11 +31,26 @@ from .const import (
     # PV actual
     CONF_PV_POWER_ENTITY,
     CONF_PV_ENERGY_TODAY_ENTITY,
-    # EV/EVSE för beslutsparametrar
+    # EV/EVSE param
     CONF_EVSE_MIN_A,
     CONF_EVSE_MAX_A,
     CONF_EVSE_PHASES,
     CONF_EVSE_VOLTAGE,
+    CONF_EVSE_START_SWITCH,
+    CONF_EVSE_CURRENT_NUMBER,
+    # Baseline
+    CONF_RUNTIME_SOURCE,
+    CONF_RUNTIME_COUNTER_ENTITY,
+    CONF_RUNTIME_POWER_ENTITY,
+    CONF_RUNTIME_ALPHA,
+    CONF_RUNTIME_WINDOW_MIN,
+    CONF_RUNTIME_EXCLUDE_EV,
+    CONF_RUNTIME_EXCLUDE_BATT_GRID,
+    CONF_RUNTIME_SOC_FLOOR,
+    CONF_RUNTIME_SOC_CEILING,
+    CONF_LOAD_POWER_ENTITY,
+    CONF_BATT_POWER_ENTITY,
+    CONF_GRID_IMPORT_TODAY_ENTITY,
 )
 from .models import PricePoint
 from .price_provider import PriceProvider, PriceFees
@@ -47,13 +62,13 @@ _LOGGER = logging.getLogger(__name__)
 class EnergyDispatcherCoordinator(DataUpdateCoordinator):
     """
     Samlar:
-    - Timvisa priser (spot + enriched)
+    - Priser (spot + enriched)
     - Aktuellt berikat pris
-    - Batteriets uppskattade driftstid
-    - Solprognos (nu, idag, imorgon)
-    - Faktisk PV-produktion (nu, idag)
-    - Auto EV v0 (setpoint i A + orsak + ETA)
-    - Forecast vs Actual-delta (15m medel)
+    - Huslast-baseline (W) och runtime-estimat
+    - Solprognos + faktisk PV
+    - Auto EV v0 + ETA
+    - Ekonomi (grid vs batt)
+    - Forecast vs Actual-delta (15m)
     """
 
     def __init__(self, hass: HomeAssistant):
@@ -63,23 +78,32 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             name=f"{DOMAIN}_coordinator",
             update_interval=timedelta(seconds=300),
         )
-        self.entry_id: Optional[str] = None  # sätts i __init__.py
+        self.entry_id: Optional[str] = None
         self.data: Dict[str, Any] = {
-            "hourly_prices": [],            # List[PricePoint]
-            "current_enriched": None,       # float
-            "battery_runtime_h": None,      # float
-            "solar_points": [],             # List[ForecastPoint]
-            "solar_now_w": None,            # float
-            "solar_today_kwh": None,        # float
-            "solar_tomorrow_kwh": None,     # float
-            "pv_now_w": None,               # float
-            "pv_today_kwh": None,           # float
+            "hourly_prices": [],
+            "current_enriched": None,
+            # Baseline
+            "house_baseline_w": None,
+            "baseline_method": None,
+            "baseline_source_value": None,
+            "baseline_kwh_per_h": None,
+            "baseline_exclusion_reason": "",
+            # Runtime + batteri
+            "battery_runtime_h": None,
+            # Sol
+            "solar_points": [],
+            "solar_now_w": None,
+            "solar_today_kwh": None,
+            "solar_tomorrow_kwh": None,
+            # PV actual
+            "pv_now_w": None,
+            "pv_today_kwh": None,
             # Auto EV status
-            "cheap_threshold": None,        # SEK/kWh (P25)
+            "cheap_threshold": None,
             "auto_ev_setpoint_a": 0,
             "auto_ev_reason": "",
             "time_until_charge_ev_min": None,
-            # Batteri (placeholder tills auto-batt implementeras)
+            # Batteri placeholder
             "time_until_charge_batt_min": None,
             "batt_charge_reason": "not_implemented",
             # Ekonomi
@@ -88,7 +112,10 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             "solar_delta_15m_w": None,
             "solar_delta_15m_pct": None,
         }
-        # Historik för delta-beräkning
+
+        # Historik/EMA för baseline (counter_kwh/power_w)
+        self._baseline_prev_counter: Optional[Tuple[float, Any]] = None  # (kWh, ts)
+        self._baseline_ema_kwh_per_h: Optional[float] = None
         self._sf_history: List[Tuple[Any, float, float]] = []  # (ts, forecast_w, actual_w)
 
     # ---------- helpers ----------
@@ -111,7 +138,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         try:
             await self._update_prices()
-            await self._update_battery_runtime()
+            await self._update_baseline_and_runtime()
             await self._update_solar()
             await self._update_pv_actual()
             await self._auto_ev_tick()
@@ -145,7 +172,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         self.data["hourly_prices"] = hourly
         self.data["current_enriched"] = provider.get_current_enriched(hourly)
 
-        # P25-tröskel på kommande 24h (inkl. pågående timme)
+        # P25-tröskel 24h framåt
         now = dt_util.now().replace(minute=0, second=0, microsecond=0)
         next24 = [p for p in hourly if 0 <= (p.time - now).total_seconds() < 24 * 3600]
         if next24:
@@ -155,54 +182,151 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         else:
             self.data["cheap_threshold"] = None
 
-        _LOGGER.debug(
-            "Priser uppdaterade: %s rader, current_enriched=%s, p25=%s",
-            len(hourly), self.data["current_enriched"], self.data["cheap_threshold"]
-        )
-
-    # ---------- battery runtime ----------
-    async def _update_battery_runtime(self):
-        batt_cap = float(self._get_cfg(CONF_BATT_CAP_KWH, 0.0))
-        soc_entity = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
-        house_cons_entity = self._get_cfg(CONF_HOUSE_CONS_SENSOR, "")
-
-        if not batt_cap or not soc_entity:
-            self.data["battery_runtime_h"] = None
-            return
-
-        soc_state = self.hass.states.get(soc_entity)
+    # ---------- baseline + runtime ----------
+    def _read_float(self, entity_id: str) -> Optional[float]:
+        if not entity_id:
+            return None
+        st = self.hass.states.get(entity_id)
+        if not st or st.state in (None, "", "unknown", "unavailable"):
+            return None
         try:
-            soc = float(soc_state.state)  # %
+            return float(str(st.state).replace(",", "."))
         except Exception:
-            soc = None
+            return None
 
-        if soc is None:
-            self.data["battery_runtime_h"] = None
-            return
-
-        energy_kwh = max(0.0, min(1.0, soc / 100.0)) * batt_cap
-
-        avg_kwh_per_h = None
-        if house_cons_entity:
-            cons_state = self.hass.states.get(house_cons_entity)
+    def _is_ev_charging(self) -> bool:
+        if not bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_EV, True)):
+            return False
+        start_sw = self._get_cfg(CONF_EVSE_START_SWITCH, "")
+        num_current = self._get_cfg(CONF_EVSE_CURRENT_NUMBER, "")
+        if start_sw:
+            st = self.hass.states.get(start_sw)
+            is_on = (st and str(st.state).lower() == "on")
+        else:
+            is_on = False
+        amps = 0.0
+        if num_current:
             try:
-                avg_kwh_per_h = float(cons_state.state)
+                amps = float(self.hass.states.get(num_current).state)
             except Exception:
-                avg_kwh_per_h = None
+                amps = 0.0
+        min_a = int(self._get_cfg(CONF_EVSE_MIN_A, 6))
+        return bool(is_on and amps >= min_a)
 
-        if avg_kwh_per_h and avg_kwh_per_h > 0:
-            runtime_h = energy_kwh / avg_kwh_per_h
+    def _is_batt_charging_from_grid(self) -> bool:
+        if not bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)):
+            return False
+        batt_pw = self._read_float(self._get_cfg(CONF_BATT_POWER_ENTITY, ""))
+        load_pw = self._read_float(self._get_cfg(CONF_LOAD_POWER_ENTITY, ""))
+        pv_pw = self._read_float(self._get_cfg(CONF_PV_POWER_ENTITY, ""))
+        if batt_pw is None or load_pw is None or pv_pw is None:
+            return False
+        batt_charge_w = max(0.0, -batt_pw)  # negativt = laddning
+        pv_surplus_w = max(0.0, pv_pw - load_pw)
+        grid_charge_w = max(0.0, batt_charge_w - pv_surplus_w)
+        return grid_charge_w > 100.0
+
+    async def _update_baseline_and_runtime(self):
+        """
+        Beräkna husets baseline (kWh/h) och Battery Runtime Estimate.
+        - counter_kwh: derivata på kWh-räknare (t.ex. Consumption today)
+        - power_w: W-sensor till kWh/h
+        - manual_dayparts: ej implementerad än (placeholder)
+        Exkluderar datapunkter vid EV-laddning och forcerad batteriladdning från grid.
+        """
+        method = self._get_cfg(CONF_RUNTIME_SOURCE, "counter_kwh")
+        alpha = float(self._get_cfg(CONF_RUNTIME_ALPHA, 0.2))
+        now = dt_util.now()
+
+        excluded_reason = ""
+        sample_kwh_per_h: Optional[float] = None
+        source_val = None
+
+        if method == "counter_kwh":
+            ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
+            kwh = self._read_float(ent)
+            source_val = kwh
+            if kwh is not None:
+                prev = self._baseline_prev_counter
+                self._baseline_prev_counter = (kwh, now)
+                if prev:
+                    prev_kwh, prev_ts = prev
+                    dt_h = max(0.0, (now - prev_ts).total_seconds() / 3600.0)
+                    delta = kwh - prev_kwh
+                    # hantera dygnsreset/negativa hopp
+                    if dt_h > 0 and delta >= 0:
+                        sample_kwh_per_h = delta / dt_h
+
+        elif method == "power_w":
+            ent = self._get_cfg(CONF_RUNTIME_POWER_ENTITY, "")
+            w = self._read_float(ent)
+            source_val = w
+            if w is not None and w >= 0:
+                sample_kwh_per_h = w / 1000.0
+
+        else:
+            # manual_dayparts (placeholder)
+            sample_kwh_per_h = None
+
+        # Exkludera datapunkt för inlärning när EV eller grid-laddning pågår
+        if sample_kwh_per_h is not None:
+            if self._is_ev_charging():
+                excluded_reason = "ev_charging"
+                sample_for_ema = None
+            elif self._is_batt_charging_from_grid():
+                excluded_reason = "batt_grid_charge"
+                sample_for_ema = None
+            else:
+                sample_for_ema = sample_kwh_per_h
+        else:
+            sample_for_ema = None
+
+        # Klipp orimliga värden (0.05..5 kWh/h)
+        if sample_for_ema is not None:
+            sample_for_ema = max(0.05, min(5.0, sample_for_ema))
+
+        # EMA
+        if sample_for_ema is not None:
+            if self._baseline_ema_kwh_per_h is None:
+                self._baseline_ema_kwh_per_h = sample_for_ema
+            else:
+                self._baseline_ema_kwh_per_h = (alpha * sample_for_ema) + ((1 - alpha) * self._baseline_ema_kwh_per_h)
+
+        # Publicera baseline data
+        baseline_kwh_h = self._baseline_ema_kwh_per_h
+        baseline_w = None if baseline_kwh_h is None else round(baseline_kwh_h * 1000.0, 1)
+        self.data["house_baseline_w"] = baseline_w
+        self.data["baseline_method"] = method
+        self.data["baseline_source_value"] = source_val
+        self.data["baseline_kwh_per_h"] = None if baseline_kwh_h is None else round(baseline_kwh_h, 4)
+        self.data["baseline_exclusion_reason"] = excluded_reason
+
+        # Battery runtime
+        batt_cap = float(self._get_cfg(CONF_BATT_CAP_KWH, 0.0))
+        soc_ent = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
+        soc_state = self._read_float(soc_ent)
+        soc_floor = float(self._get_cfg(CONF_RUNTIME_SOC_FLOOR, 10))
+        soc_ceil = float(self._get_cfg(CONF_RUNTIME_SOC_CEILING, 95))
+
+        if batt_cap and soc_state is not None and baseline_kwh_h and baseline_kwh_h > 0:
+            span = max(1.0, soc_ceil - soc_floor)
+            usable = max(0.0, min(1.0, (soc_state - soc_floor) / span))
+            energy_kwh = usable * batt_cap
+            runtime_h = round(energy_kwh / baseline_kwh_h, 2) if baseline_kwh_h > 0 else None
         else:
             runtime_h = None
 
-        val = None if runtime_h is None else round(runtime_h, 2)
-        self.data["battery_runtime_h"] = val
+        self.data["battery_runtime_h"] = runtime_h
         _LOGGER.debug(
-            "Battery runtime estimate: %s h (SOC=%s%%, cap=%s kWh, avg=%s kWh/h)",
-            val, soc, batt_cap, avg_kwh_per_h
+            "Baseline: method=%s sample=%.4f kWh/h ema=%.4f kWh/h excl=%s | Runtime=%s h",
+            method,
+            -1.0 if sample_kwh_per_h is None else sample_kwh_per_h,
+            -1.0 if self._baseline_ema_kwh_per_h is None else self._baseline_ema_kwh_per_h,
+            excluded_reason or "none",
+            runtime_h,
         )
 
-    # ---------- solar forecast ----------
+    # ---------- solar ----------
     def _trapz_kwh(self, points):
         if not points or len(points) < 2:
             return 0.0
@@ -223,7 +347,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 "solar_today_kwh": None,
                 "solar_tomorrow_kwh": None,
             })
-            _LOGGER.debug("Forecast.Solar avstängt (fs_use=False)")
             return
 
         apikey = self._get_cfg(CONF_FS_APIKEY, "")
@@ -252,11 +375,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
 
         self.data["solar_today_kwh"] = self._trapz_kwh(today_pts) if today_pts else 0.0
         self.data["solar_tomorrow_kwh"] = self._trapz_kwh(tomo_pts) if tomo_pts else 0.0
-
-        _LOGGER.debug(
-            "Forecast.Solar: points=%s, now=%s W, today=%s kWh, tomorrow=%s kWh",
-            len(pts), self.data["solar_now_w"], self.data["solar_today_kwh"], self.data["solar_tomorrow_kwh"]
-        )
 
     # ---------- PV actual ----------
     async def _update_pv_actual(self):
@@ -297,12 +415,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                     pv_today = None
         self.data["pv_today_kwh"] = pv_today
 
-        _LOGGER.debug(
-            "PV actual: now=%s W, today=%s kWh (power_entity=%s, energy_entity=%s)",
-            pv_now, pv_today, pv_power_entity, pv_energy_entity
-        )
-
-    # ---------- Auto EV tick ----------
+    # ---------- Auto EV tick (oförändrad logik v0) ----------
     async def _auto_ev_tick(self):
         store = self._get_store()
         dispatcher = store.get("dispatcher")
@@ -310,21 +423,18 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             return
 
         now = dt_util.now()
-        if dispatcher.is_paused(now):
+        if hasattr(dispatcher, "is_paused") and dispatcher.is_paused(now):
             self.data["auto_ev_setpoint_a"] = 0
             self.data["auto_ev_reason"] = "override_pause"
             self.data["time_until_charge_ev_min"] = None
-            _LOGGER.debug("Auto EV: paus override aktiv – ingen styrning.")
             return
 
-        # Force-override: kör på given ström.
-        if dispatcher.is_forced(now):
+        if hasattr(dispatcher, "is_forced") and dispatcher.is_forced(now):
             amps = dispatcher.get_forced_ev_current() or int(self._get_cfg(CONF_EVSE_MIN_A, 6))
             await dispatcher.async_apply_ev_setpoint(amps)
             self.data["auto_ev_setpoint_a"] = amps
             self.data["auto_ev_reason"] = "override_force"
             self.data["time_until_charge_ev_min"] = 0
-            _LOGGER.debug("Auto EV: force override %s A", amps)
             return
 
         if not self._get_flag("auto_ev_enabled", True):
@@ -333,7 +443,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self.data["time_until_charge_ev_min"] = None
             return
 
-        # Parametrar
         phases = int(self._get_cfg(CONF_EVSE_PHASES, 3))
         voltage = int(self._get_cfg(CONF_EVSE_VOLTAGE, 230))
         min_a = int(self._get_cfg(CONF_EVSE_MIN_A, 6))
@@ -343,29 +452,18 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         price = self.data.get("current_enriched")
         p25 = self.data.get("cheap_threshold")
 
-        # PV-överskott "nu": använd faktisk PV om tillgängligt, annars prognosen
         pv_now_w = self.data.get("pv_now_w")
         if pv_now_w is None:
             pv_now_w = self.data.get("solar_now_w") or 0.0
 
-        house_cons_entity = self._get_cfg(CONF_HOUSE_CONS_SENSOR, "")
-        surplus_w = pv_now_w
-        if house_cons_entity:
-            st = self.hass.states.get(house_cons_entity)
-            try:
-                avg_kwh_per_h = float(st.state)  # kWh/h ~ kW
-                house_now_w = max(0.0, avg_kwh_per_h * 1000.0)
-                surplus_w = max(0.0, pv_now_w - house_now_w)
-            except Exception:
-                pass
+        house_w = float(self.data.get("house_baseline_w") or 0.0)
+        surplus_w = max(0.0, pv_now_w - house_w)
 
         def w_to_amps(w: float) -> int:
             return max(0, math.ceil(w / max(1, phases * voltage)))
 
-        # Enkel beslutslogik
         reason = "idle"
         target_a = 0
-
         solar_a = w_to_amps(surplus_w)
         if solar_a >= min_a:
             target_a = max(min_a, min(max_a, solar_a))
@@ -377,31 +475,19 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             target_a = 0
             reason = "expensive_or_no_need"
 
-        # Säkerhet
         target_a = min(target_a, w_to_amps(max_w))
         await dispatcher.async_apply_ev_setpoint(target_a)
 
         self.data["auto_ev_setpoint_a"] = target_a
         self.data["auto_ev_reason"] = reason
-        self.data["time_until_charge_ev_min"] = self._eta_until_next_charge(min_a, phases, voltage, p25)
+        self.data["time_until_charge_ev_min"] = self._eta_until_next_charge(min_a, phases, voltage, p25, house_w)
 
-        _LOGGER.debug(
-            "Auto EV: setpoint=%s A, reason=%s (price=%s, p25=%s, pv_surplus_w=%s)",
-            target_a, reason, price, p25, surplus_w
-        )
-
-    def _eta_until_next_charge(self, min_a: int, phases: int, voltage: int, cheap_threshold: Optional[float]):
-        """
-        Grov uppskattning av tid tills vi börjar ladda (minuter):
-         - Nästa timme där enriched <= p25
-         - Nästa tidpunkt med prognosticerat solöverskott som räcker för min_a
-        """
+    def _eta_until_next_charge(self, min_a: int, phases: int, voltage: int, cheap_threshold: Optional[float], house_w: float):
         now = dt_util.now()
-        # Om redan laddning: 0
         if int(self.data.get("auto_ev_setpoint_a") or 0) >= min_a:
             return 0
 
-        # Kandidat 1: billig timme
+        # Billig timme
         t1 = None
         if cheap_threshold is not None:
             for p in self.data.get("hourly_prices") or []:
@@ -409,20 +495,10 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                     t1 = p.time
                     break
 
-        # Kandidat 2: solöverskott
-        t2 = None
-        solar_pts = self.data.get("solar_points") or []
-        house_w = 0.0
-        house_cons_entity = self._get_cfg(CONF_HOUSE_CONS_SENSOR, "")
-        if house_cons_entity:
-            st = self.hass.states.get(house_cons_entity)
-            try:
-                house_w = max(0.0, float(st.state) * 1000.0)
-            except Exception:
-                house_w = 0.0
-
+        # Solöverskott
         need_w = min_a * phases * voltage
-        for sp in solar_pts:
+        t2 = None
+        for sp in self.data.get("solar_points") or []:
             if sp.time >= now and (sp.watts - house_w) >= need_w:
                 t2 = sp.time
                 break
@@ -431,8 +507,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         if not candidates:
             return None
         eta = min(candidates)
-        minutes = max(0, int((eta - now).total_seconds() // 60))
-        return minutes
+        return max(0, int((eta - now).total_seconds() // 60))
 
     # ---------- Ekonomi ----------
     def _update_grid_vs_batt_delta(self):
@@ -450,9 +525,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         fc_w = self.data.get("solar_now_w") or 0.0
         pv_w = self.data.get("pv_now_w")
         if pv_w is None:
-            pv_w = fc_w  # om ingen faktisk sensor, delta=0
+            pv_w = fc_w
 
-        # Lägg till punkt och trimma äldre än 15 min
         self._sf_history.append((now, float(fc_w), float(pv_w)))
         cutoff = now - timedelta(minutes=15)
         self._sf_history = [e for e in self._sf_history if e[0] >= cutoff]
@@ -464,8 +538,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
 
         deltas = [(pv - fc) for (_, fc, pv) in self._sf_history]
         avg_delta = sum(deltas) / len(deltas)
-
-        # Procent relativt genomsnittlig forecast under perioden
         avg_fc = sum([fc for (_, fc, _) in self._sf_history]) / len(self._sf_history)
         pct = 0.0 if avg_fc == 0 else (avg_delta / avg_fc) * 100.0
 
