@@ -94,11 +94,11 @@ class ForecastSolarProvider:
         try:
             with async_timeout.timeout(20):
                 resp = await session.get(url)
-            if resp.status != 200:
-                text = await resp.text()
-                _LOGGER.warning("Forecast.Solar status=%s text=%s", resp.status, text)
-                return []
-            data = await resp.json()
+                if resp.status != 200:
+                    text = await resp.text()
+                    _LOGGER.warning("Forecast.Solar status=%s text=%s", resp.status, text)
+                    return []
+                data = await resp.json()
         except Exception as e:  # noqa: BLE001
             _LOGGER.exception("Kunde inte hämta Forecast.Solar: %s", e)
             return []
