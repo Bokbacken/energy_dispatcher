@@ -46,24 +46,24 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    hass.data.setdefault(DOMION := DOMAIN, {})
+    # 0) Grundstruktur i hass.data
+    hass.data.setdefault(DOMAIN, {})
+    store = hass.data[DOMAIN].setdefault(
+        entry.entry_id,
+        {
+            "config": dict(entry.data),
+            "flags": {"auto_ev_enabled": True, "auto_planner_enabled": True},
+            "wace": 0.0,
+        },
+    )
 
-    # Lägg in config och flags först
-    store = {
-        "config": dict(entry.data),
-        "flags": {"auto_ev_enabled": True, "auto_planner_enabled": True},
-        "wace": 0.0,
-    }
-    hass.data[DOMAIN][entry.entry_id] = store
-
-    # Skapa koordinator med config, sätt entry_id och kör first refresh
-    coordinator = EnergyDispatcherCoordinator(hass, config=store["config"])
+    # 1) Koordinator – utan config-argument
+    coordinator = EnergyDispatcherCoordinator(hass)
     coordinator.entry_id = entry.entry_id
     store["coordinator"] = coordinator
     await coordinator.async_config_entry_first_refresh()
 
-    # ...därefter bygger du adapters, dispatcher osv och stoppar in i store
-    # 2) Batteri-adapter
+    # 2) Batteri-adapter (Huawei i MVP)
     battery_adapter: Optional[BatteryAdapter] = None
     batt_adapter_type = entry.data.get(CONF_BATT_ADAPTER, "huawei")
     if batt_adapter_type == "huawei":
@@ -72,7 +72,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning("Huawei device_id saknas; forced charge fungerar ej.")
         battery_adapter = HuaweiBatteryAdapter(hass, device_id=device_id or "")
 
-    # 3) EVSE-adapter
+    # 3) EVSE-adapter (generisk: start/stop-switch + current number)
     evse_adapter: Optional[EVSEAdapter] = None
     start_sw = entry.data.get(CONF_EVSE_START_SWITCH)
     stop_sw = entry.data.get(CONF_EVSE_STOP_SWITCH)
@@ -104,22 +104,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 5) Dispatcher
     dispatcher = Dispatcher(hass, battery=battery_adapter, evse=evse_adapter)
 
-    # 6) Spara referenser + config
-    hass.data[DOMION][entry.entry_id] = {
-        "coordinator": coordinator,
-        "battery": battery_adapter,
-        "evse": evse_adapter,
-        "ev_manual": ev_manual,
-        "dispatcher": dispatcher,
-        "config": dict(entry.data),  # lättillgängligt för coordinator o.s.v.
-        # anv. av switches för att spara tillstånd:
-        "flags": {
-            "auto_ev_enabled": True,
-            "auto_planner_enabled": True,
-        },
-        # plats för WACE om/innan BEC-logic ansluts:
-        "wace": 0.0,
-    }
+    # 6) Uppdatera store med referenser (utan att skriva över hela dict:en)
+    store.update(
+        {
+            "battery": battery_adapter,
+            "evse": evse_adapter,
+            "ev_manual": ev_manual,
+            "dispatcher": dispatcher,
+        }
+    )
 
     # 7) Override-event
     @callback
@@ -132,7 +125,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if until_iso:
             try:
                 until_dt = datetime.fromisoformat(until_iso)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 _LOGGER.exception("Override 'until' kunde ej parsas: %s", until_iso)
         if key and until_dt:
             dispatcher.set_override(key, until_dt)
@@ -146,14 +139,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def _svc_set_manual_ev(call):
         soc_current = float(call.data.get("soc_current", 40))
         soc_target = float(call.data.get("soc_target", 80))
-        st = hass.data[DOMION][entry.entry_id]
+        st = hass.data[DOMAIN][entry.entry_id]
         manual: EVManualAdapter = st.get("ev_manual")
         if manual:
             manual.ev_current_soc = soc_current
             manual.ev_target_soc = soc_target
             _LOGGER.info("Manual EV uppdaterad: current=%s target=%s", soc_current, soc_target)
 
-    hass.services.async_register(DOMION, "set_manual_ev", _svc_set_manual_ev)
+    hass.services.async_register(DOMAIN, "set_manual_ev", _svc_set_manual_ev)
 
     async def _svc_ev_force_charge(call):
         duration = int(call.data.get("duration", 60))
@@ -162,31 +155,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         dispatcher.set_override("ev_force_until", until)
         if hasattr(dispatcher, "set_forced_ev_current"):
             dispatcher.set_forced_ev_current(current)
-        st = hass.data[DOMION][entry.entry_id]
+        st = hass.data[DOMAIN][entry.entry_id]
         evse: Optional[EVSEAdapter] = st.get("evse")
         if evse:
             await evse.async_set_current(current)
             await evse.async_start()
         _LOGGER.info("EV force charge i %sm @ %sA", duration, current)
 
-    hass.services.async_register(DOMION, "ev_force_charge", _svc_ev_force_charge)
+    hass.services.async_register(DOMAIN, "ev_force_charge", _svc_ev_force_charge)
 
     async def _svc_ev_pause(call):
         duration = int(call.data.get("duration", 30))
         until = datetime.now() + timedelta(minutes=duration)
         dispatcher.set_override("ev_pause_until", until)
-        st = hass.data[DOMION][entry.entry_id]
+        st = hass.data[DOMAIN][entry.entry_id]
         evse: Optional[EVSEAdapter] = st.get("evse")
         if evse:
             await evse.async_stop()
         _LOGGER.info("EV paus i %s min", duration)
 
-    hass.services.async_register(DOMION, "ev_pause", _svc_ev_pause)
+    hass.services.async_register(DOMAIN, "ev_pause", _svc_ev_pause)
 
     async def _svc_force_battery_charge(call):
         power_w = int(call.data.get("power_w", 10000))
         duration = int(call.data.get("duration", 60))
-        st = hass.data[DOMION][entry.entry_id]
+        st = hass.data[DOMAIN][entry.entry_id]
         batt: Optional[BatteryAdapter] = st.get("battery")
         if batt and batt.supports_forced_charge():
             await batt.async_force_charge(power_w=power_w, duration_min=duration)
@@ -195,16 +188,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         else:
             _LOGGER.warning("Battery adapter saknas eller stödjer ej forced charge.")
 
-    hass.services.async_register(DOMION, "force_battery_charge", _svc_force_battery_charge)
+    hass.services.async_register(DOMAIN, "force_battery_charge", _svc_force_battery_charge)
 
     # 9) Ladda plattformar
-    await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON])
+    await hass.config_entries.async_forward_entry_setups(
+        entry, [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON]
+    )
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON])
+    unload_ok = await hass.config_entries.async_unload_platforms(
+        entry, [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON]
+    )
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
