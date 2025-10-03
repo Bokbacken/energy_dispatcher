@@ -101,6 +101,8 @@ class SolarPowerNowSensor(BaseEDSensor):
     _attr_name = "Solar Power Forecast Now"
     _attr_native_unit_of_measurement = "W"
     _attr_icon = "mdi:solar-power"
+    _attr_device_class = "power"
+    _attr_state_class = "measurement"
 
     @property
     def unique_id(self) -> str:
@@ -120,6 +122,8 @@ class SolarEnergyTodaySensor(BaseEDSensor):
     _attr_name = "Solar Energy Forecast Today"
     _attr_native_unit_of_measurement = "kWh"
     _attr_icon = "mdi:solar-power"
+    _attr_device_class = "energy"
+    _attr_state_class = "measurement"
 
     @property
     def unique_id(self) -> str:
@@ -134,6 +138,8 @@ class SolarEnergyTomorrowSensor(BaseEDSensor):
     _attr_name = "Solar Energy Forecast Tomorrow"
     _attr_native_unit_of_measurement = "kWh"
     _attr_icon = "mdi:solar-power"
+    _attr_device_class = "energy"
+    _attr_state_class = "measurement"
 
     @property
     def unique_id(self) -> str:
@@ -148,6 +154,8 @@ class PVPowerNowSensor(BaseEDSensor):
     _attr_name = "Solar Production Now"
     _attr_native_unit_of_measurement = "W"
     _attr_icon = "mdi:solar-power"
+    _attr_device_class = "power"
+    _attr_state_class = "measurement"
 
     @property
     def unique_id(self) -> str:
@@ -162,6 +170,8 @@ class PVEnergyTodaySensor(BaseEDSensor):
     _attr_name = "Solar Production Today"
     _attr_native_unit_of_measurement = "kWh"
     _attr_icon = "mdi:solar-power"
+    _attr_device_class = "energy"
+    _attr_state_class = "measurement"
 
     @property
     def unique_id(self) -> str:
