@@ -42,6 +42,10 @@ class SolarForecastRawSensor(SensorEntity):
     def name(self):
         return "Solar Forecast (Raw)"
 
+    @property
+    def state(self):
+        return self._state
+
     async def async_update(self):
         raw, _ = await self._forecast_provider.async_fetch_watts()
         self._state = sum(point.watts for point in raw)
@@ -67,6 +71,10 @@ class SolarForecastCompensatedSensor(SensorEntity):
     @property
     def name(self):
         return "Solar Forecast (Cloud Compensated)"
+
+    @property
+    def state(self):
+        return self._state
 
     async def async_update(self):
         _, compensated = await self._forecast_provider.async_fetch_watts()
