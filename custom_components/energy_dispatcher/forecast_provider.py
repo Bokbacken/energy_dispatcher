@@ -127,6 +127,7 @@ class ForecastSolarProvider:
         # Apply cloud compensation if weather entity is configured
         compensated = await self._apply_cloud_compensation(raw)
         
+        _LOGGER.debug("Forecast.Solar: parsed %s compensated points", len(compensated))
         return raw, compensated
 
     async def _apply_cloud_compensation(self, raw: List[ForecastPoint]) -> List[ForecastPoint]:
