@@ -33,25 +33,6 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         BattTimeUntilChargeSensor(coordinator, entry.entry_id),
         BattChargeReasonSensor(coordinator, entry.entry_id),
     ]
-
-    # Add forecast sensors (raw & compensated)
-    config = st["config"]
-    forecast_provider = ForecastSolarProvider(
-        hass=hass,
-        lat=config.get("fs_lat"),
-        lon=config.get("fs_lon"),
-        planes_json=config.get("fs_planes"),
-        apikey=config.get("fs_apikey"),
-        horizon_csv=config.get("fs_horizon"),
-        weather_entity=config.get("weather_entity"),
-        cloud_0_factor=config.get("cloud_0_factor", 250),
-        cloud_100_factor=config.get("cloud_100_factor", 20),
-    )
-    entities += [
-        SolarForecastRawSensor(hass, forecast_provider),
-        SolarForecastCompensatedSensor(hass, forecast_provider),
-    ]
-
     async_add_entities(entities)
 
 
@@ -345,58 +326,3 @@ class BattChargeReasonSensor(BaseEDSensor):
     @property
     def native_value(self):
         return self.coordinator.data.get("batt_charge_reason")
-
-
-# --- Forecast sensors added below ---
-
-class SolarForecastRawSensor(SensorEntity):
-    _attr_has_entity_name = True
-    _attr_unique_id = "solar_forecast_raw"
-
-    def __init__(self, hass: HomeAssistant, forecast_provider: ForecastSolarProvider):
-        self.hass = hass
-        self._forecast_provider = forecast_provider
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, "energy_dispatcher")},
-            name="Energy Dispatcher",
-            manufacturer="Bokbacken",
-        )
-        self._state = None
-        self._attr_extra_state_attributes = {}
-
-    @property
-    def name(self):
-        return "Solar Forecast (Raw)"
-
-    async def async_update(self):
-        raw, _ = await self._forecast_provider.async_fetch_watts()
-        self._state = sum(point.watts for point in raw)
-        self._attr_extra_state_attributes = {
-            "forecast": [(point.time.isoformat(), point.watts) for point in raw]
-        }
-
-class SolarForecastCompensatedSensor(SensorEntity):
-    _attr_has_entity_name = True
-    _attr_unique_id = "solar_forecast_compensated"
-
-    def __init__(self, hass: HomeAssistant, forecast_provider: ForecastSolarProvider):
-        self.hass = hass
-        self._forecast_provider = forecast_provider
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, "energy_dispatcher")},
-            name="Energy Dispatcher",
-            manufacturer="Bokbacken",
-        )
-        self._state = None
-        self._attr_extra_state_attributes = {}
-
-    @property
-    def name(self):
-        return "Solar Forecast (Cloud Compensated)"
-
-    async def async_update(self):
-        _, compensated = await self._forecast_provider.async_fetch_watts()
-        self._state = sum(point.watts for point in compensated)
-        self._attr_extra_state_attributes = {
-            "forecast": [(point.time.isoformat(), point.watts) for point in compensated]
-        }
