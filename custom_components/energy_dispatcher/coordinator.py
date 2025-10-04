@@ -464,7 +464,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         provider = ForecastSolarProvider(
             self.hass, lat=lat, lon=lon, planes_json=planes, apikey=apikey, horizon_csv=horizon
         )
-        pts = await provider.async_fetch_watts()
+        pts, _ = await provider.async_fetch_watts()
         self.data["solar_points"] = pts
 
         now = dt_util.now().replace(second=0, microsecond=0)
