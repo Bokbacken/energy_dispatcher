@@ -58,3 +58,10 @@ cards:
           action: call-service
           service: energy_dispatcher.force_battery_charge
           service_data: {power_w: 10000, duration: 60}
+```
+
+## Dokumentation
+
+För detaljerad konfigurationsguide, se:
+- **[Configuration Guide](docs/configuration.md)** - Omfattande uppsättningsguide med alla inställningar förklarade
+- **[Configuration Improvements](docs/CHANGELOG_CONFIG_IMPROVEMENTS.md)** - Changelog för konfigurationsförbättringar
