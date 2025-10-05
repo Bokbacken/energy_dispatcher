@@ -31,6 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         SolarDelta15mSensor(coordinator, entry.entry_id),
         EVTimeUntilChargeSensor(coordinator, entry.entry_id),
         EVChargeReasonSensor(coordinator, entry.entry_id),
+        EVChargingSessionSensor(coordinator, entry.entry_id),
         BattTimeUntilChargeSensor(coordinator, entry.entry_id),
         BattChargeReasonSensor(coordinator, entry.entry_id),
     ]
@@ -318,6 +319,45 @@ class EVChargeReasonSensor(BaseEDSensor):
             "setpoint_a": self.coordinator.data.get("auto_ev_setpoint_a"),
             "cheap_threshold": self.coordinator.data.get("cheap_threshold"),
         }
+
+
+class EVChargingSessionSensor(BaseEDSensor):
+    _attr_name = "EV Charging Session"
+    _attr_icon = "mdi:ev-station"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_ev_charging_session_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        """Return session status."""
+        dispatcher = self.hass.data[DOMAIN][self._entry_id].get("dispatcher")
+        if not dispatcher:
+            return "unknown"
+        
+        session_info = dispatcher.get_charging_session_info()
+        return "active" if session_info["active"] else "idle"
+
+    @property
+    def extra_state_attributes(self):
+        """Return session details as attributes."""
+        dispatcher = self.hass.data[DOMAIN][self._entry_id].get("dispatcher")
+        if not dispatcher:
+            return {}
+        
+        session_info = dispatcher.get_charging_session_info()
+        attrs = {
+            "active": session_info["active"],
+        }
+        
+        if session_info["active"]:
+            attrs["start_soc"] = session_info["start_soc"]
+            attrs["target_soc"] = session_info["target_soc"]
+            if session_info["start_energy"] is not None:
+                attrs["start_energy_kwh"] = round(session_info["start_energy"], 2)
+        
+        return attrs
 
 
 class BattTimeUntilChargeSensor(BaseEDSensor):
