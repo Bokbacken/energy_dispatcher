@@ -3,14 +3,15 @@ ForecastSolarProvider
 
 Hämtar prognos från Forecast.Solar och konverterar till list[ForecastPoint].
 Stödjer 1–2 plan i MVP. Horizon kan anges som CSV. API-key valfri.
+Implementerar caching för att undvika för många API-anrop.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
-from typing import List, Optional, Tuple
+from datetime import datetime, timedelta
+from typing import List, Optional, Tuple, Dict
 from urllib.parse import quote
 
 import async_timeout
@@ -22,6 +23,13 @@ from .models import ForecastPoint
 _LOGGER = logging.getLogger(__name__)
 
 FS_BASE = "https://api.forecast.solar"
+
+# Cache duration in minutes - how long to keep cached data before refetching
+CACHE_DURATION_MINUTES = 30
+
+# Class-level cache shared across all instances
+# Key: URL, Value: (timestamp, raw_points, compensated_points)
+_FORECAST_CACHE: Dict[str, Tuple[datetime, List[ForecastPoint], List[ForecastPoint]]] = {}
 
 
 def _az_to_api(az: str | int) -> int:
@@ -92,10 +100,37 @@ class ForecastSolarProvider:
         """
         Hämtar result.watts och returnerar tuple av (raw, compensated) list[ForecastPoint].
         Tidsstämplar sätts till lokal timezone (HA:s DEFAULT_TIME_ZONE).
+        
+        Implementerar caching med 30 minuters livstid för att undvika för många API-anrop.
         """
         url = self._build_url()
-        _LOGGER.debug("Forecast.Solar URL: %s", url)
+        now = dt_util.now()
+        
+        # Check if we have a valid cached result
+        if url in _FORECAST_CACHE:
+            cache_time, cached_raw, cached_compensated = _FORECAST_CACHE[url]
+            age_minutes = (now - cache_time).total_seconds() / 60.0
+            
+            if age_minutes < CACHE_DURATION_MINUTES:
+                _LOGGER.debug(
+                    "Forecast.Solar: Using cached data (age: %.1f minutes, %d points)",
+                    age_minutes,
+                    len(cached_raw)
+                )
+                # Re-apply cloud compensation in case weather has changed
+                # but use the same raw forecast data
+                compensated = await self._apply_cloud_compensation(cached_raw)
+                return cached_raw, compensated
+            else:
+                _LOGGER.debug(
+                    "Forecast.Solar: Cache expired (age: %.1f minutes), fetching new data",
+                    age_minutes
+                )
+        else:
+            _LOGGER.debug("Forecast.Solar: No cached data, fetching from API")
 
+        # Fetch from API
+        _LOGGER.debug("Forecast.Solar URL: %s", url)
         session = async_get_clientsession(self.hass)
         try:
             with async_timeout.timeout(20):
@@ -103,10 +138,20 @@ class ForecastSolarProvider:
                 if resp.status != 200:
                     text = await resp.text()
                     _LOGGER.warning("Forecast.Solar status=%s text=%s", resp.status, text)
+                    # Return cached data if available, even if expired
+                    if url in _FORECAST_CACHE:
+                        _LOGGER.info("Forecast.Solar: API error, using stale cache")
+                        _, cached_raw, cached_compensated = _FORECAST_CACHE[url]
+                        return cached_raw, cached_compensated
                     return [], []
                 data = await resp.json()
         except Exception as e:  # noqa: BLE001
             _LOGGER.exception("Kunde inte hämta Forecast.Solar: %s", e)
+            # Return cached data if available, even if expired
+            if url in _FORECAST_CACHE:
+                _LOGGER.info("Forecast.Solar: Exception, using stale cache")
+                _, cached_raw, cached_compensated = _FORECAST_CACHE[url]
+                return cached_raw, cached_compensated
             return [], []
 
         result = data.get("result") or {}
@@ -122,12 +167,16 @@ class ForecastSolarProvider:
             except Exception:
                 continue
 
-        _LOGGER.debug("Forecast.Solar: parsed %s raw points", len(raw))
+        _LOGGER.info("Forecast.Solar: Fetched fresh data from API, parsed %s raw points", len(raw))
         
         # Apply cloud compensation if weather entity is configured
         compensated = await self._apply_cloud_compensation(raw)
         
         _LOGGER.debug("Forecast.Solar: parsed %s compensated points", len(compensated))
+        
+        # Store in cache
+        _FORECAST_CACHE[url] = (now, raw, compensated)
+        
         return raw, compensated
 
     async def _apply_cloud_compensation(self, raw: List[ForecastPoint]) -> List[ForecastPoint]:
