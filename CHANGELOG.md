@@ -2,11 +2,15 @@
 
 ## [Unreleased]
 ### Fixed
-- **Configuration Flow Error**: Fixed additional 500 Internal Server Error edge case in weather entity enumeration
-  - Root cause: `_available_weather_entities()` function had improper error handling when `hass.states` attribute doesn't exist
-  - Impact: Could cause AttributeError when trying to call `async_all()` on an empty list
-  - Solution: Added proper existence check using `hasattr()` before accessing `hass.states`
-  - This complements the fix in v0.8.1 and handles edge cases during testing or unusual runtime conditions
+- **Configuration Flow Error**: Fixed remaining 500 Internal Server Error edge cases in weather entity enumeration (PR #19 follow-up)
+  - Root cause: `_available_weather_entities()` function had insufficient error handling even after `hasattr()` check was added
+  - Impact: Could still cause AttributeError or TypeError when:
+    - `hass.states` exists but is None
+    - `hass.states.async_all()` method doesn't exist
+    - `hass.states.async_all()` raises exceptions during execution
+  - Solution: Wrapped the entire entity enumeration logic in try-except block to catch AttributeError and TypeError
+  - Added comprehensive test coverage for all edge cases (5 new tests)
+  - This fully resolves the configuration flow errors reported in PR #19
 
 ## [0.8.1] - 2025-10-05
 ### Fixed
