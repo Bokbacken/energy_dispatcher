@@ -139,3 +139,33 @@ class TestAvailableWeatherEntities:
         mock_hass_with_states.states = MockStates(weather_states)
         result = _available_weather_entities(mock_hass_with_states)
         assert result == []
+
+    def test_hass_with_states_none(self):
+        """Test that hass.states = None is handled gracefully."""
+        hass = MagicMock()
+        hass.states = None
+        result = _available_weather_entities(hass)
+        assert result == []
+
+    def test_hass_with_states_no_async_all(self):
+        """Test that hass.states without async_all method is handled gracefully."""
+        hass = MagicMock()
+        hass.states = object()  # Plain object without async_all
+        result = _available_weather_entities(hass)
+        assert result == []
+
+    def test_hass_with_async_all_raising_error(self):
+        """Test that errors from async_all are handled gracefully."""
+        hass = MagicMock()
+        hass.states = MagicMock()
+        hass.states.async_all = MagicMock(side_effect=AttributeError("Test error"))
+        result = _available_weather_entities(hass)
+        assert result == []
+
+    def test_hass_with_async_all_raising_type_error(self):
+        """Test that TypeError from async_all is handled gracefully."""
+        hass = MagicMock()
+        hass.states = MagicMock()
+        hass.states.async_all = MagicMock(side_effect=TypeError("Test error"))
+        result = _available_weather_entities(hass)
+        assert result == []
