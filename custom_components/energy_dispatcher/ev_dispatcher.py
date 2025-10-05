@@ -113,6 +113,30 @@ class EVDispatcher:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("EVDispatcher: failed to set current to %s A", amps)
 
+    def _is_charging(self) -> bool:
+        """Check if EV is currently charging based on current sensor or start switch state."""
+        # Check current sensor first
+        num_current = self._cfg(CONF_EVSE_CURRENT_NUMBER, "")
+        if num_current:
+            st = self.hass.states.get(num_current)
+            if st and st.state not in ("unknown", "unavailable", None, ""):
+                try:
+                    amps = float(st.state)
+                    min_a = int(self._cfg(CONF_EVSE_MIN_A, 6))
+                    if amps >= min_a:
+                        return True
+                except (ValueError, TypeError):
+                    pass
+        
+        # Fallback: check if start switch/button is in "on" state (for switches/input_boolean)
+        start_ent = self._cfg(CONF_EVSE_START_SWITCH, "")
+        if start_ent and start_ent.split(".")[0] in ("switch", "input_boolean"):
+            st = self.hass.states.get(start_ent)
+            if st and str(st.state).lower() == "on":
+                return True
+        
+        return False
+
     # ==== Publikt API ====
     async def async_apply_ev_setpoint(self, amps: int):
         min_a = int(self._cfg(CONF_EVSE_MIN_A, 6))
@@ -121,11 +145,19 @@ class EVDispatcher:
 
         start_ent = self._cfg(CONF_EVSE_START_SWITCH, "")
         stop_ent = self._cfg(CONF_EVSE_STOP_SWITCH, "")
+        
+        is_charging = self._is_charging()
 
         if amps >= min_a:
-            # Sätt ström först, tryck sedan start
+            # Sätt ström först, tryck sedan start (men bara om inte redan laddar)
             await self._set_current(amps)
-            await self._press_or_turn(start_ent, on=True)
+            if not is_charging:
+                await self._press_or_turn(start_ent, on=True)
+            else:
+                _LOGGER.debug("EVDispatcher: already charging, skipping start button")
         else:
-            # Stanna laddning
-            await self._press_or_turn(stop_ent or start_ent, on=False)
+            # Stanna laddning (men bara om laddar för tillfället)
+            if is_charging:
+                await self._press_or_turn(stop_ent or start_ent, on=False)
+            else:
+                _LOGGER.debug("EVDispatcher: already stopped, skipping stop button")
