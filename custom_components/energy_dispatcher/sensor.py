@@ -158,11 +158,32 @@ class BatteryCostSensor(BaseEDSensor):
     @property
     def native_value(self) -> float:
         store = self.coordinator.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        bec = store.get("bec")
+        if bec:
+            return float(bec.wace)
+        # Fallback to legacy storage
         return float(store.get("wace", 0.0))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         store = self.coordinator.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        bec = store.get("bec")
+        if bec:
+            history_summary = bec.get_history_summary()
+            return {
+                "total_energy_kwh": float(bec.energy_kwh),
+                "total_cost_sek": float(bec.get_total_cost()),
+                "battery_soc_percent": float(bec.get_soc()),
+                "battery_capacity_kwh": float(bec.capacity_kwh),
+                "history_events": history_summary.get("total_events", 0),
+                "history_charge_events": history_summary.get("charge_events", 0),
+                "history_discharge_events": history_summary.get("discharge_events", 0),
+                "history_total_charged_kwh": history_summary.get("total_charged_kwh", 0.0),
+                "history_total_discharged_kwh": history_summary.get("total_discharged_kwh", 0.0),
+                "history_oldest_event": history_summary.get("oldest_event"),
+                "history_newest_event": history_summary.get("newest_event"),
+            }
+        # Fallback to legacy storage
         return {
             "total_energy_kwh": float(store.get("wace_tot_energy_kwh", 0.0)),
             "total_cost_sek": float(store.get("wace_tot_cost_sek", 0.0)),
