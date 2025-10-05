@@ -231,6 +231,10 @@ class CostStrategy:
         # Calculate hours needed
         hours_needed = required_energy_kwh / charging_power_kw if charging_power_kw > 0 else 0
         
+        # If no energy needed, return empty list
+        if hours_needed <= 0:
+            return []
+        
         # Filter prices from now until deadline
         if deadline:
             available_prices = [p for p in prices if now <= p.time < deadline]
