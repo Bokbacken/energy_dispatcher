@@ -29,8 +29,60 @@ from .const import (
 )
 from .coordinator import EnergyDispatcherCoordinator
 from .ev_dispatcher import EVDispatcher
+from .bec import BatteryEnergyCost
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def _async_register_services(hass: HomeAssistant):
+    """Register services for Energy Dispatcher."""
+    
+    # Only register once
+    if hass.services.has_service(DOMAIN, "battery_cost_reset"):
+        return
+
+    async def handle_battery_cost_reset(call):
+        """Handle battery cost reset service call."""
+        for entry_id, data in hass.data.get(DOMAIN, {}).items():
+            if isinstance(data, dict) and "bec" in data:
+                bec = data["bec"]
+                bec.reset_cost()
+                await bec.async_save()
+                # Update legacy storage for backward compatibility
+                data["wace"] = bec.wace
+                data["wace_tot_energy_kwh"] = bec.energy_kwh
+                data["wace_tot_cost_sek"] = bec.get_total_cost()
+                _LOGGER.info("Battery cost reset for entry %s", entry_id)
+
+    async def handle_battery_cost_set_soc(call):
+        """Handle battery SOC set service call."""
+        soc_percent = call.data.get("soc_percent")
+        if soc_percent is None:
+            _LOGGER.error("SOC percentage not provided")
+            return
+            
+        for entry_id, data in hass.data.get(DOMAIN, {}).items():
+            if isinstance(data, dict) and "bec" in data:
+                bec = data["bec"]
+                bec.set_soc(soc_percent)
+                await bec.async_save()
+                # Update legacy storage for backward compatibility
+                data["wace"] = bec.wace
+                data["wace_tot_energy_kwh"] = bec.energy_kwh
+                data["wace_tot_cost_sek"] = bec.get_total_cost()
+                _LOGGER.info("Battery SOC set to %.1f%% for entry %s", soc_percent, entry_id)
+
+    hass.services.async_register(
+        DOMAIN,
+        "battery_cost_reset",
+        handle_battery_cost_reset
+    )
+    
+    hass.services.async_register(
+        DOMAIN,
+        "battery_cost_set_soc",
+        handle_battery_cost_set_soc
+    )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
@@ -63,23 +115,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     if CONF_BATT_CAP_KWH in config:
         manual_store[M_HOME_BATT_CAP_KWH] = float(config[CONF_BATT_CAP_KWH])
 
+    # Initialize Battery Energy Cost tracker
+    battery_capacity = config.get(CONF_BATT_CAP_KWH, 15.0)
+    bec = BatteryEnergyCost(hass, capacity_kwh=battery_capacity)
+    await bec.async_load()
+
     hass.data[DOMAIN][entry.entry_id] = {
         "config": config,
         "flags": {"auto_ev_enabled": True, "auto_planner_enabled": True},
         "coordinator": coordinator,
         "dispatcher": dispatcher,
+        "bec": bec,
         STORE_MANUAL: manual_store,
         STORE_ENTITIES: {},
-        # WACE m.m. lagras här om du använder tjänsterna
-        "wace": 0.0,
-        "wace_tot_energy_kwh": 0.0,
-        "wace_tot_cost_sek": 0.0,
+        # Legacy WACE storage (kept for backward compatibility)
+        "wace": bec.wace,
+        "wace_tot_energy_kwh": bec.energy_kwh,
+        "wace_tot_cost_sek": bec.get_total_cost(),
     }
 
     await coordinator.async_config_entry_first_refresh()
     entry.async_on_unload(entry.add_update_listener(async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    
+    # Register services
+    await _async_register_services(hass)
+    
     _LOGGER.info("Energy Dispatcher %s init complete", entry.entry_id)
     return True
 

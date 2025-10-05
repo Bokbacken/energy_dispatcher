@@ -84,3 +84,23 @@ force_battery_charge:
           min: 1
           max: 480
           unit_of_measurement: "min"
+
+battery_cost_reset:
+  name: Reset battery energy cost
+  description: Reset the weighted average cost (WACE) of energy in the battery to zero
+
+battery_cost_set_soc:
+  name: Set battery SOC manually
+  description: Manually set the battery state of charge (SOC) percentage
+  fields:
+    soc_percent:
+      name: SOC Percentage
+      description: Battery state of charge (0-100%)
+      example: 50
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+          mode: box

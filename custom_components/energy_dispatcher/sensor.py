@@ -158,11 +158,24 @@ class BatteryCostSensor(BaseEDSensor):
     @property
     def native_value(self) -> float:
         store = self.coordinator.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        bec = store.get("bec")
+        if bec:
+            return float(bec.wace)
+        # Fallback to legacy storage
         return float(store.get("wace", 0.0))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         store = self.coordinator.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        bec = store.get("bec")
+        if bec:
+            return {
+                "total_energy_kwh": float(bec.energy_kwh),
+                "total_cost_sek": float(bec.get_total_cost()),
+                "battery_soc_percent": float(bec.get_soc()),
+                "battery_capacity_kwh": float(bec.capacity_kwh),
+            }
+        # Fallback to legacy storage
         return {
             "total_energy_kwh": float(store.get("wace_tot_energy_kwh", 0.0)),
             "total_cost_sek": float(store.get("wace_tot_cost_sek", 0.0)),
