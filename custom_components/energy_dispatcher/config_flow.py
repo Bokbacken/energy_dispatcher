@@ -224,5 +224,5 @@ class EnergyDispatcherOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
         current = {**self.config_entry.data, **(self.config_entry.options or {})}
-        schema = _schema_user(current)
+        schema = _schema_user(current, hass=self.hass)
         return self.async_show_form(step_id="init", data_schema=schema)
