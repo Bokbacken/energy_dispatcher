@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+- **Battery Energy Cost (BEC) Module**: Comprehensive battery cost and state management
+  - Tracks weighted average cost of energy (WACE) in battery
+  - Automatic cost calculation during charge/discharge events
+  - Persistent storage across Home Assistant restarts
+  - Manual SOC override via `battery_cost_set_soc` service
+  - Manual cost reset via `battery_cost_reset` service and button
+  - Enhanced sensor with SOC and total cost attributes
+  - Full test coverage with 41 unit and integration tests
+  - Comprehensive documentation in `docs/battery_cost_tracking.md`
+
 ### Fixed
 - Solar forecast sensors now correctly display today's total energy in kWh instead of incorrectly summing all forecast points (which caused values >200000)
 - Cloud-compensated sensor now exposes `cloud_coverage` and `weather_entity` attributes for debugging

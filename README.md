@@ -37,6 +37,7 @@ See [`docs/solar_forecast_improvement.md`](./docs/solar_forecast_improvement.md)
 
 ## Documentation
 
+- [Battery Cost Tracking](./docs/battery_cost_tracking.md)
 - [Solar Forecast Improvement](./docs/solar_forecast_improvement.md)
 - [Changelog](./CHANGELOG.md)
 
