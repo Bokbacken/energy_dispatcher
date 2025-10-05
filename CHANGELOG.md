@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+
+## [0.8.1] - 2025-10-05
+### Fixed
+- **Configuration Flow Error**: Fixed 500 Internal Server Error when re-entering configuration options
+  - Root cause: Options flow handler was not passing the Home Assistant instance to the schema builder
+  - Impact: Users could not modify integration settings after initial setup
+  - Solution: Options flow now properly passes `self.hass` to `_schema_user()` for correct entity enumeration
+  - This was a minimal one-line fix ensuring backward compatibility
 ### Added
 - **Multi-Vehicle and Multi-Charger Support**: Enhanced EV charging management
   - Support for multiple electric vehicles with different specifications
