@@ -44,6 +44,9 @@ CONF_EVSE_MIN_A = "evse_min_a"
 CONF_EVSE_MAX_A = "evse_max_a"
 CONF_EVSE_PHASES = "evse_phases"
 CONF_EVSE_VOLTAGE = "evse_voltage"
+CONF_EVSE_POWER_SENSOR = "evse_power_sensor"  # Charging power in kW or W
+CONF_EVSE_ENERGY_SENSOR = "evse_energy_sensor"  # Energy charged this session in kWh or Wh
+CONF_EVSE_TOTAL_ENERGY_SENSOR = "evse_total_energy_sensor"  # Total energy counter in kWh
 
 # Forecast.Solar
 CONF_FS_USE = "fs_use"

@@ -43,7 +43,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     coordinator.entry_id = entry.entry_id
 
     cfg_lookup = lambda key, default=None: hass.data[DOMAIN][entry.entry_id]["config"].get(key, default)
-    dispatcher = EVDispatcher(hass=hass, cfg_lookup=cfg_lookup)
+    dispatcher = EVDispatcher(hass=hass, cfg_lookup=cfg_lookup, entry_id=entry.entry_id)
 
     # Initialize STORE_MANUAL with values from config if they exist
     # This ensures config_flow values are properly saved
