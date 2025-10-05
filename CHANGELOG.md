@@ -12,6 +12,12 @@
   - Added comprehensive test coverage for all edge cases (5 new tests)
   - This fully resolves the configuration flow errors reported in PR #19
 
+- **Options Flow Handler Error**: Added missing `__init__` method to `EnergyDispatcherOptionsFlowHandler`
+  - Root cause: The `__init__` method was removed in version 0.7.8, causing AttributeError when accessing `self.config_entry`
+  - Impact: Users got 500 Internal Server Error when trying to modify integration settings
+  - Solution: Restored the `__init__` method that properly initializes `self.config_entry`
+  - This was the actual root cause identified by user testing between versions 0.7.7 (working) and 0.7.8 (broken)
+
 ## [0.8.1] - 2025-10-05
 ### Fixed
 - **Configuration Flow Error**: Fixed 500 Internal Server Error when re-entering configuration options
