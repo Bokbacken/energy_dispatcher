@@ -8,12 +8,21 @@ The Battery Energy Cost (BEC) module tracks the weighted average cost of energy 
 
 ### Automatic Cost Tracking
 - **Weighted Average Cost of Energy (WACE)**: Automatically calculates the average cost per kWh based on all charging events
-- **Persistent Storage**: State is saved across Home Assistant restarts
+- **Historical Data Storage**: Records every charging/discharging event with timestamp (15-minute intervals)
+- **Persistent Storage**: State and historical data saved across Home Assistant restarts
 - **Real-time Updates**: Updates automatically as battery charges and discharges
+- **Data Retention**: Keeps 30 days of historical data (2,880 15-minute intervals)
 
 ### Manual Overrides
 - **Manual SOC Setting**: Override the battery state of charge if sensor readings are incorrect
 - **Cost Reset**: Reset cost tracking to start fresh (useful after pricing changes)
+- **WACE Recalculation**: Ability to recalculate WACE from historical data
+
+### Historical Data
+- **Event Tracking**: Records every charge, discharge, and manual override
+- **Source Tracking**: Distinguishes between grid and solar charging
+- **Timestamp Records**: Each event includes ISO timestamp for precise tracking
+- **History Summary**: Provides aggregate statistics (total charged, discharged, events)
 
 ## How It Works
 
@@ -71,6 +80,13 @@ data:
   - `total_cost_sek`: Total cost of energy in battery (SEK)
   - `battery_soc_percent`: Current state of charge (%)
   - `battery_capacity_kwh`: Battery capacity (kWh)
+  - `history_events`: Total number of historical events
+  - `history_charge_events`: Number of charging events recorded
+  - `history_discharge_events`: Number of discharge events recorded
+  - `history_total_charged_kwh`: Total energy charged (last 30 days)
+  - `history_total_discharged_kwh`: Total energy discharged (last 30 days)
+  - `history_oldest_event`: Timestamp of oldest event in history
+  - `history_newest_event`: Timestamp of newest event in history
 
 ### Button: Reset Battery Energy Cost
 - **Entity ID**: `button.reset_battery_energy_cost`
@@ -164,9 +180,26 @@ service: energy_dispatcher.battery_cost_reset
 ## Technical Details
 
 ### Storage
-State is persisted to `.storage/energy_dispatcher_bec` and includes:
+State is persisted to `.storage/energy_dispatcher_bec` (Storage Version 2) and includes:
 - `energy_kwh`: Current energy content
 - `wace`: Weighted average cost of energy
+- `charge_history`: Array of historical events (last 30 days)
+
+Each historical event contains:
+- `timestamp`: ISO 8601 timestamp
+- `energy_kwh`: Energy amount (positive for charge, negative for discharge)
+- `cost_sek_per_kwh`: Cost per kWh (0 for discharge)
+- `soc_percent`: Battery SOC after event
+- `source`: Energy source ("grid", "solar", "discharge", "manual")
+- `event_type`: Type of event ("charge", "discharge", "reset_cost", "initial")
+- `total_energy_after`: Total battery energy after event
+- `wace_after`: WACE after event
+
+### Storage Migration
+The module automatically migrates from Storage Version 1 (no history) to Version 2:
+- Existing `energy_kwh` and `wace` values are preserved
+- A synthetic initial event is created for historical context
+- All future events are properly tracked
 
 ### Error Handling
 - Negative charge/discharge deltas are ignored

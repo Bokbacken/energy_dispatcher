@@ -4,12 +4,18 @@
 ### Added
 - **Battery Energy Cost (BEC) Module**: Comprehensive battery cost and state management
   - Tracks weighted average cost of energy (WACE) in battery
+  - **Historical data storage**: Records every charge/discharge event with timestamp (15-min intervals)
+  - **Data retention**: Keeps 30 days of historical data (2,880 events)
+  - **Event tracking**: Distinguishes between grid and solar charging sources
+  - **WACE recalculation**: Ability to recalculate from historical data
+  - **History summary**: Aggregate statistics in sensor attributes
   - Automatic cost calculation during charge/discharge events
-  - Persistent storage across Home Assistant restarts
+  - Persistent storage across Home Assistant restarts (Storage Version 2)
+  - **Automatic migration** from Storage Version 1 to Version 2
   - Manual SOC override via `battery_cost_set_soc` service
   - Manual cost reset via `battery_cost_reset` service and button
-  - Enhanced sensor with SOC and total cost attributes
-  - Full test coverage with 41 unit and integration tests
+  - Enhanced sensor with SOC, total cost, and historical statistics attributes
+  - Full test coverage with 52 unit and integration tests (46 unit + 6 integration)
   - Comprehensive documentation in `docs/battery_cost_tracking.md`
 
 ### Fixed

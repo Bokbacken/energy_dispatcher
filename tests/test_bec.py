@@ -331,3 +331,197 @@ class TestComplexScenarios:
         # WACE only considers new charge: 1.5 SEK/kWh
         # (12*0 + 3*1.5) / 15 = 0.3
         assert bec.wace == pytest.approx(0.3)
+
+
+class TestHistoricalData:
+    """Test historical data storage and retrieval."""
+
+    def test_charge_history_recorded(self, bec):
+        """Test that charge events are recorded in history."""
+        bec.on_charge(5.0, 2.0, source="grid")
+        bec.on_charge(3.0, 0.5, source="solar")
+        
+        history = bec.get_charge_history()
+        assert len(history) == 2
+        
+        # Check first event
+        assert history[0]["event_type"] == "charge"
+        assert history[0]["energy_kwh"] == 5.0
+        assert history[0]["cost_sek_per_kwh"] == 2.0
+        assert history[0]["source"] == "grid"
+        assert "timestamp" in history[0]
+        assert "soc_percent" in history[0]
+        
+        # Check second event
+        assert history[1]["event_type"] == "charge"
+        assert history[1]["energy_kwh"] == 3.0
+        assert history[1]["cost_sek_per_kwh"] == 0.5
+        assert history[1]["source"] == "solar"
+
+    def test_discharge_history_recorded(self, bec):
+        """Test that discharge events are recorded in history."""
+        bec.on_charge(10.0, 2.0)
+        bec.on_discharge(5.0)
+        
+        history = bec.get_charge_history()
+        assert len(history) == 2
+        
+        # Check discharge event
+        discharge_event = history[1]
+        assert discharge_event["event_type"] == "discharge"
+        assert discharge_event["energy_kwh"] == -5.0  # Negative for discharge
+        assert discharge_event["source"] == "discharge"
+
+    def test_reset_cost_history_recorded(self, bec):
+        """Test that cost reset events are recorded in history."""
+        bec.on_charge(5.0, 2.0)
+        bec.reset_cost()
+        
+        history = bec.get_charge_history()
+        assert len(history) == 2
+        
+        # Check reset event
+        reset_event = history[1]
+        assert reset_event["event_type"] == "reset_cost"
+        assert reset_event["source"] == "manual"
+
+    def test_history_limit(self, bec):
+        """Test retrieving limited history."""
+        for i in range(10):
+            bec.on_charge(1.0, 1.0)
+        
+        # Get last 5 events
+        recent = bec.get_charge_history(limit=5)
+        assert len(recent) == 5
+        
+        # Get all events
+        all_events = bec.get_charge_history()
+        assert len(all_events) == 10
+
+    def test_history_max_30_days(self, bec):
+        """Test that history is limited to 30 days (2880 15-min intervals)."""
+        # Add more than 30 days of data
+        for i in range(3000):
+            bec.on_charge(0.1, 1.0)
+        
+        history = bec.get_charge_history()
+        assert len(history) == 2880  # Max 30 days
+
+    def test_recalculate_wace_from_history(self, bec):
+        """Test recalculating WACE from historical data."""
+        # Build up some history
+        bec.on_charge(5.0, 2.0)
+        bec.on_charge(5.0, 3.0)
+        bec.on_discharge(3.0)
+        
+        # Manually corrupt the WACE
+        original_wace = bec.wace
+        bec.wace = 999.0
+        
+        # Recalculate from history
+        success = bec.recalculate_wace_from_history()
+        assert success is True
+        
+        # WACE should be restored
+        # (5*2 + 5*3) / 10 = 25/10 = 2.5, then discharge 3kWh leaves 7kWh @ 2.5
+        assert bec.energy_kwh == 7.0
+        assert bec.wace == pytest.approx(2.5)
+
+    def test_recalculate_with_reset_cost(self, bec):
+        """Test recalculation includes reset cost events."""
+        bec.on_charge(5.0, 2.0)
+        bec.reset_cost()
+        bec.on_charge(5.0, 3.0)
+        
+        # Recalculate
+        success = bec.recalculate_wace_from_history()
+        assert success is True
+        
+        # After reset, we have 5kWh @ 0 cost, then add 5kWh @ 3.0
+        # (5*0 + 5*3) / 10 = 15/10 = 1.5
+        assert bec.wace == pytest.approx(1.5)
+
+    def test_history_summary(self, bec):
+        """Test getting summary statistics from history."""
+        bec.on_charge(5.0, 2.0, source="grid")
+        bec.on_charge(3.0, 0.5, source="solar")
+        bec.on_discharge(4.0)
+        
+        summary = bec.get_history_summary()
+        assert summary["total_events"] == 3
+        assert summary["charge_events"] == 2
+        assert summary["discharge_events"] == 1
+        assert summary["total_charged_kwh"] == 8.0
+        assert summary["total_discharged_kwh"] == 4.0
+        assert summary["oldest_event"] is not None
+        assert summary["newest_event"] is not None
+
+    def test_history_summary_empty(self, bec):
+        """Test history summary when no events exist."""
+        summary = bec.get_history_summary()
+        assert summary["total_events"] == 0
+        assert summary["charge_events"] == 0
+        assert summary["discharge_events"] == 0
+        assert summary["total_charged_kwh"] == 0.0
+        assert summary["oldest_event"] is None
+
+    @pytest.mark.asyncio
+    async def test_history_persistence(self, bec):
+        """Test that history is persisted and loaded correctly."""
+        # Create some history
+        bec.on_charge(5.0, 2.0, source="grid")
+        bec.on_charge(3.0, 0.5, source="solar")
+        
+        # Mock storage
+        storage = {}
+        
+        async def mock_save(data):
+            storage.update(data)
+            
+        async def mock_load():
+            return storage if storage else None
+            
+        bec.store.async_save = mock_save
+        bec.store.async_load = mock_load
+        
+        # Save
+        await bec.async_save()
+        assert "charge_history" in storage
+        assert len(storage["charge_history"]) == 2
+        
+        # Create new instance and load
+        new_bec = BatteryEnergyCost(bec.hass, capacity_kwh=15.0)
+        new_bec.store.async_load = mock_load
+        await new_bec.async_load()
+        
+        # Verify history was loaded
+        assert len(new_bec.charge_history) == 2
+        assert new_bec.charge_history[0]["energy_kwh"] == 5.0
+        assert new_bec.charge_history[1]["energy_kwh"] == 3.0
+
+    @pytest.mark.asyncio
+    async def test_migration_from_v1_to_v2(self, bec):
+        """Test migration from storage version 1 (no history) to version 2."""
+        # Simulate v1 storage (no charge_history)
+        storage = {
+            "energy_kwh": 10.0,
+            "wace": 2.5
+        }
+        
+        async def mock_load():
+            return storage
+            
+        bec.store.async_load = mock_load
+        
+        # Load should create initial history record
+        await bec.async_load()
+        
+        assert bec.energy_kwh == 10.0
+        assert bec.wace == 2.5
+        assert len(bec.charge_history) == 1
+        
+        # Check migration record
+        migration_event = bec.charge_history[0]
+        assert migration_event["source"] == "migration"
+        assert migration_event["event_type"] == "initial"
+        assert migration_event["energy_kwh"] == 10.0
