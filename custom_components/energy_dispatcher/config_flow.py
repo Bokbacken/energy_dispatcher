@@ -67,15 +67,16 @@ CONF_CLOUD_100 = "cloud_100_factor"
 
 def _available_weather_entities(hass):
     entities = []
-    for state in getattr(hass, "states", []).async_all("weather") if hass else []:
-        attrs = state.attributes
-        if (
-            "cloudiness" in attrs
-            or "cloud_coverage" in attrs
-            or "cloud_cover" in attrs
-            or "cloud" in attrs
-        ):
-            entities.append(state.entity_id)
+    if hass and hasattr(hass, "states"):
+        for state in hass.states.async_all("weather"):
+            attrs = state.attributes
+            if (
+                "cloudiness" in attrs
+                or "cloud_coverage" in attrs
+                or "cloud_cover" in attrs
+                or "cloud" in attrs
+            ):
+                entities.append(state.entity_id)
     return entities
 
 DEFAULTS = {

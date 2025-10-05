@@ -525,11 +525,13 @@ data:
    - Consider switching between counter_kwh and power_w methods
 
 6. **500 Internal Server Error when re-entering configuration**
-   - This issue was fixed in version 0.8.1
+   - This issue was fixed in version 0.8.1 and further improved in the latest version
    - If you encounter this error, update to the latest version
    - The error occurred when trying to modify settings after initial setup
-   - Root cause: Options flow was not properly accessing Home Assistant instance
-   - Solution: Update the integration to get the fix
+   - Root causes: 
+     - Options flow was not properly passing Home Assistant instance (fixed in v0.8.1)
+     - Weather entity enumeration had improper error handling (fixed in latest)
+   - Solution: Update the integration to get the fixes
 
 ## Support
 

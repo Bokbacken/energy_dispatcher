@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+- **Configuration Flow Error**: Fixed additional 500 Internal Server Error edge case in weather entity enumeration
+  - Root cause: `_available_weather_entities()` function had improper error handling when `hass.states` attribute doesn't exist
+  - Impact: Could cause AttributeError when trying to call `async_all()` on an empty list
+  - Solution: Added proper existence check using `hasattr()` before accessing `hass.states`
+  - This complements the fix in v0.8.1 and handles edge cases during testing or unusual runtime conditions
 
 ## [0.8.1] - 2025-10-05
 ### Fixed
