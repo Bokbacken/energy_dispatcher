@@ -94,6 +94,26 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
 async def async_options_updated(hass: HomeAssistant, entry: ConfigEntry):
     # Uppdatera sammanslagen konfig i store
     st = hass.data[DOMAIN][entry.entry_id]
-    st["config"] = {**entry.data, **(entry.options or {})}
+    config = {**entry.data, **(entry.options or {})}
+    st["config"] = config
+    
+    # Update STORE_MANUAL with new config values if they changed
+    # But only if the value doesn't already exist (don't overwrite manual changes)
+    manual_store = st.get(STORE_MANUAL, {})
+    if CONF_EV_CURRENT_SOC in config and M_EV_CURRENT_SOC not in manual_store:
+        manual_store[M_EV_CURRENT_SOC] = float(config[CONF_EV_CURRENT_SOC])
+    if CONF_EV_TARGET_SOC in config and M_EV_TARGET_SOC not in manual_store:
+        manual_store[M_EV_TARGET_SOC] = float(config[CONF_EV_TARGET_SOC])
+    if CONF_EV_BATT_KWH in config and M_EV_BATT_KWH not in manual_store:
+        manual_store[M_EV_BATT_KWH] = float(config[CONF_EV_BATT_KWH])
+    if CONF_EVSE_MAX_A in config and M_EVSE_MAX_A not in manual_store:
+        manual_store[M_EVSE_MAX_A] = float(config[CONF_EVSE_MAX_A])
+    if CONF_EVSE_PHASES in config and M_EVSE_PHASES not in manual_store:
+        manual_store[M_EVSE_PHASES] = float(config[CONF_EVSE_PHASES])
+    if CONF_EVSE_VOLTAGE in config and M_EVSE_VOLTAGE not in manual_store:
+        manual_store[M_EVSE_VOLTAGE] = float(config[CONF_EVSE_VOLTAGE])
+    if CONF_BATT_CAP_KWH in config and M_HOME_BATT_CAP_KWH not in manual_store:
+        manual_store[M_HOME_BATT_CAP_KWH] = float(config[CONF_BATT_CAP_KWH])
+    
     # Refresh så koordinatorn får nya värden
     await st["coordinator"].async_request_refresh()
