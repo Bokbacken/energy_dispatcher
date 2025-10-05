@@ -250,6 +250,8 @@ Power = 1.732 × 230 × 16 / 1000 = 6.4 kW
 
 Enable solar production forecasting using the Forecast.Solar service.
 
+**Note**: Energy Dispatcher implements intelligent caching to avoid excessive API calls. Forecast data is cached for 30 minutes and reused across all components, reducing API requests from ~250+/hour to ~2/hour. This ensures compliance with Forecast.Solar's rate limits while maintaining accurate predictions.
+
 ### Basic Settings
 
 #### Use Forecast.Solar
@@ -509,10 +511,12 @@ data:
    - Check that battery entities are reporting valid states
 
 4. **Solar forecast not updating**
+   - Note: Forecast data is cached for 30 minutes to comply with API rate limits
    - Verify Forecast.Solar API is accessible
    - Check that latitude/longitude are correct
    - Ensure plane configuration JSON is valid
    - Verify API key if using enhanced features
+   - Check Home Assistant logs for "Forecast.Solar" messages to see cache status
 
 5. **Baseline calculation seems wrong**
    - Check exclusion settings match your setup
