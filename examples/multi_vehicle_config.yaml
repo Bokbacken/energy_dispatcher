@@ -1,0 +1,108 @@
+# Example Multi-Vehicle Configuration for Energy Dispatcher
+# This configuration demonstrates setting up multiple EVs and chargers
+
+# ============================================================================
+# SCENARIO 1: Tesla Model Y + Hyundai Ioniq, Single 3-Phase Charger
+# ============================================================================
+
+# Vehicle 1: Tesla Model Y Long Range 2022
+vehicles:
+  tesla_model_y_lr:
+    name: "Family Tesla"
+    brand: "Tesla"
+    model: "Model Y Long Range 2022"
+    battery_kwh: 75.0
+    max_charge_current: 16  # Amperes
+    phases: 3
+    voltage: 230
+    default_target_soc: 80.0
+    charging_efficiency: 0.92
+    has_api: false  # Manual SOC input
+    
+  # Vehicle 2: Hyundai Ioniq Electric 2019
+  hyundai_ioniq_electric:
+    name: "Commuter Ioniq"
+    brand: "Hyundai"
+    model: "Ioniq Electric 2019"
+    battery_kwh: 28.0
+    max_charge_current: 16
+    phases: 1
+    voltage: 230
+    default_target_soc: 100.0
+    charging_efficiency: 0.88
+    has_api: false
+
+# Charger Configuration
+chargers:
+  home_wallbox:
+    name: "Home 3-Phase Wallbox"
+    brand: "Generic"
+    model: "3-Phase 16A"
+    min_current: 6
+    max_current: 16
+    phases: 3
+    voltage: 230
+    supports_api: false
+    # Home Assistant entities for control
+    start_switch: "switch.wallbox_start_charging"
+    stop_switch: "switch.wallbox_stop_charging"
+    current_number: "number.wallbox_charging_current"
+    power_sensor: "sensor.wallbox_power"
+    energy_sensor: "sensor.wallbox_session_energy"
+    total_energy_sensor: "sensor.wallbox_total_energy"
+
+# Cost Strategy Configuration
+cost_strategy:
+  # Thresholds for cost classification (SEK/kWh)
+  cheap_max: 1.5   # Prices <= 1.5 are "cheap"
+  high_min: 3.0    # Prices >= 3.0 are "high"
+  # Dynamic thresholds can be calculated from price history
+  use_dynamic_thresholds: false
+  
+  # Battery reserve settings
+  battery_reserve:
+    enabled: true
+    max_reserve_percent: 80.0
+    estimated_load_kw: 2.0  # Average house load during high-cost windows
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+
+# Example 1: Morning Commute - Tesla needs to be ready by 08:00
+charging_schedules:
+  morning_commute:
+    vehicle_id: "tesla_model_y_lr"
+    charger_id: "home_wallbox"
+    mode: "deadline"
+    current_soc: 40.0  # Read from car display
+    target_soc: 80.0
+    deadline: "08:00:00"  # Tomorrow morning
+    # System will optimize to charge during cheapest hours before 08:00
+
+# Example 2: Daytime Solar Charging - Ioniq can charge slowly
+  solar_charging:
+    vehicle_id: "hyundai_ioniq_electric"
+    charger_id: "home_wallbox"
+    mode: "eco"
+    current_soc: 60.0
+    target_soc: 100.0
+    # System will prioritize solar hours and cheap grid
+
+# Example 3: Emergency Charging - Need Tesla ASAP
+  emergency_charge:
+    vehicle_id: "tesla_model_y_lr"
+    charger_id: "home_wallbox"
+    mode: "asap"
+    current_soc: 15.0
+    target_soc: 50.0  # Just enough to get home
+    # System will start charging immediately at max power
+
+# Example 4: Cost Minimization - Ioniq can wait for cheapest hours
+  overnight_cheap:
+    vehicle_id: "hyundai_ioniq_electric"
+    charger_id: "home_wallbox"
+    mode: "cost_saver"
+    current_soc: 40.0
+    target_soc: 100.0
+    # System will only charge during absolute cheapest hours

@@ -2,6 +2,52 @@
 
 ## [Unreleased]
 ### Added
+- **Multi-Vehicle and Multi-Charger Support**: Enhanced EV charging management
+  - Support for multiple electric vehicles with different specifications
+  - Vehicle presets for Tesla Model Y LR 2022 and Hyundai Ioniq Electric 2019
+  - Multiple charger configurations with adapter pattern for future expansion
+  - Per-vehicle state tracking (SOC, target, mode, deadline)
+  - Charging session management with start/end tracking
+  - Energy delivered calculation per session
+  - Vehicle-charger association management
+  - Charging time and energy requirement calculations
+
+- **Advanced Charging Modes**: Flexible charging optimization strategies
+  - **ASAP Mode**: Immediate charging for urgent needs
+  - **Eco Mode**: Optimize for solar and cheap grid hours
+  - **Deadline Mode**: Meet specific completion time requirements
+  - **Cost Saver Mode**: Minimize cost with flexible timing
+
+- **Cost Strategy Module**: Semi-intelligent energy management
+  - Energy cost classification (cheap/medium/high) with configurable thresholds
+  - Dynamic threshold calculation based on price distribution
+  - High-cost window prediction for next 24 hours
+  - Battery reserve calculation to prevent premature depletion
+  - Smart charge/discharge decisions based on price and solar
+  - EV charging window optimization with deadline awareness
+  - Cost summary with statistics for visualization
+
+- **Enhanced Planning**: Deadline-aware and cost-optimized charging
+  - Integration with cost strategy for battery management
+  - Battery reserve logic prevents depletion before high-cost periods
+  - Deadline support for EV charging sessions
+  - Mode-based optimization (ASAP, Eco, Deadline, Cost Saver)
+  - Notes in plan actions for transparency
+
+- **Comprehensive Documentation**:
+  - `docs/multi_vehicle_setup.md`: Complete setup guide with examples
+  - `examples/multi_vehicle_config.yaml`: Example configurations and automations
+  - Vehicle preset specifications and charging calculations
+  - Cost strategy explanation and best practices
+  - Troubleshooting guide and automation examples
+
+- **Testing**: Full test coverage for new features
+  - 19 tests for vehicle manager (all passing)
+  - 21 tests for cost strategy (all passing)
+  - Vehicle presets validation
+  - Charging session lifecycle tests
+  - Cost classification and optimization tests
+
 - **Battery Energy Cost (BEC) Module**: Comprehensive battery cost and state management
   - Tracks weighted average cost of energy (WACE) in battery
   - **Historical data storage**: Records every charge/discharge event with timestamp (15-min intervals)
