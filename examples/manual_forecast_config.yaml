@@ -1,0 +1,123 @@
+# Example configuration for Manual PV Forecast Engine
+# This shows how to configure physics-based solar forecasting
+
+# Basic Solar Configuration
+fs_use: true                    # Enable solar forecasting
+forecast_source: manual_physics # Use manual physics-based engine (alternative: forecast_solar)
+
+# Location (required for solar calculations)
+fs_lat: 56.6967208731          # Latitude of your solar installation
+fs_lon: 13.0196173488          # Longitude of your solar installation
+
+# Solar Panels Configuration (same JSON format as Forecast.Solar)
+# Each plane has: dec (tilt angle 0-90°), az (azimuth), kwp (peak power)
+fs_planes: |
+  [
+    {"dec": 45, "az": "W", "kwp": 9.43},   # West-facing array, 45° tilt, 9.43 kWp
+    {"dec": 45, "az": "E", "kwp": 4.92}    # East-facing array, 45° tilt, 4.92 kWp
+  ]
+
+# Horizon Profile (CSV with 12 altitude values every 30°)
+# Values represent horizon altitude in degrees at: 0°(N), 30°, 60°, 90°(E), 120°, 150°, 180°(S), 210°, 240°, 270°(W), 300°, 330°
+# Example: trees/buildings block direct sun when it's below these altitudes
+fs_horizon: "18,16,11,7,5,4,3,2,2,4,7,10"
+
+# Weather Data Source
+# Select your weather integration - the engine will detect available capabilities
+weather_entity: "weather.home"  # Your Home Assistant weather entity
+
+# Manual Forecast Settings (Advanced)
+manual_step_minutes: 15         # Forecast time resolution (15, 30, or 60 minutes)
+                                # 15 = best accuracy, 60 = faster computation
+
+manual_diffuse_sky_view_factor: 0.95  # Sky visibility (0.7-1.0)
+                                       # 1.0 = no obstruction, 0.85 = significant trees/buildings
+                                       # Auto-calculated from horizon if not specified
+
+manual_temp_coeff_pct_per_c: -0.38   # Panel temperature coefficient (%/°C)
+                                      # Check your panel datasheet - typical range: -0.35 to -0.45
+                                      # Negative = power decreases when panels heat up
+
+manual_inverter_ac_kw_cap: 10.0      # System AC output limit (kW)
+                                      # Set to your inverter's max AC output
+                                      # Leave unset if inverter can handle full DC capacity
+
+manual_calibration_enabled: false    # Enable automatic calibration (future feature)
+
+# Cloud Compensation Settings (for Forecast.Solar mode)
+# These are used when forecast_source is "forecast_solar" instead of "manual_physics"
+cloud_0_factor: 250              # Output multiplier at 0% cloud cover (250 = 2.5x, i.e., 250%)
+cloud_100_factor: 20             # Output multiplier at 100% cloud cover (20 = 0.2x, i.e., 20%)
+
+---
+# Example Weather Entity Requirements
+# 
+# Your weather entity should provide one or more of:
+#
+# Tier 1 (Excellent accuracy):
+#   - global_horizontal_irradiance (GHI) in W/m²
+#   - direct_normal_irradiance (DNI) + diffuse_horizontal_irradiance (DHI) in W/m²
+#   - shortwave_radiation in W/m²
+#
+# Tier 2 (Good accuracy):
+#   - cloud_cover in % (0-100)
+#
+# Additional (recommended):
+#   - temperature in °C
+#   - wind_speed in m/s
+#
+# Check detected capabilities in: sensor.weather_forecast_capabilities
+
+---
+# Expected Results
+#
+# After configuration, you'll have these sensors:
+#
+# sensor.solar_forecast_raw
+#   - State: Today's total energy (kWh)
+#   - Attributes: forecast array with (time, watts) pairs
+#
+# sensor.solar_forecast_compensated
+#   - State: Today's total energy (kWh)
+#   - Attributes: forecast array (same as raw for manual mode)
+#
+# sensor.weather_forecast_capabilities (manual mode only)
+#   - State: "Excellent: DNI, DHI, Temp, Wind" (example)
+#   - Attributes: Detailed capability flags and tier level
+
+---
+# Comparison: Forecast.Solar vs Manual Physics
+#
+# Use Forecast.Solar (forecast_source: forecast_solar) if:
+#   ✓ You want plug-and-play simplicity
+#   ✓ You have an API key with horizon support
+#   ✓ You don't have reliable weather data
+#   ✓ You prefer externally validated forecasts
+#
+# Use Manual Physics (forecast_source: manual_physics) if:
+#   ✓ You want to avoid API costs
+#   ✓ Your weather provider has good irradiance/cloud data
+#   ✓ You want full control over calculations
+#   ✓ You're willing to spend time on initial setup
+
+---
+# Troubleshooting
+#
+# "Limited" weather capabilities:
+#   → Your weather provider lacks irradiance and cloud data
+#   → Manual forecast will use clear-sky model (inaccurate on cloudy days)
+#   → Consider switching weather integrations or using Forecast.Solar
+#
+# Forecast always zero:
+#   → Check weather entity is valid
+#   → Verify lat/lon coordinates
+#   → Ensure planes JSON is valid
+#   → Confirm horizon CSV has exactly 12 values
+#
+# Forecast too high/low:
+#   → Adjust temperature coefficient (check panel datasheet)
+#   → Set inverter AC cap if applicable
+#   → Verify panel kWp ratings are correct
+#   → Check horizon blocking isn't too aggressive
+#
+# For detailed information, see: docs/manual_forecast.md

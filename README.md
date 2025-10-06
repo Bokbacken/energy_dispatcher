@@ -11,15 +11,33 @@ Smart energy management for Home Assistant users, supporting dynamic price, batt
 - **Nordpool Price Integration**: Use real-time spot prices for smarter dispatch
 - **Battery Scheduling**: Automatic and manual battery management with high-cost window anticipation
 - **EV Charging Optimization**: Schedule and control EV charging sessions with deadline support
-- **Solar Forecasting**: Now with cloud compensation—see below!
+- **Solar Forecasting**: Dual-engine support (Forecast.Solar + Manual Physics-Based) with cloud compensation
 - **Localization**: Full support for Swedish and English, including all config fields
 
-## New in v0.7.0: Solar Forecast Cloud Compensation
+## New: Manual PV Forecast Engine (Physics-Based) 🌤️☀️
 
-- Incorporates cloudiness from your selected weather entity.
-- User-configurable output factors for 0% and 100% cloud cover.
-- Exposes both raw and compensated solar forecast sensors for direct comparison.
-- Supports easy graphing and testing in Home Assistant dashboards.
+Free, physics-based solar forecasting using your Home Assistant weather data! No API costs.
+
+**Features:**
+- **Tier-based weather adaptation**: Automatically uses best available data (DNI/DHI → GHI → Cloud cover)
+- **Weather capability detection**: See exactly what data your weather provider supports
+- **Industry-standard models**: Haurwitz, Kasten-Czeplak, Erbs, HDKR, PVWatts
+- **Horizon blocking**: Full 12-point horizon support built-in
+- **Temperature effects**: Accounts for panel temperature and wind cooling
+- **Optional calibration**: Future per-plane calibration to tune accuracy
+
+**When to use:**
+- You want free forecasting without API costs
+- Your weather provider has good irradiance or cloud data
+- You want transparent, customizable calculations
+- You're willing to spend time on initial setup
+
+See [`docs/manual_forecast.md`](./docs/manual_forecast.md) for complete documentation.
+
+**Cloud Compensation (Forecast.Solar):**
+- Incorporates cloudiness from your selected weather entity
+- User-configurable output factors for 0% and 100% cloud cover
+- Exposes both raw and compensated solar forecast sensors
 
 See [`docs/solar_forecast_improvement.md`](./docs/solar_forecast_improvement.md) for details.
 
@@ -41,10 +59,11 @@ See [`docs/solar_forecast_improvement.md`](./docs/solar_forecast_improvement.md)
 
 ## Documentation
 
-- [Multi-Vehicle and Multi-Charger Setup](./docs/multi_vehicle_setup.md) ⭐ NEW
+- [Manual PV Forecast (Physics-Based)](./docs/manual_forecast.md) ⭐ NEW
+- [Multi-Vehicle and Multi-Charger Setup](./docs/multi_vehicle_setup.md)
 - [Configuration Guide](./docs/configuration.md)
 - [Battery Cost Tracking](./docs/battery_cost_tracking.md)
-- [Solar Forecast Improvement](./docs/solar_forecast_improvement.md)
+- [Solar Forecast Improvement (Cloud Compensation)](./docs/solar_forecast_improvement.md)
 - [Changelog](./CHANGELOG.md)
 
 ## Quick Start Examples
