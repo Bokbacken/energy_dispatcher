@@ -1,8 +1,11 @@
 """Unit tests for config_flow module."""
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 
-from custom_components.energy_dispatcher.config_flow import _available_weather_entities
+from custom_components.energy_dispatcher.config_flow import (
+    _available_weather_entities,
+    EnergyDispatcherConfigFlow,
+)
 
 
 class MockState:
@@ -169,3 +172,23 @@ class TestAvailableWeatherEntities:
         hass.states.async_all = MagicMock(side_effect=TypeError("Test error"))
         result = _available_weather_entities(hass)
         assert result == []
+
+
+class TestOptionsFlowInitialization:
+    """Test options flow handler initialization."""
+
+    def test_options_flow_can_be_instantiated_without_arguments(self):
+        """Test that EnergyDispatcherOptionsFlowHandler can be created without passing config_entry."""
+        from custom_components.energy_dispatcher.config_flow import (
+            EnergyDispatcherConfigFlow,
+        )
+        from homeassistant import config_entries
+        
+        # Create a mock config entry
+        mock_config_entry = MagicMock(spec=config_entries.ConfigEntry)
+        mock_config_entry.data = {}
+        mock_config_entry.options = {}
+        
+        # This should not raise TypeError - the modern pattern doesn't pass config_entry
+        flow_handler = EnergyDispatcherConfigFlow.async_get_options_flow(mock_config_entry)
+        assert flow_handler is not None
