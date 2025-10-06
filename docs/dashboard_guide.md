@@ -39,7 +39,18 @@ To install: Go to **HACS** → **Frontend** → **Explore & Download Repositorie
 
 ## Where to Enter Different Code Types
 
-Understanding where to place different code snippets is crucial:
+Understanding where to place different code snippets is crucial. Here's a quick reference:
+
+| Code Type | Location | When to Use | Example |
+|-----------|----------|-------------|---------|
+| **Helpers** | Settings → Helpers → Create Helper | Manual input fields | Input number for manual EV SOC |
+| **Dashboard Cards** | Dashboard → Edit → Add Card or Raw Config | Visual interface elements | ApexCharts, Entity cards |
+| **Automations** | Settings → Automations → Create | Event-based actions | Auto-update EV SOC on plug-in |
+| **Scripts** | Settings → Automations → Scripts | Reusable action sequences | Start optimal charging script |
+| **configuration.yaml** | File Editor → configuration.yaml | Template sensors, global config | Custom template sensors |
+| **Services** | Developer Tools → Services | Testing and debugging | Test service calls manually |
+
+### Detailed Explanations
 
 ### 1. Helpers (Input Entities)
 
@@ -794,6 +805,13 @@ cards:
 3. Restart Home Assistant if entities were just created
 4. Check entity names match exactly (case-sensitive)
 
+**Entity Naming Pattern**: All Energy Dispatcher entities follow this pattern:
+- Sensors: `sensor.energy_dispatcher_<description>` (e.g., `sensor.energy_dispatcher_enriched_power_price`)
+- Numbers: `number.energy_dispatcher_<description>` (e.g., `number.energy_dispatcher_ev_aktuell_soc`)
+- Switches: `switch.energy_dispatcher_<description>` (e.g., `switch.energy_dispatcher_auto_ev`)
+
+To find all entities: Go to **Developer Tools** → **States** → Filter by `energy_dispatcher`
+
 ### ApexCharts Not Working
 
 **Problem**: "Custom element doesn't exist: apexcharts-card"
@@ -862,6 +880,19 @@ After creating your main dashboard:
 - [Future Improvements](./future_improvements.md) - Planned usability enhancements
 - [Quick Reference](./QUICK_REFERENCE.md) - Quick command reference
 
+## Looking Ahead
+
+**Want less manual configuration?** See the [Future Improvements](./future_improvements.md) document for planned features that will:
+- 🚀 Auto-generate dashboards with one click
+- 🔍 Auto-discover compatible devices
+- 🤖 Integrate directly with vehicle APIs (Tesla, VW ID, etc.)
+- 🎨 Provide visual dashboard builder in the UI
+- ⚡ Eliminate need for YAML knowledge
+
+These improvements will make Energy Dispatcher even easier to use, but for now, this guide will help you create a powerful control dashboard.
+
 ## Feedback
 
 This dashboard is designed for ease of use and understanding. If you have suggestions for improvements or find something unclear, please open an issue on [GitHub](https://github.com/Bokbacken/energy_dispatcher/issues).
+
+**Want to contribute?** Check out the [Future Improvements](./future_improvements.md) document for areas where you can help make the integration more user-friendly!
