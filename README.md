@@ -49,12 +49,23 @@ See [`docs/solar_forecast_improvement.md`](./docs/solar_forecast_improvement.md)
 
 ## Quick Start
 
+**New user?** Follow the [Getting Started Guide](./docs/getting_started.md) for a complete 10-minute setup!
+
 After installation:
 
 1. **Configure the Integration**: Settings → Devices & Services → Add Integration → Energy Dispatcher
 2. **Create Your Dashboard**: Follow the [Dashboard Setup Guide](./docs/dashboard_guide.md) for a step-by-step walkthrough
 3. **Set Your Preferences**: Adjust EV target SOC and battery floor using the number entities
 4. **Monitor & Control**: Use the dashboard to monitor optimization and override when needed
+
+### What You'll Learn
+
+The [Getting Started Guide](./docs/getting_started.md) covers:
+- ✅ Complete setup in 10 minutes
+- ✅ Essential configuration values
+- ✅ Dashboard creation (copy-paste ready)
+- ✅ Common scenarios and solutions
+- ✅ FAQ and troubleshooting
 
 The [Dashboard Guide](./docs/dashboard_guide.md) explains:
 - ✅ Where to enter different types of code (helpers, dashboards, automations, etc.)
@@ -77,7 +88,8 @@ The [Dashboard Guide](./docs/dashboard_guide.md) explains:
 ## Documentation
 
 ### Getting Started
-- [Dashboard Setup Guide](./docs/dashboard_guide.md) ⭐ **START HERE** - Step-by-step dashboard creation
+- [Getting Started Guide](./docs/getting_started.md) 🚀 **START HERE** - 10-minute quick start
+- [Dashboard Setup Guide](./docs/dashboard_guide.md) ⭐ **POPULAR** - Step-by-step dashboard creation
 - [Configuration Guide](./docs/configuration.md) - Complete configuration reference
 
 ### Features & Setup
