@@ -1,6 +1,30 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+- **Manual PV Forecast Engine (Physics-Based)**: Free alternative to Forecast.Solar using weather data
+  - Physics-based solar power forecasting using Home Assistant weather integrations
+  - No API costs or external dependencies beyond weather data
+  - Tier-based adaptation: DNI/DHI (best) → GHI → Cloud cover → Clear-sky (fallback)
+  - Weather capability detection sensor showing available data fields
+  - Industry-standard models:
+    - **Haurwitz**: Simple clear-sky GHI calculation
+    - **Kasten-Czeplak**: Cloud cover to GHI mapping
+    - **Erbs**: GHI decomposition to DNI/DHI
+    - **HDKR**: Plane-of-array transposition with anisotropic diffuse
+    - **PVWatts**: DC and AC power calculation with temperature effects
+  - Built-in horizon blocking with 12-point interpolation
+  - Cell temperature modeling with wind cooling effects
+  - Optional per-plane calibration (framework ready, implementation pending)
+  - Configurable settings:
+    - Time step: 15, 30, or 60 minutes
+    - Diffuse sky-view factor: 0.7-1.0
+    - Temperature coefficient: customizable per installation
+    - System-level inverter AC cap
+  - New sensor: `sensor.weather_forecast_capabilities` showing detected weather data
+  - Comprehensive unit tests for all physics calculations (17 tests passing)
+  - Complete documentation in `docs/manual_forecast.md`
+
 ### Fixed
 - **Configuration Flow Error**: Fixed remaining 500 Internal Server Error edge cases in weather entity enumeration (PR #19 follow-up)
   - Root cause: `_available_weather_entities()` function had insufficient error handling even after `hasattr()` check was added

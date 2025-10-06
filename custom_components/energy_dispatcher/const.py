@@ -59,6 +59,21 @@ CONF_FS_LON = "fs_lon"
 CONF_FS_PLANES = "fs_planes"
 CONF_FS_HORIZON = "fs_horizon"
 
+# Forecast source selection
+CONF_FORECAST_SOURCE = "forecast_source"  # "forecast_solar" or "manual_physics"
+
+# Weather entity for manual forecast
+CONF_WEATHER_ENTITY = "weather_entity"
+CONF_CLOUD_0_FACTOR = "cloud_0_factor"
+CONF_CLOUD_100_FACTOR = "cloud_100_factor"
+
+# Manual forecast settings
+CONF_MANUAL_STEP_MINUTES = "manual_step_minutes"
+CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR = "manual_diffuse_sky_view_factor"
+CONF_MANUAL_TEMP_COEFF = "manual_temp_coeff_pct_per_c"
+CONF_MANUAL_INVERTER_AC_CAP = "manual_inverter_ac_kw_cap"
+CONF_MANUAL_CALIBRATION_ENABLED = "manual_calibration_enabled"
+
 # PV actual (frivilligt)
 CONF_PV_POWER_ENTITY = "pv_power_entity"               # W/kW/MW
 CONF_PV_ENERGY_TODAY_ENTITY = "pv_energy_today_entity" # Wh/kWh/MWh
