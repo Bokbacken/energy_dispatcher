@@ -24,6 +24,58 @@ The Battery Energy Cost (BEC) module tracks the weighted average cost of energy 
 - **Timestamp Records**: Each event includes ISO timestamp for precise tracking
 - **History Summary**: Provides aggregate statistics (total charged, discharged, events)
 
+## Configuration
+
+### Automatic Charge/Discharge Tracking
+
+Energy Dispatcher can automatically track battery charging and discharging using daily energy sensors. This eliminates the need for manual tracking and ensures accurate cost calculations.
+
+#### Required Sensors
+
+To enable automatic tracking, configure these sensor entities in the integration settings:
+
+1. **Battery Energy Charged Today** (`batt_energy_charged_today_entity`)
+   - Reports daily energy charged to battery (kWh)
+   - Must reset to 0 at midnight
+   - Example: `sensor.energy_charged_today`
+
+2. **Battery Energy Discharged Today** (`batt_energy_discharged_today_entity`)
+   - Reports daily energy discharged from battery (kWh)
+   - Must reset to 0 at midnight
+   - Example: `sensor.energy_discharged_today`
+
+#### Optional: Automatic Capacity Detection
+
+You can optionally configure a sensor that reports your battery's rated capacity:
+
+- **Battery Capacity Sensor** (`batt_capacity_entity`)
+  - Reports battery rated capacity (kWh)
+  - Example: `sensor.rated_ess_capacity`
+  - When configured, overrides the manual capacity setting
+  - Useful for systems where capacity is dynamically reported
+
+#### How Automatic Tracking Works
+
+1. **Every 5 minutes** (coordinator update interval), the system reads the daily energy counters
+2. **Calculates deltas** by comparing current values with previous readings
+3. **Determines energy source**:
+   - If PV surplus covers charging power → cost is 0 (solar)
+   - Otherwise → uses current electricity price (grid)
+4. **Calls BEC methods**:
+   - `bec.on_charge(delta_kwh, cost, source)` for charging
+   - `bec.on_discharge(delta_kwh)` for discharging
+5. **Daily reset**: Automatically handles sensor resets at midnight
+
+#### Example EMMA/Huawei Sensors
+
+For Huawei LUNA2000 systems (EMMA), use these sensors:
+
+```yaml
+batt_energy_charged_today_entity: sensor.luna2000_energy_charged_today
+batt_energy_discharged_today_entity: sensor.luna2000_energy_discharged_today
+batt_capacity_entity: sensor.luna2000_rated_ess_capacity
+```
+
 ## How It Works
 
 ### Charging
@@ -75,6 +127,7 @@ data:
 ### Sensor: Battery Energy Cost
 - **Entity ID**: `sensor.battery_energy_cost`
 - **Value**: Current WACE in SEK/kWh
+- **Description**: Shows the weighted average cost of energy currently stored in the battery
 - **Attributes**:
   - `total_energy_kwh`: Current energy content (kWh)
   - `total_cost_sek`: Total cost of energy in battery (SEK)
@@ -87,6 +140,26 @@ data:
   - `history_total_discharged_kwh`: Total energy discharged (last 30 days)
   - `history_oldest_event`: Timestamp of oldest event in history
   - `history_newest_event`: Timestamp of newest event in history
+
+### Sensor: Battery Charging State
+- **Entity ID**: `sensor.battery_charging_state`
+- **Value**: Current battery state: `charging`, `discharging`, or `idle`
+- **Description**: Shows the current charging/discharging state of the battery
+- **Attributes**:
+  - `battery_power_w`: Current battery power (W)
+- **Note**: Uses a 50W threshold to determine state
+
+### Sensor: Battery Power Flow
+- **Entity ID**: `sensor.battery_power_flow`
+- **Value**: Current power flow in Watts
+- **Description**: Shows battery power flow (positive = charging, negative = discharging)
+- **Device Class**: `power`
+- **State Class**: `measurement`
+- **Attributes**:
+  - `battery_soc_percent`: Current state of charge (%)
+  - `battery_energy_kwh`: Current energy content (kWh)
+  - `battery_capacity_kwh`: Battery capacity (kWh)
+- **Note**: Converts Huawei convention (negative=charging) to standard (positive=charging)
 
 ### Button: Reset Battery Energy Cost
 - **Entity ID**: `button.reset_battery_energy_cost`
@@ -120,6 +193,22 @@ automation:
         value_template: "{{ now().day == 1 }}"
     action:
       - service: energy_dispatcher.battery_cost_reset
+```
+
+### Notify When Battery Is Charging
+```yaml
+automation:
+  - alias: "Notify Battery Charging"
+    trigger:
+      - platform: state
+        entity_id: sensor.battery_charging_state
+        to: "charging"
+    action:
+      - service: notify.mobile_app
+        data:
+          message: >
+            Battery is now charging at {{ states('sensor.battery_power_flow') | round(0) }}W.
+            Current cost: {{ states('sensor.battery_energy_cost') }} SEK/kWh
 ```
 
 ## Dashboard Cards

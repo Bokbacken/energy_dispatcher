@@ -23,6 +23,8 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         BatteryRuntimeSensor(coordinator, entry.entry_id),
         BatteryCostSensor(coordinator, entry.entry_id),
         BatteryVsGridDeltaSensor(coordinator, entry.entry_id),
+        BatteryChargingStateSensor(coordinator, entry.entry_id),
+        BatteryPowerFlowSensor(coordinator, entry.entry_id),
         SolarPowerNowSensor(coordinator, entry.entry_id),
         SolarEnergyTodaySensor(coordinator, entry.entry_id),
         SolarEnergyTomorrowSensor(coordinator, entry.entry_id),
@@ -377,6 +379,105 @@ class EVChargingSessionSensor(BaseEDSensor):
             attrs["target_soc"] = session_info["target_soc"]
             if session_info["start_energy"] is not None:
                 attrs["start_energy_kwh"] = round(session_info["start_energy"], 2)
+        
+        return attrs
+
+
+class BatteryChargingStateSensor(BaseEDSensor):
+    _attr_name = "Battery Charging State"
+    _attr_icon = "mdi:battery-charging"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_batt_charging_state_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        """Return battery charging state: charging, discharging, or idle."""
+        # Import here to avoid circular dependency
+        from .const import CONF_BATT_POWER_ENTITY
+        
+        batt_power_entity = self.coordinator._get_cfg(CONF_BATT_POWER_ENTITY, "")
+        if not batt_power_entity:
+            return "unknown"
+        
+        state = self.coordinator.hass.states.get(batt_power_entity)
+        if not state or state.state in (None, "", "unknown", "unavailable"):
+            return "unknown"
+        
+        try:
+            power = float(state.state)
+            # Huawei convention: negative = charging, positive = discharging
+            if power < -50:  # Charging threshold: 50W
+                return "charging"
+            elif power > 50:  # Discharging threshold: 50W
+                return "discharging"
+            else:
+                return "idle"
+        except (ValueError, TypeError):
+            return "unknown"
+
+    @property
+    def extra_state_attributes(self):
+        """Return additional state attributes."""
+        from .const import CONF_BATT_POWER_ENTITY
+        
+        batt_power_entity = self.coordinator._get_cfg(CONF_BATT_POWER_ENTITY, "")
+        attrs = {}
+        
+        if batt_power_entity:
+            state = self.coordinator.hass.states.get(batt_power_entity)
+            if state and state.state not in (None, "", "unknown", "unavailable"):
+                try:
+                    attrs["battery_power_w"] = float(state.state)
+                except (ValueError, TypeError):
+                    pass
+        
+        return attrs
+
+
+class BatteryPowerFlowSensor(BaseEDSensor):
+    _attr_name = "Battery Power Flow"
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:transmission-tower"
+    _attr_device_class = "power"
+    _attr_state_class = "measurement"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_batt_power_flow_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        """Return battery power flow (positive=charging, negative=discharging)."""
+        from .const import CONF_BATT_POWER_ENTITY
+        
+        batt_power_entity = self.coordinator._get_cfg(CONF_BATT_POWER_ENTITY, "")
+        if not batt_power_entity:
+            return None
+        
+        state = self.coordinator.hass.states.get(batt_power_entity)
+        if not state or state.state in (None, "", "unknown", "unavailable"):
+            return None
+        
+        try:
+            power = float(state.state)
+            # Convert Huawei convention (negative=charging) to standard (positive=charging)
+            return -power
+        except (ValueError, TypeError):
+            return None
+
+    @property
+    def extra_state_attributes(self):
+        """Return additional state attributes."""
+        store = self.coordinator.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        bec = store.get("bec")
+        
+        attrs = {}
+        if bec:
+            attrs["battery_soc_percent"] = float(bec.get_soc())
+            attrs["battery_energy_kwh"] = float(bec.energy_kwh)
+            attrs["battery_capacity_kwh"] = float(bec.capacity_kwh)
         
         return attrs
 

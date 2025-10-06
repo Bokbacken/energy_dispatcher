@@ -27,6 +27,9 @@ CONF_BATT_MAX_CHARGE_W = "batt_max_charge_w"
 CONF_BATT_MAX_DISCH_W = "batt_max_disch_w"
 CONF_BATT_ADAPTER = "batt_adapter"
 CONF_HUAWEI_DEVICE_ID = "huawei_device_id"
+CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY = "batt_energy_charged_today_entity"  # kWh charged today
+CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY = "batt_energy_discharged_today_entity"  # kWh discharged today
+CONF_BATT_CAPACITY_ENTITY = "batt_capacity_entity"  # Rated ESS capacity sensor (optional)
 
 # Legacy house consumption (fallback)
 CONF_HOUSE_CONS_SENSOR = "house_cons_sensor"

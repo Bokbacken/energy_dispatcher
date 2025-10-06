@@ -20,6 +20,9 @@ from .const import (
     CONF_PRICE_INCLUDE_FIXED,
     CONF_BATT_CAP_KWH,
     CONF_BATT_SOC_ENTITY,
+    CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY,
+    CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY,
+    CONF_BATT_CAPACITY_ENTITY,
     CONF_HOUSE_CONS_SENSOR,
     # Forecast.Solar-konfig
     CONF_FS_USE,
@@ -161,6 +164,11 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
 
         # Bootstrap flagga
         self._baseline_bootstrapped: bool = False
+        
+        # Battery charge/discharge tracking
+        self._batt_prev_charged_today: Optional[float] = None  # kWh charged today (previous value)
+        self._batt_prev_discharged_today: Optional[float] = None  # kWh discharged today (previous value)
+        self._batt_last_reset_date: Optional[Any] = None  # Track daily reset
 
     # ---------- helpers ----------
     def _get_store(self) -> Dict[str, Any]:
@@ -204,6 +212,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             await self._update_baseline_and_runtime()
             await self._update_solar()
             await self._update_pv_actual()
+            await self._update_battery_charge_tracking()
             await self._auto_ev_tick()
             self._update_grid_vs_batt_delta()
             self._update_solar_delta_15m()
@@ -512,6 +521,96 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 except Exception:
                     pv_today = None
         self.data["pv_today_kwh"] = pv_today
+
+    # ---------- Battery charge/discharge tracking ----------
+    async def _update_battery_charge_tracking(self):
+        """
+        Track battery charge/discharge events using daily energy counters.
+        Calls bec.on_charge() when battery charges and bec.on_discharge() when it discharges.
+        """
+        store = self._get_store()
+        bec = store.get("bec")
+        if not bec:
+            return
+        
+        # Get current date
+        now = dt_util.now()
+        current_date = now.date()
+        
+        # Check if we need to reset tracking (new day)
+        if self._batt_last_reset_date != current_date:
+            self._batt_prev_charged_today = None
+            self._batt_prev_discharged_today = None
+            self._batt_last_reset_date = current_date
+            _LOGGER.debug("Battery tracking reset for new day: %s", current_date)
+        
+        # Get configured entities
+        charged_entity = self._get_cfg(CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY, "")
+        discharged_entity = self._get_cfg(CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY, "")
+        
+        if not charged_entity and not discharged_entity:
+            # No tracking entities configured
+            return
+        
+        # Get current price for charging cost calculation
+        current_price = self.data.get("current_enriched", 0.0) or 0.0
+        
+        # Get PV power to determine if charging from solar or grid
+        pv_power_w = self.data.get("pv_now_w", 0.0) or 0.0
+        load_power_w = self._read_watts(self._get_cfg(CONF_LOAD_POWER_ENTITY, "")) or 0.0
+        batt_power_w = self._read_float(self._get_cfg(CONF_BATT_POWER_ENTITY, ""))
+        
+        # Track charging
+        if charged_entity:
+            st = self.hass.states.get(charged_entity)
+            if st and st.state not in (None, "", "unknown", "unavailable"):
+                charged_today = _safe_float(st.state)
+                if charged_today is not None:
+                    if self._batt_prev_charged_today is not None:
+                        delta_charged = charged_today - self._batt_prev_charged_today
+                        if delta_charged > 0.001:  # At least 1 Wh change
+                            # Determine if charging from grid or solar
+                            # If PV surplus exceeds charging power, it's solar, otherwise grid
+                            pv_surplus_w = max(0.0, pv_power_w - load_power_w)
+                            # Estimate charge power (if batt_power_w available)
+                            if batt_power_w is not None:
+                                # Negative in Huawei convention means charging
+                                charge_power_w = max(0.0, -batt_power_w)
+                            else:
+                                # Estimate from delta over 5 minutes (300s update interval)
+                                charge_power_w = (delta_charged * 1000.0) / (300.0 / 3600.0)  # Convert to W
+                            
+                            # Determine source and cost
+                            if pv_surplus_w >= charge_power_w * 0.8:  # 80% threshold for solar
+                                source = "solar"
+                                cost = 0.0  # Solar is free
+                            else:
+                                source = "grid"
+                                cost = current_price
+                            
+                            _LOGGER.info(
+                                "Battery charged: %.3f kWh from %s @ %.3f SEK/kWh (PV: %.1f W, Load: %.1f W, Charge: %.1f W)",
+                                delta_charged, source, cost, pv_power_w, load_power_w, charge_power_w
+                            )
+                            bec.on_charge(delta_charged, cost, source)
+                            await bec.async_save()
+                    
+                    self._batt_prev_charged_today = charged_today
+        
+        # Track discharging
+        if discharged_entity:
+            st = self.hass.states.get(discharged_entity)
+            if st and st.state not in (None, "", "unknown", "unavailable"):
+                discharged_today = _safe_float(st.state)
+                if discharged_today is not None:
+                    if self._batt_prev_discharged_today is not None:
+                        delta_discharged = discharged_today - self._batt_prev_discharged_today
+                        if delta_discharged > 0.001:  # At least 1 Wh change
+                            _LOGGER.info("Battery discharged: %.3f kWh", delta_discharged)
+                            bec.on_discharge(delta_discharged)
+                            await bec.async_save()
+                    
+                    self._batt_prev_discharged_today = discharged_today
 
     # ---------- Auto EV tick (oförändrad logik v0) ----------
     async def _auto_ev_tick(self):
