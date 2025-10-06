@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 ### Added
+- **Automated Dashboard Setup Assistance**: New users now receive a helpful welcome notification
+  - Persistent notification appears after integration setup with dashboard guidance
+  - Provides direct link to comprehensive Dashboard Setup Guide
+  - Lists available entity patterns for easy dashboard creation
+  - Can be disabled by setting `auto_create_dashboard: false` in configuration
+  - Graceful error handling ensures setup never fails due to notification issues
+  - Implements PR-1 from Future Improvements roadmap
+
 - **Manual PV Forecast Engine (Physics-Based)**: Free alternative to Forecast.Solar using weather data
   - Physics-based solar power forecasting using Home Assistant weather integrations
   - No API costs or external dependencies beyond weather data

@@ -15,11 +15,23 @@ This document outlines planned improvements focused on reducing manual configura
 
 ## High Priority Improvements
 
-### PR-1: Automated Dashboard Generation
+### PR-1: Automated Dashboard Generation ✅ **COMPLETED**
 
 **Problem**: Users need to manually create dashboards by copying YAML code
 
 **Solution**: Generate a basic dashboard automatically when integration is set up
+
+**Status**: ✅ Implemented in v0.8.7+
+
+**What was delivered**:
+- Added `auto_create_dashboard` configuration option (default: True) in config flow
+- Created `create_default_dashboard()` function that shows a persistent notification
+- Notification provides users with:
+  - Welcome message and setup instructions
+  - Direct link to Dashboard Setup Guide
+  - Entity naming pattern for dashboard creation
+- Graceful error handling ensures setup never fails due to dashboard creation issues
+- Can be disabled by setting `auto_create_dashboard: false` in configuration
 
 **Implementation**:
 ```python
@@ -28,38 +40,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # ... existing setup code ...
     
     # Auto-create dashboard if user opts in
-    if entry.data.get("auto_create_dashboard", True):
+    if config.get(CONF_AUTO_CREATE_DASHBOARD, True):
         await create_default_dashboard(hass, entry)
     
     return True
 
 async def create_default_dashboard(hass: HomeAssistant, entry: ConfigEntry):
     """Create a default Energy Dispatcher dashboard."""
-    dashboard_config = {
-        "title": "Energy Control",
-        "icon": "mdi:lightning-bolt",
-        "show_in_sidebar": True,
-        "require_admin": False,
-    }
-    
-    # Use lovelace API to create dashboard
-    await hass.services.async_call(
-        "lovelace",
-        "create_dashboard",
-        dashboard_config,
-        blocking=True,
-    )
-    
-    # Populate with default cards
-    # ... card configuration ...
+    # Shows a persistent notification with setup instructions
+    # and links to comprehensive dashboard guide
 ```
 
 **Benefits**:
-- Users get a working dashboard immediately
-- Reduces barrier to entry for new users
-- Consistent dashboard structure across installations
-
-**Estimated Effort**: Medium (2-3 days)
+- ✅ Users receive immediate guidance on dashboard setup
+- ✅ Reduces barrier to entry for new users
+- ✅ Provides consistent onboarding experience
+- ✅ Opt-in/opt-out flexibility via configuration
 
 ---
 
