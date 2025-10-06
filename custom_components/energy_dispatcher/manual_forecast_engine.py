@@ -5,17 +5,30 @@ This module implements a lightweight physics-based PV forecast engine
 that uses weather data (irradiance, cloud cover, temperature, wind) to
 generate solar power forecasts without relying on external APIs.
 
-Abbreviations:
-- GHI: Global Horizontal Irradiance (W/m²)
-- DNI: Direct Normal Irradiance (W/m²)
-- DHI: Diffuse Horizontal Irradiance (W/m²)
-- POA: Plane-of-Array (irradiance on tilted surface)
-- AOI: Angle of Incidence
-- IAM: Incidence Angle Modifier
-- SVF: Sky View Factor
-- HDKR: Hay-Davies-Klucher-Reindl (transposition model)
-- PVWatts: NREL's PV performance model
-- NOCT: Nominal Operating Cell Temperature
+Abbreviations and Acronyms:
+- GHI: Global Horizontal Irradiance (W/m²) - total solar radiation on a horizontal surface
+- DNI: Direct Normal Irradiance (W/m²) - direct beam solar radiation perpendicular to sun
+- DHI: Diffuse Horizontal Irradiance (W/m²) - scattered sky radiation on horizontal surface
+- POA: Plane-of-Array - the tilted surface of the solar panel
+- AOI: Angle of Incidence - angle between sun ray and panel normal
+- IAM: Incidence Angle Modifier - correction for non-perpendicular sunlight
+- SVF: Sky View Factor - fraction of sky hemisphere visible (0-1)
+- HDKR: Hay-Davies-Klucher-Reindl - transposition model for tilted surfaces
+- PVWatts: NREL's simple PV performance model (industry standard)
+- NOCT: Nominal Operating Cell Temperature (typically 45°C at 800 W/m²)
+- STC: Standard Test Conditions (1000 W/m², 25°C cell temp, AM1.5 spectrum)
+- E0: Eccentricity correction factor for Earth-Sun distance variation
+- kt: Clearness index - ratio of GHI to extraterrestrial irradiance
+
+Physics Models Used:
+- Haurwitz: Simple clear-sky GHI calculation (robust, no atmospheric data needed)
+- Kasten-Czeplak: Cloud cover to GHI mapping (C^3.4 relationship)
+- Erbs: GHI decomposition to DNI/DHI using clearness index correlations
+- HDKR: Anisotropic diffuse irradiance transposition to tilted planes
+- PVWatts: DC and AC power calculation with temperature effects
+
+Note: All formulas log input values and intermediate results at DEBUG level
+to enable forecast improvement analysis by comparing predicted vs actual output.
 """
 
 from __future__ import annotations
@@ -721,12 +734,24 @@ class ManualForecastEngine:
         """
         Compute manual physics-based forecast.
         
+        This method logs comprehensive calculation data for forecast improvement:
+        - Solar geometry: altitude, azimuth, zenith angle
+        - Weather inputs: DNI, DHI, GHI, cloud cover, temperature, wind
+        - Irradiance tier used and calculated values
+        - Per-plane calculations: POA, cell temp, DC/AC power
+        - Calibration factors applied (if any)
+        - System-level clipping events
+        
+        To analyze forecast accuracy, compare logged forecasts with actual generation
+        from PV sensors. All calculation inputs are logged at DEBUG level to enable
+        detailed analysis and potential calibration improvements.
+        
         Args:
             start_time: Start time for forecast (default: now)
             hours_ahead: Hours to forecast ahead (default: 48)
         
         Returns:
-            List of ForecastPoint objects
+            List of ForecastPoint objects with forecasted power (watts) per timestep
         """
         if start_time is None:
             start_time = dt_util.now()
@@ -739,6 +764,12 @@ class ManualForecastEngine:
         
         # Generate time steps
         num_steps = int(hours_ahead * 60 / self.step_minutes)
+        
+        # Log forecast run parameters
+        _LOGGER.debug(
+            "Starting manual forecast: lat=%.4f, lon=%.4f, planes=%d, step=%d min, hours=%d",
+            self.lat, self.lon, len(self.planes), self.step_minutes, hours_ahead
+        )
         
         for i in range(num_steps):
             dt = start_time + timedelta(minutes=i * self.step_minutes)
@@ -754,36 +785,62 @@ class ManualForecastEngine:
             # Get weather data
             weather = self._get_weather_data(dt)
             
-            # Calculate extraterrestrial DNI
+            # Calculate extraterrestrial DNI (Direct Normal Irradiance outside atmosphere)
             doy = dt.timetuple().tm_yday
             E0 = eccentricity_correction(doy)
             dni_extra = SOLAR_CONSTANT * E0
             
+            # Log solar geometry and weather inputs (only for first few points to avoid log spam)
+            if i < 3 or i % 24 == 0:  # Log first 3 and then hourly
+                _LOGGER.debug(
+                    "[%s] Solar: alt=%.1f° az=%.1f° zenith=%.1f° | Weather: DNI=%s DHI=%s GHI=%s cloud=%s%% temp=%.1f°C wind=%.1fm/s",
+                    dt.strftime("%Y-%m-%d %H:%M"),
+                    sun_alt, sun_az, sun_zenith,
+                    weather["dni"], weather["dhi"], weather["ghi"],
+                    weather["cloud_cover"],
+                    weather["temperature"] if weather["temperature"] is not None else 20.0,
+                    weather["wind_speed"] if weather["wind_speed"] is not None else 1.0
+                )
+            
             # Determine irradiance based on available data (tier system)
+            tier_used = None
             if weather["dni"] is not None and weather["dhi"] is not None:
                 # Tier 1: Use provided DNI/DHI
                 dni = weather["dni"]
                 dhi = weather["dhi"]
                 ghi = dni * math.cos(math.radians(sun_zenith)) + dhi
+                tier_used = "1-DNI/DHI"
             elif weather["ghi"] is not None:
                 # Tier 1: Decompose GHI
                 ghi = weather["ghi"]
                 dhi, dni = erbs_decomposition(ghi, sun_zenith, dni_extra)
+                tier_used = "1-GHI"
             elif weather["cloud_cover"] is not None:
                 # Tier 2: Use cloud cover mapping
                 ghi_clear = clearsky_ghi_haurwitz(sun_zenith)
                 cloud_fraction = weather["cloud_cover"] / 100.0
                 ghi = cloud_to_ghi(ghi_clear, cloud_fraction)
                 dhi, dni = erbs_decomposition(ghi, sun_zenith, dni_extra)
+                tier_used = "2-Cloud"
             else:
                 # Tier 3: Use clear-sky model
                 ghi = clearsky_ghi_haurwitz(sun_zenith)
                 dhi, dni = erbs_decomposition(ghi, sun_zenith, dni_extra)
+                tier_used = "3-ClearSky"
             
             # Apply horizon blocking
             dni_blocked, dhi_adjusted = apply_horizon_blocking(
                 dni, dhi, sun_alt, sun_az, self.horizon12, self.diffuse_svf
             )
+            
+            # Log irradiance calculations
+            if i < 3 or i % 24 == 0:
+                _LOGGER.debug(
+                    "[%s] Irradiance (Tier %s): GHI=%.0f DNI=%.0f→%.0f DHI=%.0f→%.0f W/m²",
+                    dt.strftime("%Y-%m-%d %H:%M"),
+                    tier_used,
+                    ghi, dni, dni_blocked, dhi, dhi_adjusted
+                )
             
             # Get meteorological data
             temp_amb = weather["temperature"] if weather["temperature"] is not None else 20.0
@@ -791,6 +848,7 @@ class ManualForecastEngine:
             
             # Calculate power for each plane
             total_ac_w = 0.0
+            plane_details = []
             
             for plane_idx, plane in enumerate(self.planes):
                 tilt = float(plane.get("dec", 45))
@@ -798,40 +856,72 @@ class ManualForecastEngine:
                 kwp = float(plane.get("kwp", 5.0))
                 pdc0_w = kwp * 1000.0  # Convert kWp to W
                 
-                # Calculate POA irradiance
+                # Calculate POA (Plane-of-Array) irradiance using HDKR model
                 poa = poa_hdkr(
                     ghi, dhi_adjusted, dni_blocked,
                     sun_zenith, sun_az,
                     tilt, azimuth
                 )
                 
-                # Calculate cell temperature
+                # Calculate cell temperature using PVsyst-like model
                 tcell = cell_temp_pvsyst(poa, temp_amb, wind_speed)
                 
-                # Calculate DC power
+                # Calculate DC power using PVWatts model
                 pdc_w = pvwatts_dc(poa, tcell, pdc0_w, self.temp_coeff)
                 
                 # Apply calibration if enabled
+                calib_factor = 1.0
                 if self.calibration_enabled and plane_idx in self.calibration_scalars:
-                    pdc_w *= self.calibration_scalars[plane_idx]
+                    calib_factor = self.calibration_scalars[plane_idx]
+                    pdc_w *= calib_factor
                 
-                # Calculate AC power (per-plane)
-                # Note: Individual plane AC caps would go here
+                # Calculate AC power (inverter conversion)
                 pac_w = pvwatts_ac(pdc_w)
                 
                 total_ac_w += pac_w
+                
+                # Store details for logging
+                plane_details.append({
+                    "idx": plane_idx,
+                    "az": azimuth,
+                    "tilt": tilt,
+                    "poa": poa,
+                    "tcell": tcell,
+                    "pdc": pdc_w,
+                    "pac": pac_w,
+                    "calib": calib_factor
+                })
             
             # Apply system-level inverter cap if configured
+            total_before_cap = total_ac_w
             if self.inverter_ac_kw_cap is not None:
                 total_ac_w = min(total_ac_w, self.inverter_ac_kw_cap * 1000.0)
+            
+            # Log plane calculations (first few and hourly)
+            if i < 3 or i % 24 == 0:
+                for pd in plane_details:
+                    _LOGGER.debug(
+                        "[%s] Plane %d (az=%.0f° tilt=%.0f°): POA=%.0f W/m² → Tcell=%.1f°C → DC=%.0fW → AC=%.0fW (calib=%.3f)",
+                        dt.strftime("%Y-%m-%d %H:%M"),
+                        pd["idx"], pd["az"], pd["tilt"], pd["poa"],
+                        pd["tcell"], pd["pdc"], pd["pac"], pd["calib"]
+                    )
+                if self.inverter_ac_kw_cap is not None and total_before_cap > total_ac_w:
+                    _LOGGER.debug(
+                        "[%s] Inverter clipping: %.0fW → %.0fW (cap=%.0fkW)",
+                        dt.strftime("%Y-%m-%d %H:%M"),
+                        total_before_cap, total_ac_w, self.inverter_ac_kw_cap
+                    )
             
             forecast_points.append(ForecastPoint(time=dt, watts=total_ac_w))
         
         _LOGGER.info(
-            "Manual forecast computed: %d points from %s to %s",
+            "Manual forecast computed: %d points from %s to %s, tier=%s, total_energy=%.2fkWh",
             len(forecast_points),
             start_time.isoformat(),
-            forecast_points[-1].time.isoformat() if forecast_points else "N/A"
+            forecast_points[-1].time.isoformat() if forecast_points else "N/A",
+            self.weather_caps.get_description(),
+            sum(p.watts for p in forecast_points) * self.step_minutes / 60.0 / 1000.0
         )
         
         return forecast_points
