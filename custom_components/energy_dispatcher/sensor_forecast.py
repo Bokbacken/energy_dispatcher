@@ -9,34 +9,12 @@ from .const import DOMAIN
 from .forecast_provider import ForecastSolarProvider
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    # Merge data and options to get the current configuration
-    config = {**entry.data, **(entry.options or {})}
-    forecast_provider = ForecastSolarProvider(
-        hass=hass,
-        lat=config["fs_lat"],
-        lon=config["fs_lon"],
-        planes_json=config["fs_planes"],
-        apikey=config.get("fs_apikey"),
-        horizon_csv=config.get("fs_horizon"),
-        weather_entity=config.get("weather_entity"),
-        cloud_0_factor=config.get("cloud_0_factor", 250),
-        cloud_100_factor=config.get("cloud_100_factor", 20),
-        forecast_source=config.get("forecast_source", "forecast_solar"),
-        manual_step_minutes=config.get("manual_step_minutes", 15),
-        manual_diffuse_svf=config.get("manual_diffuse_sky_view_factor"),
-        manual_temp_coeff=config.get("manual_temp_coeff_pct_per_c", -0.38),
-        manual_inverter_ac_cap=config.get("manual_inverter_ac_kw_cap"),
-        manual_calibration_enabled=config.get("manual_calibration_enabled", False),
-    )
-    
+    # Create sensors that will read config dynamically
     entities = [
-        SolarForecastRawSensor(hass, forecast_provider),
-        SolarForecastCompensatedSensor(hass, forecast_provider),
+        SolarForecastRawSensor(hass, entry),
+        SolarForecastCompensatedSensor(hass, entry),
+        WeatherCapabilitySensor(hass, entry),
     ]
-    
-    # Add weather capability sensor if manual physics is enabled
-    if config.get("forecast_source") == "manual_physics":
-        entities.append(WeatherCapabilitySensor(hass, forecast_provider))
     
     async_add_entities(entities)
 
@@ -48,9 +26,9 @@ class SolarForecastRawSensor(SensorEntity):
     _attr_state_class = "measurement"
     _attr_icon = "mdi:solar-power"
 
-    def __init__(self, hass: HomeAssistant, forecast_provider: ForecastSolarProvider):
+    def __init__(self, hass: HomeAssistant, entry):
         self.hass = hass
-        self._forecast_provider = forecast_provider
+        self._entry = entry
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "energy_dispatcher")},
             name="Energy Dispatcher",
@@ -58,6 +36,27 @@ class SolarForecastRawSensor(SensorEntity):
         )
         self._state = None
         self._attr_extra_state_attributes = {}
+    
+    def _get_forecast_provider(self) -> ForecastSolarProvider:
+        """Create forecast provider with current config."""
+        config = {**self._entry.data, **(self._entry.options or {})}
+        return ForecastSolarProvider(
+            hass=self.hass,
+            lat=config["fs_lat"],
+            lon=config["fs_lon"],
+            planes_json=config["fs_planes"],
+            apikey=config.get("fs_apikey"),
+            horizon_csv=config.get("fs_horizon"),
+            weather_entity=config.get("weather_entity"),
+            cloud_0_factor=config.get("cloud_0_factor", 250),
+            cloud_100_factor=config.get("cloud_100_factor", 20),
+            forecast_source=config.get("forecast_source", "forecast_solar"),
+            manual_step_minutes=config.get("manual_step_minutes", 15),
+            manual_diffuse_svf=config.get("manual_diffuse_sky_view_factor"),
+            manual_temp_coeff=config.get("manual_temp_coeff_pct_per_c", -0.38),
+            manual_inverter_ac_cap=config.get("manual_inverter_ac_kw_cap"),
+            manual_calibration_enabled=config.get("manual_calibration_enabled", False),
+        )
 
     @property
     def name(self):
@@ -72,7 +71,8 @@ class SolarForecastRawSensor(SensorEntity):
         return self._state
 
     async def async_update(self):
-        raw, _ = await self._forecast_provider.async_fetch_watts()
+        forecast_provider = self._get_forecast_provider()
+        raw, _ = await forecast_provider.async_fetch_watts()
         
         # Calculate today's total energy in kWh using trapezoidal integration
         now = dt_util.now()
@@ -103,9 +103,9 @@ class SolarForecastCompensatedSensor(SensorEntity):
     _attr_state_class = "measurement"
     _attr_icon = "mdi:solar-power"
 
-    def __init__(self, hass: HomeAssistant, forecast_provider: ForecastSolarProvider):
+    def __init__(self, hass: HomeAssistant, entry):
         self.hass = hass
-        self._forecast_provider = forecast_provider
+        self._entry = entry
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "energy_dispatcher")},
             name="Energy Dispatcher",
@@ -113,6 +113,27 @@ class SolarForecastCompensatedSensor(SensorEntity):
         )
         self._state = None
         self._attr_extra_state_attributes = {}
+    
+    def _get_forecast_provider(self) -> ForecastSolarProvider:
+        """Create forecast provider with current config."""
+        config = {**self._entry.data, **(self._entry.options or {})}
+        return ForecastSolarProvider(
+            hass=self.hass,
+            lat=config["fs_lat"],
+            lon=config["fs_lon"],
+            planes_json=config["fs_planes"],
+            apikey=config.get("fs_apikey"),
+            horizon_csv=config.get("fs_horizon"),
+            weather_entity=config.get("weather_entity"),
+            cloud_0_factor=config.get("cloud_0_factor", 250),
+            cloud_100_factor=config.get("cloud_100_factor", 20),
+            forecast_source=config.get("forecast_source", "forecast_solar"),
+            manual_step_minutes=config.get("manual_step_minutes", 15),
+            manual_diffuse_svf=config.get("manual_diffuse_sky_view_factor"),
+            manual_temp_coeff=config.get("manual_temp_coeff_pct_per_c", -0.38),
+            manual_inverter_ac_cap=config.get("manual_inverter_ac_kw_cap"),
+            manual_calibration_enabled=config.get("manual_calibration_enabled", False),
+        )
 
     @property
     def name(self):
@@ -127,7 +148,8 @@ class SolarForecastCompensatedSensor(SensorEntity):
         return self._state
 
     async def async_update(self):
-        _, compensated = await self._forecast_provider.async_fetch_watts()
+        forecast_provider = self._get_forecast_provider()
+        _, compensated = await forecast_provider.async_fetch_watts()
         
         # Calculate today's total energy in kWh using trapezoidal integration
         now = dt_util.now()
@@ -148,7 +170,7 @@ class SolarForecastCompensatedSensor(SensorEntity):
         
         # Get cloudiness from weather entity for debugging
         cloudiness = None
-        weather_entity = self._forecast_provider.weather_entity
+        weather_entity = forecast_provider.weather_entity
         if weather_entity:
             state = self.hass.states.get(weather_entity)
             if state:
@@ -175,9 +197,9 @@ class WeatherCapabilitySensor(SensorEntity):
     _attr_unique_id = "solar_forecast_weather_capabilities"
     _attr_icon = "mdi:weather-partly-cloudy"
     
-    def __init__(self, hass: HomeAssistant, forecast_provider: ForecastSolarProvider):
+    def __init__(self, hass: HomeAssistant, entry):
         self.hass = hass
-        self._forecast_provider = forecast_provider
+        self._entry = entry
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "energy_dispatcher")},
             name="Energy Dispatcher",
@@ -185,6 +207,33 @@ class WeatherCapabilitySensor(SensorEntity):
         )
         self._state = None
         self._attr_extra_state_attributes = {}
+    
+    def _get_forecast_provider(self) -> ForecastSolarProvider:
+        """Create forecast provider with current config."""
+        config = {**self._entry.data, **(self._entry.options or {})}
+        return ForecastSolarProvider(
+            hass=self.hass,
+            lat=config["fs_lat"],
+            lon=config["fs_lon"],
+            planes_json=config["fs_planes"],
+            apikey=config.get("fs_apikey"),
+            horizon_csv=config.get("fs_horizon"),
+            weather_entity=config.get("weather_entity"),
+            cloud_0_factor=config.get("cloud_0_factor", 250),
+            cloud_100_factor=config.get("cloud_100_factor", 20),
+            forecast_source=config.get("forecast_source", "forecast_solar"),
+            manual_step_minutes=config.get("manual_step_minutes", 15),
+            manual_diffuse_svf=config.get("manual_diffuse_sky_view_factor"),
+            manual_temp_coeff=config.get("manual_temp_coeff_pct_per_c", -0.38),
+            manual_inverter_ac_cap=config.get("manual_inverter_ac_kw_cap"),
+            manual_calibration_enabled=config.get("manual_calibration_enabled", False),
+        )
+    
+    @property
+    def available(self) -> bool:
+        """Return True only if manual physics is enabled."""
+        config = {**self._entry.data, **(self._entry.options or {})}
+        return config.get("forecast_source") == "manual_physics"
     
     @property
     def name(self):
@@ -200,8 +249,9 @@ class WeatherCapabilitySensor(SensorEntity):
     
     async def async_update(self):
         """Update weather capabilities."""
-        if self._forecast_provider.manual_engine:
-            caps = self._forecast_provider.manual_engine.weather_caps
+        forecast_provider = self._get_forecast_provider()
+        if forecast_provider.manual_engine:
+            caps = forecast_provider.manual_engine.weather_caps
             self._state = caps.get_description()
             
             # Detailed attributes
@@ -216,7 +266,7 @@ class WeatherCapabilitySensor(SensorEntity):
                 "has_wind_speed": caps.has_wind_speed,
                 "has_relative_humidity": caps.has_relative_humidity,
                 "has_pressure": caps.has_pressure,
-                "weather_entity": self._forecast_provider.weather_entity,
+                "weather_entity": forecast_provider.weather_entity,
             }
         else:
             self._state = "Manual forecast not enabled"
