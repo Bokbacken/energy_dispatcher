@@ -150,6 +150,7 @@ class BatteryCostSensor(BaseEDSensor):
     _attr_name = "Battery Energy Cost"
     _attr_native_unit_of_measurement = "SEK/kWh"
     _attr_icon = "mdi:battery-heart-variant"
+    _attr_state_class = "measurement"
 
     @property
     def unique_id(self) -> str:
