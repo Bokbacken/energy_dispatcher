@@ -63,10 +63,18 @@ from .const import (
     CONF_GRID_IMPORT_TODAY_ENTITY,
 )
 
-# New additions for weather/cloud compensation
+# Forecast source and weather/cloud compensation
+CONF_FORECAST_SOURCE = "forecast_source"
 CONF_WEATHER_ENTITY = "weather_entity"
 CONF_CLOUD_0 = "cloud_0_factor"
 CONF_CLOUD_100 = "cloud_100_factor"
+
+# Manual forecast settings
+CONF_MANUAL_STEP_MINUTES = "manual_step_minutes"
+CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR = "manual_diffuse_sky_view_factor"
+CONF_MANUAL_TEMP_COEFF = "manual_temp_coeff_pct_per_c"
+CONF_MANUAL_INVERTER_AC_CAP = "manual_inverter_ac_kw_cap"
+CONF_MANUAL_CALIBRATION_ENABLED = "manual_calibration_enabled"
 
 def _available_weather_entities(hass):
     entities = []
@@ -129,9 +137,15 @@ DEFAULTS = {
     CONF_LOAD_POWER_ENTITY: "",
     CONF_BATT_POWER_ENTITY: "",
     CONF_GRID_IMPORT_TODAY_ENTITY: "",
+    CONF_FORECAST_SOURCE: "forecast_solar",
     CONF_WEATHER_ENTITY: "",
     CONF_CLOUD_0: 250,
     CONF_CLOUD_100: 20,
+    CONF_MANUAL_STEP_MINUTES: 15,
+    CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR: 0.95,
+    CONF_MANUAL_TEMP_COEFF: -0.38,
+    CONF_MANUAL_INVERTER_AC_CAP: None,
+    CONF_MANUAL_CALIBRATION_ENABLED: False,
 }
 
 def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
@@ -175,6 +189,7 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
             vol.Optional(CONF_EVSE_TOTAL_ENERGY_SENSOR, default=d.get(CONF_EVSE_TOTAL_ENERGY_SENSOR, "")): str,
 
             vol.Optional(CONF_FS_USE, default=d.get(CONF_FS_USE, True)): bool,
+            vol.Optional(CONF_FORECAST_SOURCE, default=d.get(CONF_FORECAST_SOURCE, "forecast_solar")): vol.In(["forecast_solar", "manual_physics"]),
             vol.Optional(CONF_FS_APIKEY, default=d.get(CONF_FS_APIKEY, "")): str,
             vol.Optional(CONF_FS_LAT, default=d.get(CONF_FS_LAT, 56.6967208731)): vol.Coerce(float),
             vol.Optional(CONF_FS_LON, default=d.get(CONF_FS_LON, 13.0196173488)): vol.Coerce(float),
@@ -184,6 +199,12 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
             vol.Optional(CONF_WEATHER_ENTITY, default=d.get(CONF_WEATHER_ENTITY, "")): weather_select,
             vol.Optional(CONF_CLOUD_0, default=d.get(CONF_CLOUD_0, 250)): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
             vol.Optional(CONF_CLOUD_100, default=d.get(CONF_CLOUD_100, 20)): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
+            
+            vol.Optional(CONF_MANUAL_STEP_MINUTES, default=d.get(CONF_MANUAL_STEP_MINUTES, 15)): vol.In([15, 30, 60]),
+            vol.Optional(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, default=d.get(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, 0.95)): vol.All(vol.Coerce(float), vol.Range(min=0.7, max=1.0)),
+            vol.Optional(CONF_MANUAL_TEMP_COEFF, default=d.get(CONF_MANUAL_TEMP_COEFF, -0.38)): vol.Coerce(float),
+            vol.Optional(CONF_MANUAL_INVERTER_AC_CAP, default=d.get(CONF_MANUAL_INVERTER_AC_CAP, None)): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_MANUAL_CALIBRATION_ENABLED, default=d.get(CONF_MANUAL_CALIBRATION_ENABLED, False)): bool,
 
             vol.Optional(CONF_PV_POWER_ENTITY, default=d.get(CONF_PV_POWER_ENTITY, "")): str,
             vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d.get(CONF_PV_ENERGY_TODAY_ENTITY, "")): str,

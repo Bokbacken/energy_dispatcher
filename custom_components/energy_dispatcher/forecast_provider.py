@@ -19,6 +19,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
 from .models import ForecastPoint
+from .manual_forecast_engine import ManualForecastEngine, detect_weather_capabilities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,6 +65,12 @@ class ForecastSolarProvider:
         weather_entity: Optional[str] = None,
         cloud_0_factor: int = 250,
         cloud_100_factor: int = 20,
+        forecast_source: str = "forecast_solar",
+        manual_step_minutes: int = 15,
+        manual_diffuse_svf: Optional[float] = None,
+        manual_temp_coeff: float = -0.38,
+        manual_inverter_ac_cap: Optional[float] = None,
+        manual_calibration_enabled: bool = False,
     ):
         self.hass = hass
         self.lat = lat
@@ -73,6 +80,8 @@ class ForecastSolarProvider:
         self.weather_entity = weather_entity or ""
         self.cloud_0_factor = cloud_0_factor
         self.cloud_100_factor = cloud_100_factor
+        self.forecast_source = forecast_source
+        
         try:
             self.planes = json.loads(planes_json)
             if not isinstance(self.planes, list):
@@ -80,6 +89,23 @@ class ForecastSolarProvider:
         except Exception as e:  # noqa: BLE001
             _LOGGER.exception("Kunde inte parsa fs_planes: %s", e)
             self.planes = [{"dec": 37, "az": 0, "kwp": 5.67}]
+        
+        # Initialize manual forecast engine if selected
+        self.manual_engine = None
+        if forecast_source == "manual_physics":
+            self.manual_engine = ManualForecastEngine(
+                hass=hass,
+                lat=lat,
+                lon=lon,
+                planes_json=planes_json,
+                horizon_csv=horizon_csv,
+                weather_entity=weather_entity,
+                step_minutes=manual_step_minutes,
+                diffuse_svf=manual_diffuse_svf,
+                temp_coeff_pct_per_c=manual_temp_coeff,
+                inverter_ac_kw_cap=manual_inverter_ac_cap,
+                calibration_enabled=manual_calibration_enabled,
+            )
 
     def _build_url(self) -> str:
         parts = []
@@ -102,7 +128,17 @@ class ForecastSolarProvider:
         Tidsstämplar sätts till lokal timezone (HA:s DEFAULT_TIME_ZONE).
         
         Implementerar caching med 30 minuters livstid för att undvika för många API-anrop.
+        
+        If forecast_source is "manual_physics", uses manual forecast engine instead.
         """
+        # Use manual forecast engine if selected
+        if self.forecast_source == "manual_physics" and self.manual_engine:
+            raw = await self.manual_engine.async_compute_forecast()
+            # For manual engine, raw and compensated are the same
+            # (physics already accounts for conditions)
+            return raw, raw
+        
+        # Otherwise use Forecast.Solar
         url = self._build_url()
         now = dt_util.now()
         

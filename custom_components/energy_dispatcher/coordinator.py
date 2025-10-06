@@ -469,9 +469,25 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         lon = float(self._get_cfg(CONF_FS_LON, 0.0))
         planes = self._get_cfg(CONF_FS_PLANES, "[]")
         horizon = self._get_cfg(CONF_FS_HORIZON, "")
-
+        
+        # Get forecast source and manual settings (new in this PR)
+        forecast_source = self._get_cfg("forecast_source", "forecast_solar")
+        weather_entity = self._get_cfg("weather_entity", "")
+        
         provider = ForecastSolarProvider(
-            self.hass, lat=lat, lon=lon, planes_json=planes, apikey=apikey, horizon_csv=horizon
+            self.hass,
+            lat=lat,
+            lon=lon,
+            planes_json=planes,
+            apikey=apikey,
+            horizon_csv=horizon,
+            weather_entity=weather_entity,
+            forecast_source=forecast_source,
+            manual_step_minutes=self._get_cfg("manual_step_minutes", 15),
+            manual_diffuse_svf=self._get_cfg("manual_diffuse_sky_view_factor"),
+            manual_temp_coeff=self._get_cfg("manual_temp_coeff_pct_per_c", -0.38),
+            manual_inverter_ac_cap=self._get_cfg("manual_inverter_ac_kw_cap"),
+            manual_calibration_enabled=self._get_cfg("manual_calibration_enabled", False),
         )
         pts, _ = await provider.async_fetch_watts()
         self.data["solar_points"] = pts
