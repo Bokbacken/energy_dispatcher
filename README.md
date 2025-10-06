@@ -47,10 +47,27 @@ See [`docs/solar_forecast_improvement.md`](./docs/solar_forecast_improvement.md)
 2. Restart Home Assistant.
 3. Configure via the UI (Integrations > Add Energy Dispatcher).
 
+## Quick Start
+
+After installation:
+
+1. **Configure the Integration**: Settings → Devices & Services → Add Integration → Energy Dispatcher
+2. **Create Your Dashboard**: Follow the [Dashboard Setup Guide](./docs/dashboard_guide.md) for a step-by-step walkthrough
+3. **Set Your Preferences**: Adjust EV target SOC and battery floor using the number entities
+4. **Monitor & Control**: Use the dashboard to monitor optimization and override when needed
+
+The [Dashboard Guide](./docs/dashboard_guide.md) explains:
+- ✅ Where to enter different types of code (helpers, dashboards, automations, etc.)
+- ✅ How to create a main control dashboard
+- ✅ How to add EV and battery charge overrides
+- ✅ How to visualize price forecasts and solar production
+- ✅ Which cards to use and why
+
 ## Configuration
 
 - Fill in all required fields in the config flow.
 - For cloud compensation, select your weather entity and adjust the output factors as needed.
+- See [Configuration Guide](./docs/configuration.md) for detailed information on each setting.
 
 ## Sensors
 
@@ -59,12 +76,20 @@ See [`docs/solar_forecast_improvement.md`](./docs/solar_forecast_improvement.md)
 
 ## Documentation
 
-- [Manual PV Forecast (Physics-Based)](./docs/manual_forecast.md) ⭐ NEW
-- [Multi-Vehicle and Multi-Charger Setup](./docs/multi_vehicle_setup.md)
-- [Configuration Guide](./docs/configuration.md)
-- [Battery Cost Tracking](./docs/battery_cost_tracking.md)
-- [Solar Forecast Improvement (Cloud Compensation)](./docs/solar_forecast_improvement.md)
-- [Changelog](./CHANGELOG.md)
+### Getting Started
+- [Dashboard Setup Guide](./docs/dashboard_guide.md) ⭐ **START HERE** - Step-by-step dashboard creation
+- [Configuration Guide](./docs/configuration.md) - Complete configuration reference
+
+### Features & Setup
+- [Multi-Vehicle and Multi-Charger Setup](./docs/multi_vehicle_setup.md) - Managing multiple EVs
+- [Battery Cost Tracking](./docs/battery_cost_tracking.md) - Understanding battery economics
+- [Manual PV Forecast (Physics-Based)](./docs/manual_forecast.md) - Free solar forecasting
+- [Solar Forecast Improvement (Cloud Compensation)](./docs/solar_forecast_improvement.md) - Cloud-based adjustments
+
+### Reference & Planning
+- [Quick Reference](./docs/QUICK_REFERENCE.md) - Command cheat sheet
+- [Future Improvements](./docs/future_improvements.md) - Planned usability enhancements
+- [Changelog](./CHANGELOG.md) - Version history
 
 ## Quick Start Examples
 
