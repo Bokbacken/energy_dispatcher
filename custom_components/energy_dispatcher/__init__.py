@@ -185,6 +185,19 @@ async def _async_register_services(hass: HomeAssistant):
                 data["wace_tot_cost_sek"] = bec.get_total_cost()
                 _LOGGER.info("Battery SOC set to %.1f%% for entry %s", soc_percent, entry_id)
 
+    async def handle_create_dashboard_notification(call):
+        """Handle manual dashboard notification creation."""
+        # Get the first config entry for this integration
+        entries = hass.config_entries.async_entries(DOMAIN)
+        if not entries:
+            _LOGGER.error("No Energy Dispatcher integration configured")
+            return
+        
+        # Use the first entry to create the notification
+        entry = entries[0]
+        _LOGGER.info("Manually creating dashboard notification for entry %s", entry.entry_id)
+        await create_default_dashboard(hass, entry)
+
     hass.services.async_register(
         DOMAIN,
         "battery_cost_reset",
@@ -195,6 +208,12 @@ async def _async_register_services(hass: HomeAssistant):
         DOMAIN,
         "battery_cost_set_soc",
         handle_battery_cost_set_soc
+    )
+    
+    hass.services.async_register(
+        DOMAIN,
+        "create_dashboard_notification",
+        handle_create_dashboard_notification
     )
 
 

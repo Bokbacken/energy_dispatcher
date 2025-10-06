@@ -68,6 +68,8 @@ When you first install Energy Dispatcher, you'll receive a helpful notification 
 
 To disable this feature, set `auto_create_dashboard: false` in the integration configuration.
 
+**Missed the notification?** Call the service `energy_dispatcher.create_dashboard_notification` to recreate it anytime.
+
 ### What You'll Learn
 
 The [Getting Started Guide](./docs/getting_started.md) covers:

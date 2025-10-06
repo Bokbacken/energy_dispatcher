@@ -122,6 +122,17 @@ data:
 
 **Note:** This preserves the WACE - only the energy content is adjusted.
 
+### create_dashboard_notification
+Manually create or recreate the dashboard setup notification with instructions and links.
+
+**Use case:** You dismissed the original notification or want to see the dashboard setup instructions again.
+
+```yaml
+service: energy_dispatcher.create_dashboard_notification
+```
+
+**Note:** This is helpful if you deleted and re-added the integration, or simply want to reference the setup guide again.
+
 ## Entities
 
 ### Sensor: Battery Energy Cost

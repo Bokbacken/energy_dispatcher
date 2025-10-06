@@ -104,3 +104,7 @@ battery_cost_set_soc:
           max: 100
           unit_of_measurement: "%"
           mode: box
+
+create_dashboard_notification:
+  name: Create dashboard setup notification
+  description: Manually create or recreate the dashboard setup notification with instructions and links
