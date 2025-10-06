@@ -30,8 +30,10 @@ The Manual PV Forecast Engine provides a free, physics-based alternative to Fore
 
 ### Basic Setup
 
-1. **Enable Solar Forecasting** (`fs_use`): `True`
-2. **Forecast Source** (`forecast_source`): Select `manual_physics`
+1. **Enable Solar Forecasting** (`fs_use`): Check this box (set to `True`)
+   - This enables all solar forecasting, regardless of source (Forecast.Solar or Manual Physics)
+2. **Forecast Source** (`forecast_source`): Select `manual_physics` from the dropdown
+   - Choose "manual_physics" instead of "forecast_solar"
 3. **Weather Entity** (`weather_entity`): Select your weather integration
 4. **Location** (`fs_lat`, `fs_lon`): Your installation coordinates
 5. **Solar Arrays** (`fs_planes`): JSON array of your panels (same format as Forecast.Solar)
@@ -240,8 +242,16 @@ The calibration feature will allow the system to learn correction factors by com
 
 ## Troubleshooting
 
-### Forecast is Always Zero
-- Check weather entity has valid state
+### No Forecast Data / Forecast is Always Zero
+
+**Most Common Issue**: "Enable Solar Forecasting" checkbox is not checked
+- The `fs_use` configuration must be enabled (checked) for ANY solar forecasting to work
+- This applies to both Forecast.Solar AND Manual Physics forecasting
+- **Solution**: Check the "Enable Solar Forecasting" checkbox in the configuration
+
+**Other potential causes**:
+- Verify "Forecast Source" dropdown is set to `manual_physics` (not `forecast_solar`)
+- Check weather entity has valid state and is selected
 - Verify latitude/longitude are correct
 - Ensure planes JSON is valid
 - Check horizon CSV has 12 values
