@@ -2,6 +2,9 @@ from homeassistant.const import Platform
 
 DOMAIN = "energy_dispatcher"
 
+# Dashboard configuration
+CONF_AUTO_CREATE_DASHBOARD = "auto_create_dashboard"
+
 # Viktigt: PLATFORMS inkluderar NUMBER och SELECT i 0.5.4
 PLATFORMS = [
     Platform.SENSOR,

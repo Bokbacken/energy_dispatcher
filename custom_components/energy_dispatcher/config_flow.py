@@ -62,6 +62,7 @@ from .const import (
     CONF_LOAD_POWER_ENTITY,
     CONF_BATT_POWER_ENTITY,
     CONF_GRID_IMPORT_TODAY_ENTITY,
+    CONF_AUTO_CREATE_DASHBOARD,
 )
 
 # Forecast source and weather/cloud compensation
@@ -148,6 +149,7 @@ DEFAULTS = {
     CONF_MANUAL_TEMP_COEFF: -0.38,
     CONF_MANUAL_INVERTER_AC_CAP: None,
     CONF_MANUAL_CALIBRATION_ENABLED: False,
+    CONF_AUTO_CREATE_DASHBOARD: True,
 }
 
 def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
@@ -225,6 +227,8 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
             vol.Optional(CONF_RUNTIME_EXCLUDE_BATT_GRID, default=d.get(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)): bool,
             vol.Optional(CONF_RUNTIME_SOC_FLOOR, default=d.get(CONF_RUNTIME_SOC_FLOOR, 10)): vol.Coerce(float),
             vol.Optional(CONF_RUNTIME_SOC_CEILING, default=d.get(CONF_RUNTIME_SOC_CEILING, 95)): vol.Coerce(float),
+            
+            vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): bool,
         }
     )
 
