@@ -15,7 +15,8 @@ from .const import DOMAIN
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     st = hass.data[DOMAIN][entry.entry_id]
     coordinator = st["coordinator"]
-    config = entry.data
+    # Merge data and options to get the current configuration
+    config = {**entry.data, **(entry.options or {})}
 
     entities = [
         EnrichedPriceSensor(coordinator, entry.entry_id),
