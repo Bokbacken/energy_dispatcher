@@ -156,11 +156,8 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
     d = defaults or DEFAULTS
     weather_entities = _available_weather_entities(hass) if hass else []
     weather_select = vol.In(weather_entities) if weather_entities else str
-    
-    # Get the current forecast source to conditionally show fields
-    forecast_source = d.get(CONF_FORECAST_SOURCE, "forecast_solar")
 
-    # Build schema with common fields
+    # Build schema with all fields visible regardless of forecast source selection
     schema_dict = {
         vol.Required(CONF_NORDPOOL_ENTITY, default=d.get(CONF_NORDPOOL_ENTITY, "")): str,
         vol.Optional(CONF_PRICE_TAX, default=d.get(CONF_PRICE_TAX, 0.0)): vol.Coerce(float),
@@ -195,33 +192,27 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         vol.Optional(CONF_EVSE_ENERGY_SENSOR, default=d.get(CONF_EVSE_ENERGY_SENSOR, "")): str,
         vol.Optional(CONF_EVSE_TOTAL_ENERGY_SENSOR, default=d.get(CONF_EVSE_TOTAL_ENERGY_SENSOR, "")): str,
 
-        # Common solar forecasting fields
+        # Solar forecasting fields - all visible regardless of source selection
         vol.Optional(CONF_FS_USE, default=d.get(CONF_FS_USE, True)): bool,
         vol.Optional(CONF_FORECAST_SOURCE, default=d.get(CONF_FORECAST_SOURCE, "forecast_solar")): vol.In(["forecast_solar", "manual_physics"]),
         vol.Optional(CONF_FS_LAT, default=d.get(CONF_FS_LAT, 56.6967208731)): vol.Coerce(float),
         vol.Optional(CONF_FS_LON, default=d.get(CONF_FS_LON, 13.0196173488)): vol.Coerce(float),
         vol.Optional(CONF_FS_PLANES, default=d.get(CONF_FS_PLANES, '[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]')): str,
         vol.Optional(CONF_FS_HORIZON, default=d.get(CONF_FS_HORIZON, "18,16,11,7,5,4,3,2,2,4,7,10")): str,
-    }
-    
-    # Add forecast.solar specific fields
-    if forecast_source == "forecast_solar":
-        schema_dict[vol.Optional(CONF_FS_APIKEY, default=d.get(CONF_FS_APIKEY, ""))] = str
-        schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default=d.get(CONF_WEATHER_ENTITY, ""))] = weather_select
-        schema_dict[vol.Optional(CONF_CLOUD_0, default=d.get(CONF_CLOUD_0, 250))] = vol.All(vol.Coerce(int), vol.Range(min=0, max=500))
-        schema_dict[vol.Optional(CONF_CLOUD_100, default=d.get(CONF_CLOUD_100, 20))] = vol.All(vol.Coerce(int), vol.Range(min=0, max=500))
-    
-    # Add manual_physics specific fields
-    if forecast_source == "manual_physics":
-        schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default=d.get(CONF_WEATHER_ENTITY, ""))] = weather_select
-        schema_dict[vol.Optional(CONF_MANUAL_STEP_MINUTES, default=d.get(CONF_MANUAL_STEP_MINUTES, 15))] = vol.In([15, 30, 60])
-        schema_dict[vol.Optional(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, default=d.get(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, 0.95))] = vol.All(vol.Coerce(float), vol.Range(min=0.7, max=1.0))
-        schema_dict[vol.Optional(CONF_MANUAL_TEMP_COEFF, default=d.get(CONF_MANUAL_TEMP_COEFF, -0.38))] = vol.Coerce(float)
-        schema_dict[vol.Optional(CONF_MANUAL_INVERTER_AC_CAP, default=d.get(CONF_MANUAL_INVERTER_AC_CAP, None))] = vol.Any(None, vol.Coerce(float))
-        schema_dict[vol.Optional(CONF_MANUAL_CALIBRATION_ENABLED, default=d.get(CONF_MANUAL_CALIBRATION_ENABLED, False))] = bool
-    
-    # Add remaining fields
-    schema_dict.update({
+        
+        # Forecast.solar specific fields (always visible)
+        vol.Optional(CONF_FS_APIKEY, default=d.get(CONF_FS_APIKEY, "")): str,
+        vol.Optional(CONF_WEATHER_ENTITY, default=d.get(CONF_WEATHER_ENTITY, "")): weather_select,
+        vol.Optional(CONF_CLOUD_0, default=d.get(CONF_CLOUD_0, 250)): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
+        vol.Optional(CONF_CLOUD_100, default=d.get(CONF_CLOUD_100, 20)): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
+        
+        # Manual physics specific fields (always visible)
+        vol.Optional(CONF_MANUAL_STEP_MINUTES, default=d.get(CONF_MANUAL_STEP_MINUTES, 15)): vol.In([15, 30, 60]),
+        vol.Optional(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, default=d.get(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, 0.95)): vol.All(vol.Coerce(float), vol.Range(min=0.7, max=1.0)),
+        vol.Optional(CONF_MANUAL_TEMP_COEFF, default=d.get(CONF_MANUAL_TEMP_COEFF, -0.38)): vol.Coerce(float),
+        vol.Optional(CONF_MANUAL_INVERTER_AC_CAP, default=d.get(CONF_MANUAL_INVERTER_AC_CAP, None)): vol.Any(None, vol.Coerce(float)),
+        vol.Optional(CONF_MANUAL_CALIBRATION_ENABLED, default=d.get(CONF_MANUAL_CALIBRATION_ENABLED, False)): bool,
+
         vol.Optional(CONF_PV_POWER_ENTITY, default=d.get(CONF_PV_POWER_ENTITY, "")): str,
         vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d.get(CONF_PV_ENERGY_TODAY_ENTITY, "")): str,
 
@@ -241,7 +232,7 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         vol.Optional(CONF_RUNTIME_SOC_CEILING, default=d.get(CONF_RUNTIME_SOC_CEILING, 95)): vol.Coerce(float),
         
         vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): bool,
-    })
+    }
 
     return vol.Schema(schema_dict)
 
@@ -281,8 +272,6 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return EnergyDispatcherOptionsFlowHandler(config_entry)
 
 class EnergyDispatcherOptionsFlowHandler(config_entries.OptionsFlow):
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         errors = {}

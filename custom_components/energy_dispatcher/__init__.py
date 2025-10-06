@@ -47,8 +47,9 @@ async def create_default_dashboard(hass: HomeAssistant, entry: ConfigEntry):
         
         # Check if dashboard already exists
         try:
-            if hasattr(hass.data.get("lovelace", {}), "get"):
-                existing = hass.data.get("lovelace", {}).get("dashboards", {})
+            lovelace_data = hass.data.get("lovelace")
+            if lovelace_data is not None and hasattr(lovelace_data, "dashboards"):
+                existing = lovelace_data.dashboards
                 if dashboard_url in existing:
                     _LOGGER.info("Energy Dispatcher dashboard already exists, skipping creation")
                     return
