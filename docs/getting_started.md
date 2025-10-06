@@ -41,6 +41,8 @@ Welcome! This guide will help you get Energy Dispatcher up and running in the sh
 3. Search for **"Energy Dispatcher"**
 4. Fill in the required information:
 
+> 🆕 **New in v0.8.7+**: After configuration, you'll receive a helpful welcome notification with dashboard setup guidance!
+
 #### Essential Configuration
 
 **Prices** (Required):

@@ -54,9 +54,19 @@ See [`docs/solar_forecast_improvement.md`](./docs/solar_forecast_improvement.md)
 After installation:
 
 1. **Configure the Integration**: Settings → Devices & Services → Add Integration → Energy Dispatcher
-2. **Create Your Dashboard**: Follow the [Dashboard Setup Guide](./docs/dashboard_guide.md) for a step-by-step walkthrough
-3. **Set Your Preferences**: Adjust EV target SOC and battery floor using the number entities
-4. **Monitor & Control**: Use the dashboard to monitor optimization and override when needed
+2. **Get Dashboard Guidance**: 🆕 A welcome notification will guide you through dashboard setup
+3. **Create Your Dashboard**: Follow the [Dashboard Setup Guide](./docs/dashboard_guide.md) for a step-by-step walkthrough
+4. **Set Your Preferences**: Adjust EV target SOC and battery floor using the number entities
+5. **Monitor & Control**: Use the dashboard to monitor optimization and override when needed
+
+### 🆕 Automatic Dashboard Setup Assistance (v0.8.7+)
+
+When you first install Energy Dispatcher, you'll receive a helpful notification with:
+- Welcome message and quick start tips
+- Direct link to the comprehensive Dashboard Setup Guide
+- Information about available entities for your dashboard
+
+To disable this feature, set `auto_create_dashboard: false` in the integration configuration.
 
 ### What You'll Learn
 
