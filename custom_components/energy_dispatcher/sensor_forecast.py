@@ -9,7 +9,8 @@ from .const import DOMAIN
 from .forecast_provider import ForecastSolarProvider
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    config = entry.data
+    # Merge data and options to get the current configuration
+    config = {**entry.data, **(entry.options or {})}
     forecast_provider = ForecastSolarProvider(
         hass=hass,
         lat=config["fs_lat"],
