@@ -92,6 +92,7 @@ CONF_RUNTIME_SOC_CEILING = "runtime_soc_ceiling"
 # Kontextsensors för exkludering
 CONF_LOAD_POWER_ENTITY = "load_power_entity"  # W
 CONF_BATT_POWER_ENTITY = "batt_power_entity"  # W (+ ladd, - urladd)
+CONF_BATT_POWER_INVERT_SIGN = "batt_power_invert_sign"  # Invert sign convention (for Huawei-style sensors)
 CONF_GRID_IMPORT_TODAY_ENTITY = "grid_import_today_entity"  # kWh (frivillig)
 
 # Internt store

@@ -391,48 +391,50 @@ class BatteryChargingStateSensor(BaseEDSensor):
     def unique_id(self) -> str:
         return f"{DOMAIN}_batt_charging_state_{self._entry_id}"
 
-    @property
-    def native_value(self):
-        """Return battery charging state: charging, discharging, or idle."""
-        # Import here to avoid circular dependency
-        from .const import CONF_BATT_POWER_ENTITY
+    def _get_normalized_battery_power(self):
+        """Get battery power normalized to standard convention (positive=charging)."""
+        from .const import CONF_BATT_POWER_ENTITY, CONF_BATT_POWER_INVERT_SIGN
         
         batt_power_entity = self.coordinator._get_cfg(CONF_BATT_POWER_ENTITY, "")
         if not batt_power_entity:
-            return "unknown"
+            return None
         
         state = self.coordinator.hass.states.get(batt_power_entity)
         if not state or state.state in (None, "", "unknown", "unavailable"):
-            return "unknown"
+            return None
         
         try:
             power = float(state.state)
-            # Standard convention: positive = charging, negative = discharging
-            if power > 50:  # Charging threshold: 50W
-                return "charging"
-            elif power < -50:  # Discharging threshold: 50W
-                return "discharging"
-            else:
-                return "idle"
+            # Apply sign inversion if configured (for Huawei-style sensors)
+            invert_sign = self.coordinator._get_cfg(CONF_BATT_POWER_INVERT_SIGN, False)
+            if invert_sign:
+                power = -power
+            return power
         except (ValueError, TypeError):
+            return None
+    
+    @property
+    def native_value(self):
+        """Return battery charging state: charging, discharging, or idle."""
+        power = self._get_normalized_battery_power()
+        if power is None:
             return "unknown"
+        
+        # Standard convention: positive = charging, negative = discharging
+        if power > 50:  # Charging threshold: 50W
+            return "charging"
+        elif power < -50:  # Discharging threshold: 50W
+            return "discharging"
+        else:
+            return "idle"
 
     @property
     def extra_state_attributes(self):
         """Return additional state attributes."""
-        from .const import CONF_BATT_POWER_ENTITY
-        
-        batt_power_entity = self.coordinator._get_cfg(CONF_BATT_POWER_ENTITY, "")
         attrs = {}
-        
-        if batt_power_entity:
-            state = self.coordinator.hass.states.get(batt_power_entity)
-            if state and state.state not in (None, "", "unknown", "unavailable"):
-                try:
-                    attrs["battery_power_w"] = float(state.state)
-                except (ValueError, TypeError):
-                    pass
-        
+        power = self._get_normalized_battery_power()
+        if power is not None:
+            attrs["battery_power_w"] = power
         return attrs
 
 
@@ -447,10 +449,9 @@ class BatteryPowerFlowSensor(BaseEDSensor):
     def unique_id(self) -> str:
         return f"{DOMAIN}_batt_power_flow_{self._entry_id}"
 
-    @property
-    def native_value(self):
-        """Return battery power flow (positive=charging, negative=discharging)."""
-        from .const import CONF_BATT_POWER_ENTITY
+    def _get_normalized_battery_power(self):
+        """Get battery power normalized to standard convention (positive=charging)."""
+        from .const import CONF_BATT_POWER_ENTITY, CONF_BATT_POWER_INVERT_SIGN
         
         batt_power_entity = self.coordinator._get_cfg(CONF_BATT_POWER_ENTITY, "")
         if not batt_power_entity:
@@ -462,10 +463,18 @@ class BatteryPowerFlowSensor(BaseEDSensor):
         
         try:
             power = float(state.state)
-            # Sensor already uses standard convention (positive=charging, negative=discharging)
+            # Apply sign inversion if configured (for Huawei-style sensors)
+            invert_sign = self.coordinator._get_cfg(CONF_BATT_POWER_INVERT_SIGN, False)
+            if invert_sign:
+                power = -power
             return power
         except (ValueError, TypeError):
             return None
+    
+    @property
+    def native_value(self):
+        """Return battery power flow (positive=charging, negative=discharging)."""
+        return self._get_normalized_battery_power()
 
     @property
     def extra_state_attributes(self):

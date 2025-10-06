@@ -210,3 +210,70 @@ class TestBatteryCapacitySensor:
         
         # This would be tested in integration test, but verifies the concept
         assert float(mock_state.state) == 30.0
+
+
+class TestBatteryPowerSignInversion:
+    """Test battery power sign inversion feature."""
+
+    @pytest.mark.asyncio
+    async def test_charge_with_inverted_sign(self, coordinator, mock_bec):
+        """Test tracking battery charging with inverted sign (Huawei convention)."""
+        # Enable sign inversion
+        coordinator.hass.data["energy_dispatcher"]["test_entry"]["config"]["batt_power_invert_sign"] = True
+        
+        # Setup initial state
+        coordinator._batt_last_reset_date = date.today()
+        coordinator._batt_prev_charged_today = 10.0
+        
+        # Mock current state showing 0.5 kWh more charged
+        mock_charged_state = MagicMock()
+        mock_charged_state.state = "10.5"
+        
+        # Mock battery power (negative = charging in Huawei convention)
+        # With inversion enabled, this should be correctly interpreted as charging
+        mock_batt_power = MagicMock()
+        mock_batt_power.state = "-4000"  # Negative in Huawei = charging
+        
+        def state_get(entity_id):
+            if "charged_today" in entity_id:
+                return mock_charged_state
+            elif "battery_power" in entity_id:
+                return mock_batt_power
+            return None
+        
+        coordinator.hass.states.get = MagicMock(side_effect=state_get)
+        
+        # Mock current price and PV
+        coordinator.data["current_enriched"] = 2.5
+        coordinator.data["pv_now_w"] = 5000.0  # 5kW PV output
+        
+        # Mock load power
+        with patch.object(coordinator, '_read_watts', return_value=1000.0):
+            # Run tracking
+            await coordinator._update_battery_charge_tracking()
+        
+        # Verify charge was recorded and value updated
+        assert coordinator._batt_prev_charged_today == 10.5
+    
+    def test_normalized_battery_power_standard(self, coordinator):
+        """Test that normalized battery power works with standard convention."""
+        # Standard convention (default): positive = charging
+        mock_state = MagicMock()
+        mock_state.state = "1000"  # Charging at 1000W
+        coordinator.hass.states.get = MagicMock(return_value=mock_state)
+        
+        power = coordinator._read_battery_power_normalized()
+        assert power == 1000.0  # No inversion
+    
+    def test_normalized_battery_power_inverted(self, coordinator):
+        """Test that normalized battery power works with inverted convention."""
+        # Enable sign inversion
+        coordinator.hass.data["energy_dispatcher"]["test_entry"]["config"]["batt_power_invert_sign"] = True
+        
+        # Huawei convention: negative = charging
+        mock_state = MagicMock()
+        mock_state.state = "-1000"  # Charging at 1000W (Huawei convention)
+        coordinator.hass.states.get = MagicMock(return_value=mock_state)
+        
+        power = coordinator._read_battery_power_normalized()
+        assert power == 1000.0  # Inverted to standard convention

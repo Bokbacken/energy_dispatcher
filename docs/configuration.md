@@ -450,9 +450,20 @@ These settings help calculate the "true" baseline by excluding non-constant load
 #### Battery Power Sensor
 - **Field**: `batt_power_entity`
 - **Type**: Entity selector (sensor domain)
-- **Description**: Battery power (positive=charging, negative=discharging)
+- **Description**: Battery power sensor
 - **Example**: `sensor.battery_power`
-- **Note**: Sign convention should be positive for charging
+- **Default convention**: Positive = charging, negative = discharging
+- **Note**: If your sensor shows negative values when battery is charging, enable the "Invert Battery Power Sign" option below
+
+#### Invert Battery Power Sign
+- **Field**: `batt_power_invert_sign`
+- **Type**: Boolean (checkbox)
+- **Default**: `False` (disabled)
+- **Description**: Enable this option if your battery power sensor uses Huawei/inverted convention (negative=charging, positive=discharging)
+- **How to check**: Look at your battery power sensor when the battery is actively charging:
+  - If it shows **negative values** (e.g., -1000 W) → Enable this option
+  - If it shows **positive values** (e.g., +1000 W) → Leave this disabled (default)
+- **Systems that may need this**: Some Huawei LUNA2000 inverters and older battery management systems
 
 #### Grid Import Today Sensor
 - **Field**: `grid_import_today_entity`

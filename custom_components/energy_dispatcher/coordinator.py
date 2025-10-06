@@ -53,6 +53,7 @@ from .const import (
     CONF_RUNTIME_SOC_CEILING,
     CONF_LOAD_POWER_ENTITY,
     CONF_BATT_POWER_ENTITY,
+    CONF_BATT_POWER_INVERT_SIGN,
     CONF_GRID_IMPORT_TODAY_ENTITY,
 )
 from .models import PricePoint
@@ -204,6 +205,19 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             return None
         unit = st.attributes.get("unit_of_measurement")
         return _as_watts(st.state, unit)
+    
+    def _read_battery_power_normalized(self) -> Optional[float]:
+        """Read battery power normalized to standard convention (positive=charging)."""
+        batt_power_w = self._read_float(self._get_cfg(CONF_BATT_POWER_ENTITY, ""))
+        if batt_power_w is None:
+            return None
+        
+        # Apply sign inversion if configured (for Huawei-style sensors)
+        invert_sign = self._get_cfg(CONF_BATT_POWER_INVERT_SIGN, False)
+        if invert_sign:
+            batt_power_w = -batt_power_w
+        
+        return batt_power_w
 
     # ---------- update loop ----------
     async def _async_update_data(self):
@@ -281,7 +295,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         if not bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)):
             return False
 
-        batt_pw = self._read_float(self._get_cfg(CONF_BATT_POWER_ENTITY, ""))  # legacy tecken-konvention
+        batt_pw = self._read_battery_power_normalized()
         load_pw = self._read_watts(self._get_cfg(CONF_LOAD_POWER_ENTITY, "")) or self._read_watts(self._get_cfg(CONF_RUNTIME_POWER_ENTITY, ""))  # W
         pv_pw = self._read_watts(self._get_cfg(CONF_PV_POWER_ENTITY, ""))
 
@@ -574,7 +588,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         # Get PV power to determine if charging from solar or grid
         pv_power_w = self.data.get("pv_now_w", 0.0) or 0.0
         load_power_w = self._read_watts(self._get_cfg(CONF_LOAD_POWER_ENTITY, "")) or 0.0
-        batt_power_w = self._read_float(self._get_cfg(CONF_BATT_POWER_ENTITY, ""))
+        batt_power_w = self._read_battery_power_normalized()
         
         # Track charging
         if charged_entity:
