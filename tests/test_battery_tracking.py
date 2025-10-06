@@ -69,8 +69,8 @@ class TestBatteryChargeTracking:
         # Run tracking
         await coordinator._update_battery_charge_tracking()
         
-        # Verify charge was recorded
-        assert mock_bec.on_charge.called or coordinator._batt_prev_charged_today == 10.5
+        # Verify charge was recorded and value updated
+        assert coordinator._batt_prev_charged_today == 10.5
 
     @pytest.mark.asyncio
     async def test_charge_from_solar(self, coordinator, mock_bec):
