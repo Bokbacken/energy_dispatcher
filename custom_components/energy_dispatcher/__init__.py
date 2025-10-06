@@ -18,6 +18,7 @@ from .const import (
     CONF_EVSE_PHASES,
     CONF_EVSE_VOLTAGE,
     CONF_BATT_CAP_KWH,
+    CONF_BATT_CAPACITY_ENTITY,
     M_EV_CURRENT_SOC,
     M_EV_TARGET_SOC,
     M_EV_BATT_KWH,
@@ -116,7 +117,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         manual_store[M_HOME_BATT_CAP_KWH] = float(config[CONF_BATT_CAP_KWH])
 
     # Initialize Battery Energy Cost tracker
+    # Try to get capacity from sensor first, fall back to manual config
     battery_capacity = config.get(CONF_BATT_CAP_KWH, 15.0)
+    capacity_entity = config.get(CONF_BATT_CAPACITY_ENTITY, "")
+    if capacity_entity:
+        state = hass.states.get(capacity_entity)
+        if state and state.state not in (None, "", "unknown", "unavailable"):
+            try:
+                sensor_capacity = float(state.state)
+                if sensor_capacity > 0:
+                    battery_capacity = sensor_capacity
+                    _LOGGER.info("Using battery capacity from sensor %s: %.2f kWh", capacity_entity, battery_capacity)
+            except (ValueError, TypeError):
+                _LOGGER.warning("Invalid capacity value from sensor %s, using manual capacity", capacity_entity)
+    
     bec = BatteryEnergyCost(hass, capacity_kwh=battery_capacity)
     await bec.async_load()
 
