@@ -266,9 +266,12 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not errors:
                 return self.async_create_entry(title="Energy Dispatcher", data=user_input)
 
+        # If there are errors or first time, use user_input if available to rebuild schema
+        # This ensures the form shows the correct fields based on user's current selections
+        defaults = user_input if user_input is not None else None
         return self.async_show_form(
             step_id="user",
-            data_schema=_schema_user(hass=hass),
+            data_schema=_schema_user(defaults=defaults, hass=hass),
             errors=errors,
         )
 
@@ -282,8 +285,25 @@ class EnergyDispatcherOptionsFlowHandler(config_entries.OptionsFlow):
         self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
+        errors = {}
+        
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-        current = {**self.config_entry.data, **(self.config_entry.options or {})}
-        schema = _schema_user(current, hass=self.hass)
-        return self.async_show_form(step_id="init", data_schema=schema)
+            # Validate input
+            try:
+                float(user_input.get(CONF_FS_LAT, 0))
+                float(user_input.get(CONF_FS_LON, 0))
+            except Exception:  # noqa: BLE001
+                errors["base"] = "invalid_latlon"
+            
+            if not errors:
+                return self.async_create_entry(title="", data=user_input)
+        
+        # Use user_input if validation failed, otherwise use current config
+        # This ensures the form shows the correct fields based on user's current selections
+        if user_input is not None:
+            defaults = user_input
+        else:
+            defaults = {**self.config_entry.data, **(self.config_entry.options or {})}
+        
+        schema = _schema_user(defaults, hass=self.hass)
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)

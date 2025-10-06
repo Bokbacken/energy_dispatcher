@@ -93,6 +93,7 @@ class ForecastSolarProvider:
         # Initialize manual forecast engine if selected
         self.manual_engine = None
         if forecast_source == "manual_physics":
+            _LOGGER.info("Initializing manual physics forecast engine (weather_entity=%s)", weather_entity)
             self.manual_engine = ManualForecastEngine(
                 hass=hass,
                 lat=lat,
@@ -106,6 +107,8 @@ class ForecastSolarProvider:
                 inverter_ac_kw_cap=manual_inverter_ac_cap,
                 calibration_enabled=manual_calibration_enabled,
             )
+        else:
+            _LOGGER.info("Using Forecast.Solar forecast engine (apikey=%s)", "***" if apikey else "none")
 
     def _build_url(self) -> str:
         parts = []
@@ -132,13 +135,21 @@ class ForecastSolarProvider:
         If forecast_source is "manual_physics", uses manual forecast engine instead.
         """
         # Use manual forecast engine if selected
-        if self.forecast_source == "manual_physics" and self.manual_engine:
-            raw = await self.manual_engine.async_compute_forecast()
-            # For manual engine, raw and compensated are the same
-            # (physics already accounts for conditions)
-            return raw, raw
+        if self.forecast_source == "manual_physics":
+            if self.manual_engine:
+                _LOGGER.debug("Using manual physics forecast engine")
+                raw = await self.manual_engine.async_compute_forecast()
+                # For manual engine, raw and compensated are the same
+                # (physics already accounts for conditions)
+                return raw, raw
+            else:
+                _LOGGER.warning(
+                    "Forecast source is 'manual_physics' but manual engine is not initialized. "
+                    "Falling back to Forecast.Solar. Check weather_entity configuration."
+                )
         
         # Otherwise use Forecast.Solar
+        _LOGGER.debug("Using Forecast.Solar forecast engine")
         url = self._build_url()
         now = dt_util.now()
         
