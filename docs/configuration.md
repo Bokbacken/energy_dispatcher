@@ -137,6 +137,35 @@ Configure your home battery system for optimal charge/discharge scheduling.
 - **Example**: `1` or your specific device ID
 - **Note**: Required when using Huawei adapter for force charge functionality
 
+#### Battery Capacity Sensor (Alternative)
+- **Field**: `batt_capacity_entity`
+- **Type**: Entity selector (sensor domain)
+- **Default**: Empty (uses manual capacity)
+- **Description**: Sensor reporting battery rated capacity (alternative to manual capacity)
+- **Example**: `sensor.rated_ess_capacity`
+- **Requirements**: Must report capacity in kWh
+- **Note**: When configured, this sensor value will override the manual `batt_cap_kwh` setting
+
+#### Battery Energy Charged Today Sensor
+- **Field**: `batt_energy_charged_today_entity`
+- **Type**: Entity selector (sensor domain)
+- **Default**: Empty
+- **Description**: Sensor reporting total energy charged to battery today
+- **Example**: `sensor.energy_charged_today`
+- **Requirements**: Must report energy in kWh, resets daily
+- **Purpose**: Enables automatic cost tracking by calling `bec.on_charge()` when battery charges
+- **Note**: This sensor is required for automatic battery cost tracking
+
+#### Battery Energy Discharged Today Sensor
+- **Field**: `batt_energy_discharged_today_entity`
+- **Type**: Entity selector (sensor domain)
+- **Default**: Empty
+- **Description**: Sensor reporting total energy discharged from battery today
+- **Example**: `sensor.energy_discharged_today`
+- **Requirements**: Must report energy in kWh, resets daily
+- **Purpose**: Enables automatic discharge tracking by calling `bec.on_discharge()` when battery discharges
+- **Note**: This sensor is required for automatic battery cost tracking
+
 ### Battery Runtime Settings
 
 #### SOC Floor
