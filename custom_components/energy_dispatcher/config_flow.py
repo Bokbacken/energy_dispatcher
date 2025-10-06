@@ -156,81 +156,94 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
     d = defaults or DEFAULTS
     weather_entities = _available_weather_entities(hass) if hass else []
     weather_select = vol.In(weather_entities) if weather_entities else str
+    
+    # Get the current forecast source to conditionally show fields
+    forecast_source = d.get(CONF_FORECAST_SOURCE, "forecast_solar")
 
-    return vol.Schema(
-        {
-            vol.Required(CONF_NORDPOOL_ENTITY, default=d.get(CONF_NORDPOOL_ENTITY, "")): str,
-            vol.Optional(CONF_PRICE_TAX, default=d.get(CONF_PRICE_TAX, 0.0)): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_TRANSFER, default=d.get(CONF_PRICE_TRANSFER, 0.0)): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_SURCHARGE, default=d.get(CONF_PRICE_SURCHARGE, 0.0)): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_VAT, default=d.get(CONF_PRICE_VAT, 0.25)): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_FIXED_MONTHLY, default=d.get(CONF_PRICE_FIXED_MONTHLY, 0.0)): vol.Coerce(float),
-            vol.Optional(CONF_PRICE_INCLUDE_FIXED, default=d.get(CONF_PRICE_INCLUDE_FIXED, False)): bool,
+    # Build schema with common fields
+    schema_dict = {
+        vol.Required(CONF_NORDPOOL_ENTITY, default=d.get(CONF_NORDPOOL_ENTITY, "")): str,
+        vol.Optional(CONF_PRICE_TAX, default=d.get(CONF_PRICE_TAX, 0.0)): vol.Coerce(float),
+        vol.Optional(CONF_PRICE_TRANSFER, default=d.get(CONF_PRICE_TRANSFER, 0.0)): vol.Coerce(float),
+        vol.Optional(CONF_PRICE_SURCHARGE, default=d.get(CONF_PRICE_SURCHARGE, 0.0)): vol.Coerce(float),
+        vol.Optional(CONF_PRICE_VAT, default=d.get(CONF_PRICE_VAT, 0.25)): vol.Coerce(float),
+        vol.Optional(CONF_PRICE_FIXED_MONTHLY, default=d.get(CONF_PRICE_FIXED_MONTHLY, 0.0)): vol.Coerce(float),
+        vol.Optional(CONF_PRICE_INCLUDE_FIXED, default=d.get(CONF_PRICE_INCLUDE_FIXED, False)): bool,
 
-            vol.Required(CONF_BATT_CAP_KWH, default=d.get(CONF_BATT_CAP_KWH, 15.0)): vol.Coerce(float),
-            vol.Optional(CONF_BATT_CAPACITY_ENTITY, default=d.get(CONF_BATT_CAPACITY_ENTITY, "")): str,
-            vol.Required(CONF_BATT_SOC_ENTITY, default=d.get(CONF_BATT_SOC_ENTITY, "")): str,
-            vol.Optional(CONF_BATT_MAX_CHARGE_W, default=d.get(CONF_BATT_MAX_CHARGE_W, 4000)): vol.Coerce(int),
-            vol.Optional(CONF_BATT_MAX_DISCH_W, default=d.get(CONF_BATT_MAX_DISCH_W, 4000)): vol.Coerce(int),
-            vol.Optional(CONF_BATT_ADAPTER, default=d.get(CONF_BATT_ADAPTER, "huawei")): vol.In(["huawei"]),
-            vol.Optional(CONF_HUAWEI_DEVICE_ID, default=d.get(CONF_HUAWEI_DEVICE_ID, "")): str,
-            vol.Optional(CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY, default=d.get(CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY, "")): str,
-            vol.Optional(CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY, default=d.get(CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY, "")): str,
+        vol.Required(CONF_BATT_CAP_KWH, default=d.get(CONF_BATT_CAP_KWH, 15.0)): vol.Coerce(float),
+        vol.Optional(CONF_BATT_CAPACITY_ENTITY, default=d.get(CONF_BATT_CAPACITY_ENTITY, "")): str,
+        vol.Required(CONF_BATT_SOC_ENTITY, default=d.get(CONF_BATT_SOC_ENTITY, "")): str,
+        vol.Optional(CONF_BATT_MAX_CHARGE_W, default=d.get(CONF_BATT_MAX_CHARGE_W, 4000)): vol.Coerce(int),
+        vol.Optional(CONF_BATT_MAX_DISCH_W, default=d.get(CONF_BATT_MAX_DISCH_W, 4000)): vol.Coerce(int),
+        vol.Optional(CONF_BATT_ADAPTER, default=d.get(CONF_BATT_ADAPTER, "huawei")): vol.In(["huawei"]),
+        vol.Optional(CONF_HUAWEI_DEVICE_ID, default=d.get(CONF_HUAWEI_DEVICE_ID, "")): str,
+        vol.Optional(CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY, default=d.get(CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY, "")): str,
+        vol.Optional(CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY, default=d.get(CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY, "")): str,
 
-            vol.Optional(CONF_EV_MODE, default=d.get(CONF_EV_MODE, "manual")): vol.In(["manual"]),
-            vol.Optional(CONF_EV_BATT_KWH, default=d.get(CONF_EV_BATT_KWH, 75.0)): vol.Coerce(float),
-            vol.Optional(CONF_EV_CURRENT_SOC, default=d.get(CONF_EV_CURRENT_SOC, 40.0)): vol.Coerce(float),
-            vol.Optional(CONF_EV_TARGET_SOC, default=d.get(CONF_EV_TARGET_SOC, 80.0)): vol.Coerce(float),
-            vol.Optional(CONF_EVSE_START_SWITCH, default=d.get(CONF_EVSE_START_SWITCH, "")): str,
-            vol.Optional(CONF_EVSE_STOP_SWITCH, default=d.get(CONF_EVSE_STOP_SWITCH, "")): str,
-            vol.Optional(CONF_EVSE_CURRENT_NUMBER, default=d.get(CONF_EVSE_CURRENT_NUMBER, "")): str,
-            vol.Optional(CONF_EVSE_MIN_A, default=d.get(CONF_EVSE_MIN_A, 6)): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_MAX_A, default=d.get(CONF_EVSE_MAX_A, 16)): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_PHASES, default=d.get(CONF_EVSE_PHASES, 3)): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_VOLTAGE, default=d.get(CONF_EVSE_VOLTAGE, 230)): vol.Coerce(int),
-            vol.Optional(CONF_EVSE_POWER_SENSOR, default=d.get(CONF_EVSE_POWER_SENSOR, "")): str,
-            vol.Optional(CONF_EVSE_ENERGY_SENSOR, default=d.get(CONF_EVSE_ENERGY_SENSOR, "")): str,
-            vol.Optional(CONF_EVSE_TOTAL_ENERGY_SENSOR, default=d.get(CONF_EVSE_TOTAL_ENERGY_SENSOR, "")): str,
+        vol.Optional(CONF_EV_MODE, default=d.get(CONF_EV_MODE, "manual")): vol.In(["manual"]),
+        vol.Optional(CONF_EV_BATT_KWH, default=d.get(CONF_EV_BATT_KWH, 75.0)): vol.Coerce(float),
+        vol.Optional(CONF_EV_CURRENT_SOC, default=d.get(CONF_EV_CURRENT_SOC, 40.0)): vol.Coerce(float),
+        vol.Optional(CONF_EV_TARGET_SOC, default=d.get(CONF_EV_TARGET_SOC, 80.0)): vol.Coerce(float),
+        vol.Optional(CONF_EVSE_START_SWITCH, default=d.get(CONF_EVSE_START_SWITCH, "")): str,
+        vol.Optional(CONF_EVSE_STOP_SWITCH, default=d.get(CONF_EVSE_STOP_SWITCH, "")): str,
+        vol.Optional(CONF_EVSE_CURRENT_NUMBER, default=d.get(CONF_EVSE_CURRENT_NUMBER, "")): str,
+        vol.Optional(CONF_EVSE_MIN_A, default=d.get(CONF_EVSE_MIN_A, 6)): vol.Coerce(int),
+        vol.Optional(CONF_EVSE_MAX_A, default=d.get(CONF_EVSE_MAX_A, 16)): vol.Coerce(int),
+        vol.Optional(CONF_EVSE_PHASES, default=d.get(CONF_EVSE_PHASES, 3)): vol.Coerce(int),
+        vol.Optional(CONF_EVSE_VOLTAGE, default=d.get(CONF_EVSE_VOLTAGE, 230)): vol.Coerce(int),
+        vol.Optional(CONF_EVSE_POWER_SENSOR, default=d.get(CONF_EVSE_POWER_SENSOR, "")): str,
+        vol.Optional(CONF_EVSE_ENERGY_SENSOR, default=d.get(CONF_EVSE_ENERGY_SENSOR, "")): str,
+        vol.Optional(CONF_EVSE_TOTAL_ENERGY_SENSOR, default=d.get(CONF_EVSE_TOTAL_ENERGY_SENSOR, "")): str,
 
-            vol.Optional(CONF_FS_USE, default=d.get(CONF_FS_USE, True)): bool,
-            vol.Optional(CONF_FORECAST_SOURCE, default=d.get(CONF_FORECAST_SOURCE, "forecast_solar")): vol.In(["forecast_solar", "manual_physics"]),
-            vol.Optional(CONF_FS_APIKEY, default=d.get(CONF_FS_APIKEY, "")): str,
-            vol.Optional(CONF_FS_LAT, default=d.get(CONF_FS_LAT, 56.6967208731)): vol.Coerce(float),
-            vol.Optional(CONF_FS_LON, default=d.get(CONF_FS_LON, 13.0196173488)): vol.Coerce(float),
-            vol.Optional(CONF_FS_PLANES, default=d.get(CONF_FS_PLANES, '[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]')): str,
-            vol.Optional(CONF_FS_HORIZON, default=d.get(CONF_FS_HORIZON, "18,16,11,7,5,4,3,2,2,4,7,10")): str,
+        # Common solar forecasting fields
+        vol.Optional(CONF_FS_USE, default=d.get(CONF_FS_USE, True)): bool,
+        vol.Optional(CONF_FORECAST_SOURCE, default=d.get(CONF_FORECAST_SOURCE, "forecast_solar")): vol.In(["forecast_solar", "manual_physics"]),
+        vol.Optional(CONF_FS_LAT, default=d.get(CONF_FS_LAT, 56.6967208731)): vol.Coerce(float),
+        vol.Optional(CONF_FS_LON, default=d.get(CONF_FS_LON, 13.0196173488)): vol.Coerce(float),
+        vol.Optional(CONF_FS_PLANES, default=d.get(CONF_FS_PLANES, '[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]')): str,
+        vol.Optional(CONF_FS_HORIZON, default=d.get(CONF_FS_HORIZON, "18,16,11,7,5,4,3,2,2,4,7,10")): str,
+    }
+    
+    # Add forecast.solar specific fields
+    if forecast_source == "forecast_solar":
+        schema_dict[vol.Optional(CONF_FS_APIKEY, default=d.get(CONF_FS_APIKEY, ""))] = str
+        schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default=d.get(CONF_WEATHER_ENTITY, ""))] = weather_select
+        schema_dict[vol.Optional(CONF_CLOUD_0, default=d.get(CONF_CLOUD_0, 250))] = vol.All(vol.Coerce(int), vol.Range(min=0, max=500))
+        schema_dict[vol.Optional(CONF_CLOUD_100, default=d.get(CONF_CLOUD_100, 20))] = vol.All(vol.Coerce(int), vol.Range(min=0, max=500))
+    
+    # Add manual_physics specific fields
+    if forecast_source == "manual_physics":
+        schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default=d.get(CONF_WEATHER_ENTITY, ""))] = weather_select
+        schema_dict[vol.Optional(CONF_MANUAL_STEP_MINUTES, default=d.get(CONF_MANUAL_STEP_MINUTES, 15))] = vol.In([15, 30, 60])
+        schema_dict[vol.Optional(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, default=d.get(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, 0.95))] = vol.All(vol.Coerce(float), vol.Range(min=0.7, max=1.0))
+        schema_dict[vol.Optional(CONF_MANUAL_TEMP_COEFF, default=d.get(CONF_MANUAL_TEMP_COEFF, -0.38))] = vol.Coerce(float)
+        schema_dict[vol.Optional(CONF_MANUAL_INVERTER_AC_CAP, default=d.get(CONF_MANUAL_INVERTER_AC_CAP, None))] = vol.Any(None, vol.Coerce(float))
+        schema_dict[vol.Optional(CONF_MANUAL_CALIBRATION_ENABLED, default=d.get(CONF_MANUAL_CALIBRATION_ENABLED, False))] = bool
+    
+    # Add remaining fields
+    schema_dict.update({
+        vol.Optional(CONF_PV_POWER_ENTITY, default=d.get(CONF_PV_POWER_ENTITY, "")): str,
+        vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d.get(CONF_PV_ENERGY_TODAY_ENTITY, "")): str,
 
-            vol.Optional(CONF_WEATHER_ENTITY, default=d.get(CONF_WEATHER_ENTITY, "")): weather_select,
-            vol.Optional(CONF_CLOUD_0, default=d.get(CONF_CLOUD_0, 250)): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
-            vol.Optional(CONF_CLOUD_100, default=d.get(CONF_CLOUD_100, 20)): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
-            
-            vol.Optional(CONF_MANUAL_STEP_MINUTES, default=d.get(CONF_MANUAL_STEP_MINUTES, 15)): vol.In([15, 30, 60]),
-            vol.Optional(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, default=d.get(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, 0.95)): vol.All(vol.Coerce(float), vol.Range(min=0.7, max=1.0)),
-            vol.Optional(CONF_MANUAL_TEMP_COEFF, default=d.get(CONF_MANUAL_TEMP_COEFF, -0.38)): vol.Coerce(float),
-            vol.Optional(CONF_MANUAL_INVERTER_AC_CAP, default=d.get(CONF_MANUAL_INVERTER_AC_CAP, None)): vol.Any(None, vol.Coerce(float)),
-            vol.Optional(CONF_MANUAL_CALIBRATION_ENABLED, default=d.get(CONF_MANUAL_CALIBRATION_ENABLED, False)): bool,
+        vol.Optional(CONF_HOUSE_CONS_SENSOR, default=d.get(CONF_HOUSE_CONS_SENSOR, "")): str,
+        vol.Optional(CONF_RUNTIME_SOURCE, default=d.get(CONF_RUNTIME_SOURCE, "counter_kwh")): vol.In(["counter_kwh", "power_w", "manual_dayparts"]),
+        vol.Optional(CONF_RUNTIME_COUNTER_ENTITY, default=d.get(CONF_RUNTIME_COUNTER_ENTITY, "")): str,
+        vol.Optional(CONF_RUNTIME_POWER_ENTITY, default=d.get(CONF_RUNTIME_POWER_ENTITY, "")): str,
+        vol.Optional(CONF_LOAD_POWER_ENTITY, default=d.get(CONF_LOAD_POWER_ENTITY, "")): str,
+        vol.Optional(CONF_BATT_POWER_ENTITY, default=d.get(CONF_BATT_POWER_ENTITY, "")): str,
+        vol.Optional(CONF_BATT_POWER_INVERT_SIGN, default=d.get(CONF_BATT_POWER_INVERT_SIGN, False)): bool,
+        vol.Optional(CONF_GRID_IMPORT_TODAY_ENTITY, default=d.get(CONF_GRID_IMPORT_TODAY_ENTITY, "")): str,
+        vol.Optional(CONF_RUNTIME_ALPHA, default=d.get(CONF_RUNTIME_ALPHA, 0.2)): vol.Coerce(float),
+        vol.Optional(CONF_RUNTIME_WINDOW_MIN, default=d.get(CONF_RUNTIME_WINDOW_MIN, 15)): vol.Coerce(int),
+        vol.Optional(CONF_RUNTIME_EXCLUDE_EV, default=d.get(CONF_RUNTIME_EXCLUDE_EV, True)): bool,
+        vol.Optional(CONF_RUNTIME_EXCLUDE_BATT_GRID, default=d.get(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)): bool,
+        vol.Optional(CONF_RUNTIME_SOC_FLOOR, default=d.get(CONF_RUNTIME_SOC_FLOOR, 10)): vol.Coerce(float),
+        vol.Optional(CONF_RUNTIME_SOC_CEILING, default=d.get(CONF_RUNTIME_SOC_CEILING, 95)): vol.Coerce(float),
+        
+        vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): bool,
+    })
 
-            vol.Optional(CONF_PV_POWER_ENTITY, default=d.get(CONF_PV_POWER_ENTITY, "")): str,
-            vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d.get(CONF_PV_ENERGY_TODAY_ENTITY, "")): str,
-
-            vol.Optional(CONF_HOUSE_CONS_SENSOR, default=d.get(CONF_HOUSE_CONS_SENSOR, "")): str,
-            vol.Optional(CONF_RUNTIME_SOURCE, default=d.get(CONF_RUNTIME_SOURCE, "counter_kwh")): vol.In(["counter_kwh", "power_w", "manual_dayparts"]),
-            vol.Optional(CONF_RUNTIME_COUNTER_ENTITY, default=d.get(CONF_RUNTIME_COUNTER_ENTITY, "")): str,
-            vol.Optional(CONF_RUNTIME_POWER_ENTITY, default=d.get(CONF_RUNTIME_POWER_ENTITY, "")): str,
-            vol.Optional(CONF_LOAD_POWER_ENTITY, default=d.get(CONF_LOAD_POWER_ENTITY, "")): str,
-            vol.Optional(CONF_BATT_POWER_ENTITY, default=d.get(CONF_BATT_POWER_ENTITY, "")): str,
-            vol.Optional(CONF_BATT_POWER_INVERT_SIGN, default=d.get(CONF_BATT_POWER_INVERT_SIGN, False)): bool,
-            vol.Optional(CONF_GRID_IMPORT_TODAY_ENTITY, default=d.get(CONF_GRID_IMPORT_TODAY_ENTITY, "")): str,
-            vol.Optional(CONF_RUNTIME_ALPHA, default=d.get(CONF_RUNTIME_ALPHA, 0.2)): vol.Coerce(float),
-            vol.Optional(CONF_RUNTIME_WINDOW_MIN, default=d.get(CONF_RUNTIME_WINDOW_MIN, 15)): vol.Coerce(int),
-            vol.Optional(CONF_RUNTIME_EXCLUDE_EV, default=d.get(CONF_RUNTIME_EXCLUDE_EV, True)): bool,
-            vol.Optional(CONF_RUNTIME_EXCLUDE_BATT_GRID, default=d.get(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)): bool,
-            vol.Optional(CONF_RUNTIME_SOC_FLOOR, default=d.get(CONF_RUNTIME_SOC_FLOOR, 10)): vol.Coerce(float),
-            vol.Optional(CONF_RUNTIME_SOC_CEILING, default=d.get(CONF_RUNTIME_SOC_CEILING, 95)): vol.Coerce(float),
-            
-            vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): bool,
-        }
-    )
+    return vol.Schema(schema_dict)
 
 # Translation key structure for Home Assistant config flows:
 # "component.energy_dispatcher.config.<field>.label"
