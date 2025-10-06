@@ -83,9 +83,9 @@ class TestBatteryChargeTracking:
         mock_charged_state = MagicMock()
         mock_charged_state.state = "10.5"
         
-        # Mock battery power (negative = charging in Huawei convention)
+        # Mock battery power (positive = charging in standard convention)
         mock_batt_power = MagicMock()
-        mock_batt_power.state = "-4000"  # 4kW charging
+        mock_batt_power.state = "4000"  # 4kW charging
         
         def state_get(entity_id):
             if "charged_today" in entity_id:

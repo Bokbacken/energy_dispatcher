@@ -159,7 +159,7 @@ data:
   - `battery_soc_percent`: Current state of charge (%)
   - `battery_energy_kwh`: Current energy content (kWh)
   - `battery_capacity_kwh`: Battery capacity (kWh)
-- **Note**: Converts Huawei convention (negative=charging) to standard (positive=charging)
+- **Note**: Uses standard convention (positive=charging, negative=discharging)
 
 ### Button: Reset Battery Energy Cost
 - **Entity ID**: `button.reset_battery_energy_cost`

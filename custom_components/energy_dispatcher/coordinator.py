@@ -289,8 +289,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             # Saknas data ⇒ var försiktig: returnera False (låt inte exkludering döda baseline)
             return False
 
-        # I legacy Huawei-konvention: negativt = laddning
-        batt_charge_w = max(0.0, -batt_pw)
+        # Standard convention: positive = charging, negative = discharging
+        batt_charge_w = max(0.0, batt_pw)
         pv_surplus_w = max(0.0, pv_pw - load_pw)
         grid_charge_w = max(0.0, batt_charge_w - pv_surplus_w)
         return grid_charge_w > 100.0
@@ -590,8 +590,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                             pv_surplus_w = max(0.0, pv_power_w - load_power_w)
                             # Estimate charge power (if batt_power_w available)
                             if batt_power_w is not None:
-                                # Negative in Huawei convention means charging
-                                charge_power_w = max(0.0, -batt_power_w)
+                                # Standard convention: positive means charging
+                                charge_power_w = max(0.0, batt_power_w)
                             else:
                                 # Estimate from delta over 5 minutes (300s update interval)
                                 charge_power_w = (delta_charged * 1000.0) / (300.0 / 3600.0)  # Convert to W

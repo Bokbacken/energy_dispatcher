@@ -407,10 +407,10 @@ class BatteryChargingStateSensor(BaseEDSensor):
         
         try:
             power = float(state.state)
-            # Huawei convention: negative = charging, positive = discharging
-            if power < -50:  # Charging threshold: 50W
+            # Standard convention: positive = charging, negative = discharging
+            if power > 50:  # Charging threshold: 50W
                 return "charging"
-            elif power > 50:  # Discharging threshold: 50W
+            elif power < -50:  # Discharging threshold: 50W
                 return "discharging"
             else:
                 return "idle"
@@ -462,8 +462,8 @@ class BatteryPowerFlowSensor(BaseEDSensor):
         
         try:
             power = float(state.state)
-            # Convert Huawei convention (negative=charging) to standard (positive=charging)
-            return -power
+            # Sensor already uses standard convention (positive=charging, negative=discharging)
+            return power
         except (ValueError, TypeError):
             return None
 
