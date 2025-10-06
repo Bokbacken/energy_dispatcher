@@ -531,6 +531,17 @@ data:
   duration: 60    # minutes
 ```
 
+#### Create Dashboard Notification
+Service: `energy_dispatcher.create_dashboard_notification`
+
+Manually create or recreate the dashboard setup notification. Useful if you dismissed the original notification or want to see the setup instructions again.
+
+```yaml
+service: energy_dispatcher.create_dashboard_notification
+```
+
+**Use case:** You deleted the hub and re-added it, or you dismissed the notification and want to see the dashboard setup instructions again.
+
 ## Troubleshooting
 
 ### Common Issues
