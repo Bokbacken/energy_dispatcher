@@ -44,11 +44,13 @@
   - Added comprehensive test coverage for all edge cases (5 new tests)
   - This fully resolves the configuration flow errors reported in PR #19
 
-- **Options Flow Handler Error**: Added missing `__init__` method to `EnergyDispatcherOptionsFlowHandler`
-  - Root cause: The `__init__` method was removed in version 0.7.8, causing AttributeError when accessing `self.config_entry`
+- **Options Flow Handler Error**: Fixed 500 Internal Server Error by modernizing to Home Assistant 2025.12+ pattern
+  - Root cause: The `async_get_options_flow` method was passing `config_entry` to the constructor, but `EnergyDispatcherOptionsFlowHandler` didn't accept it (TypeError)
   - Impact: Users got 500 Internal Server Error when trying to modify integration settings
-  - Solution: Restored the `__init__` method that properly initializes `self.config_entry`
-  - This was the actual root cause identified by user testing between versions 0.7.7 (working) and 0.7.8 (broken)
+  - Previous attempt: Version 0.7.7 had an `__init__` method (deprecated pattern scheduled for removal in 2025.12), which was removed in 0.7.8
+  - Solution: Use modern Home Assistant pattern where `config_entry` is automatically available as a property from the `OptionsFlow` base class
+  - Changed `EnergyDispatcherOptionsFlowHandler(config_entry)` to `EnergyDispatcherOptionsFlowHandler()` in `async_get_options_flow`
+  - This is the proper long-term solution that aligns with Home Assistant's architecture and avoids deprecated code patterns
 
 ## [0.8.1] - 2025-10-05
 ### Fixed
