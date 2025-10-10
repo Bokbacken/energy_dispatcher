@@ -4,9 +4,8 @@
 ### Added
 - **Enhanced Diagnostic Logging**: Added comprehensive logging for 48h baseline calculation to help troubleshoot issues
   - Logs when 48h calculation succeeds with all daypart values
-  - Logs when falling back to EMA mode with helpful guidance
+  - Logs WARNING when 48h calculation fails with specific checks to perform
   - Logs when power entity is not configured
-  - Logs when entering EMA fallback mode for debugging
 
 ### Fixed
 - **48h Baseline Daypart Sensors**: Fixed bug where daypart sensors (Night/Day/Evening) showed "unknown" instead of values
@@ -18,14 +17,28 @@
 - **Configuration Cleanup**: Removed deprecated EMA parameters from configuration UI
   - Removed `runtime_alpha` (EMA Smoothing Factor 0-1) from config flow
   - Removed `runtime_window_min` (Calculation Windows minutes) from config flow
-  - These parameters are kept in code for backward compatibility (EMA fallback mode)
+  - These parameters are kept in code for backward compatibility but are no longer used
   - Existing configurations will continue to work without changes
+
+- **Baseline Calculation Simplified**: Removed EMA fallback for power_w method
+  - `power_w` method now uses ONLY 48h historical baseline (no EMA fallback)
+  - If 48h calculation fails, sensors show "unknown" with clear diagnostic message
+  - `counter_kwh` method continues to work as before
+  - This provides more accurate, realistic baseline values representative of actual consumption
+  - No more mixing of EMA and historical calculations
 
 ### Removed
 - **Code Cleanup**: Archived unused files to `archive/` directory
   - `planner.py`: simple_plan() function was never imported or used
   - `vehicle_manager.py`: VehicleManager class was never imported or used
   - Files can be restored from archive if needed in the future
+
+- **EMA Fallback Removed**: Removed all EMA (Exponential Moving Average) fallback logic for power_w method
+  - Removed `_baseline_ema_kwh_per_h` instance variable
+  - Removed `_baseline_bootstrapped` flag
+  - Removed `_bootstrap_from_history_power()` method
+  - Removed EMA calculation and accumulation logic
+  - This simplifies the codebase and ensures only realistic historical baselines are used
 
 ### Added
 - **Automated Dashboard Setup Assistance**: New users now receive a helpful welcome notification
