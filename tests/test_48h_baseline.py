@@ -27,8 +27,10 @@ def coordinator(mock_hass):
             "config": {
                 "runtime_lookback_hours": 48,
                 "runtime_use_dayparts": True,
-                "runtime_power_entity": "sensor.house_power",
-                "runtime_source": "power_w",
+                "runtime_counter_entity": "sensor.house_energy",
+                "evse_total_energy_sensor": "sensor.ev_energy",
+                "batt_total_charged_energy_entity": "sensor.battery_charged_energy",
+                "pv_total_energy_entity": "sensor.pv_total_energy",
                 "runtime_exclude_ev": True,
                 "runtime_exclude_batt_grid": True,
             },
@@ -64,8 +66,7 @@ class Test48HourBaseline:
     async def test_no_historical_data(self, coordinator, mock_hass):
         """Test that None is returned when no historical data is available."""
         # Mock empty history
-        with patch('custom_components.energy_dispatcher.coordinator.history') as mock_history:
-            mock_history.state_changes_during_period = MagicMock(return_value={})
+        with patch('homeassistant.components.recorder.history'):
             mock_hass.async_add_executor_job = AsyncMock(return_value={})
             
             result = await coordinator._calculate_48h_baseline()
@@ -73,25 +74,28 @@ class Test48HourBaseline:
     
     @pytest.mark.asyncio
     async def test_baseline_calculation_with_data(self, coordinator, mock_hass):
-        """Test baseline calculation with sample data."""
-        # Create mock state objects
+        """Test baseline calculation with energy counter data."""
+        # Create mock state objects for energy counters
         now = datetime.now()
-        states = []
         
-        # Add 24 samples (one per hour for last 24 hours)
-        for i in range(24):
-            state = MagicMock()
-            state.state = "1000"  # 1000W
-            state.attributes = {"unit_of_measurement": "W"}
-            state.last_changed = now - timedelta(hours=i)
-            states.append(state)
+        # House energy counter: start at 100 kWh, end at 148 kWh (48 kWh consumed over 48h = 1 kWh/h)
+        house_states = []
+        start_state = MagicMock()
+        start_state.state = "100.0"
+        start_state.last_changed = now - timedelta(hours=48)
+        house_states.append(start_state)
+        
+        end_state = MagicMock()
+        end_state.state = "148.0"
+        end_state.last_changed = now
+        house_states.append(end_state)
         
         # Mock history response
         history_data = {
-            "sensor.house_power": states
+            "sensor.house_energy": house_states
         }
         
-        with patch('custom_components.energy_dispatcher.coordinator.history'):
+        with patch('homeassistant.components.recorder.history'):
             mock_hass.async_add_executor_job = AsyncMock(return_value=history_data)
             
             result = await coordinator._calculate_48h_baseline()
@@ -103,93 +107,127 @@ class Test48HourBaseline:
             assert "day" in result
             assert "evening" in result
             
-            # Overall should be approximately 1 kWh/h (1000W / 1000)
+            # Overall should be approximately 1 kWh/h (48 kWh / 48 hours)
             if result["overall"]:
                 assert 0.9 <= result["overall"] <= 1.1
     
     @pytest.mark.asyncio
     async def test_exclusion_of_ev_charging(self, coordinator, mock_hass):
-        """Test that EV charging periods are excluded."""
+        """Test that EV charging energy is excluded from baseline."""
         now = datetime.now()
-        house_states = []
-        ev_states = []
         
-        # Create samples where EV is charging half the time
-        for i in range(24):
-            house_state = MagicMock()
-            house_state.state = "2000"  # 2000W house load
-            house_state.attributes = {"unit_of_measurement": "W"}
-            house_state.last_changed = now - timedelta(hours=i)
-            house_states.append(house_state)
-            
-            ev_state = MagicMock()
-            # EV charging every other hour
-            ev_state.state = "3000" if i % 2 == 0 else "0"
-            ev_state.last_changed = now - timedelta(hours=i)
-            ev_states.append(ev_state)
+        # House energy counter: 100 kWh -> 158 kWh (58 kWh consumed over 48h)
+        house_states = []
+        house_start = MagicMock()
+        house_start.state = "100.0"
+        house_start.last_changed = now - timedelta(hours=48)
+        house_states.append(house_start)
+        
+        house_end = MagicMock()
+        house_end.state = "158.0"
+        house_end.last_changed = now
+        house_states.append(house_end)
+        
+        # EV energy counter: 50 kWh -> 60 kWh (10 kWh charged)
+        ev_states = []
+        ev_start = MagicMock()
+        ev_start.state = "50.0"
+        ev_start.last_changed = now - timedelta(hours=48)
+        ev_states.append(ev_start)
+        
+        ev_end = MagicMock()
+        ev_end.state = "60.0"
+        ev_end.last_changed = now
+        ev_states.append(ev_end)
         
         history_data = {
-            "sensor.house_power": house_states,
-            "sensor.ev_power": ev_states,
+            "sensor.house_energy": house_states,
+            "sensor.ev_energy": ev_states,
         }
         
-        # Update config to include EV sensor
-        mock_hass.data["energy_dispatcher"]["test_entry"]["config"]["evse_power_sensor"] = "sensor.ev_power"
-        
-        with patch('custom_components.energy_dispatcher.coordinator.history'):
+        with patch('homeassistant.components.recorder.history'):
             mock_hass.async_add_executor_job = AsyncMock(return_value=history_data)
             
             result = await coordinator._calculate_48h_baseline()
             
-            # Should exclude half the samples (when EV was charging)
-            # So we should only have ~12 samples instead of 24
+            # Should exclude EV charging: (58 - 10) / 48 = 1 kWh/h
             assert result is not None
+            if result["overall"]:
+                assert 0.9 <= result["overall"] <= 1.1
 
 
-class TestBackwardCompatibility:
-    """Test backward compatibility with existing configurations."""
+class TestEnergyCounterBaseline:
+    """Test energy counter-based baseline calculation."""
     
     @pytest.mark.asyncio
-    async def test_ema_fallback_when_lookback_zero(self, coordinator, mock_hass):
-        """Test that EMA is used when lookback is 0."""
-        # Configure for EMA mode
-        mock_hass.data["energy_dispatcher"]["test_entry"]["config"]["runtime_lookback_hours"] = 0
+    async def test_baseline_with_counter_reset(self, coordinator, mock_hass):
+        """Test that counter resets are handled correctly."""
+        now = datetime.now()
         
-        # Mock current power state
-        power_state = MagicMock()
-        power_state.state = "1500"
-        power_state.attributes = {"unit_of_measurement": "W"}
-        mock_hass.states.get = MagicMock(return_value=power_state)
+        # House energy counter with reset: 500 kWh -> 10 kWh (counter reset at midnight)
+        house_states = []
+        house_start = MagicMock()
+        house_start.state = "500.0"
+        house_start.last_changed = now - timedelta(hours=48)
+        house_states.append(house_start)
         
-        # Update baseline should work with EMA
-        await coordinator._update_baseline_and_runtime()
+        house_end = MagicMock()
+        house_end.state = "10.0"  # Counter reset
+        house_end.last_changed = now
+        house_states.append(house_end)
         
-        # Should have baseline calculated
-        assert coordinator.data.get("house_baseline_w") is not None
-        assert coordinator.data.get("baseline_method") == "power_w"
+        history_data = {
+            "sensor.house_energy": house_states
+        }
+        
+        with patch('homeassistant.components.recorder.history'):
+            mock_hass.async_add_executor_job = AsyncMock(return_value=history_data)
+            
+            result = await coordinator._calculate_48h_baseline()
+            
+            # Should use end value as approximation: 10 / 48 ≈ 0.21 kWh/h
+            assert result is not None
+            if result["overall"]:
+                assert 0.15 <= result["overall"] <= 0.25
     
     @pytest.mark.asyncio
-    async def test_counter_method_still_works(self, coordinator, mock_hass):
-        """Test that counter_kwh method still works."""
-        # Configure for counter mode
-        config = mock_hass.data["energy_dispatcher"]["test_entry"]["config"]
-        config["runtime_source"] = "counter_kwh"
-        config["runtime_counter_entity"] = "sensor.energy_counter"
+    async def test_baseline_with_battery_exclusion(self, coordinator, mock_hass):
+        """Test that battery grid charging is excluded."""
+        now = datetime.now()
         
-        # Mock counter state
-        counter_state = MagicMock()
-        counter_state.state = "100.5"
-        mock_hass.states.get = MagicMock(return_value=counter_state)
+        # House: 100 -> 170 kWh (70 kWh)
+        house_states = [
+            MagicMock(state="100.0", last_changed=now - timedelta(hours=48)),
+            MagicMock(state="170.0", last_changed=now)
+        ]
         
-        # First update to establish baseline
-        await coordinator._update_baseline_and_runtime()
+        # Battery charged: 20 -> 40 kWh (20 kWh charged)
+        batt_states = [
+            MagicMock(state="20.0", last_changed=now - timedelta(hours=48)),
+            MagicMock(state="40.0", last_changed=now)
+        ]
         
-        # Update again with new value
-        counter_state.state = "101.0"
-        await coordinator._update_baseline_and_runtime()
+        # PV generated: 0 -> 10 kWh (10 kWh from solar)
+        pv_states = [
+            MagicMock(state="0.0", last_changed=now - timedelta(hours=48)),
+            MagicMock(state="10.0", last_changed=now)
+        ]
         
-        # Should have baseline
-        assert coordinator.data.get("baseline_method") == "counter_kwh"
+        history_data = {
+            "sensor.house_energy": house_states,
+            "sensor.battery_charged_energy": batt_states,
+            "sensor.pv_total_energy": pv_states,
+        }
+        
+        with patch('homeassistant.components.recorder.history'):
+            mock_hass.async_add_executor_job = AsyncMock(return_value=history_data)
+            
+            result = await coordinator._calculate_48h_baseline()
+            
+            # Should exclude battery grid charging: (70 - (20 - 10)) / 48 = 60 / 48 = 1.25 kWh/h
+            assert result is not None
+            if result["overall"]:
+                assert 1.2 <= result["overall"] <= 1.3
 
 
 if __name__ == "__main__":
