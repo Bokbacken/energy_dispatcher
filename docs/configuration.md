@@ -406,11 +406,30 @@ Configure how Energy Dispatcher calculates your house's baseline electricity con
 - **Example**: `sensor.house_power`
 - **Required for**: `power_w` method
 
+#### Historical Lookback Period
+- **Field**: `runtime_lookback_hours`
+- **Type**: Number (0-168 hours)
+- **Default**: 48
+- **Description**: Number of hours to look back for calculating baseline from historical data
+- **Note**: Set to 0 to disable historical calculation and use EMA instead
+- **Recommendation**: 48 hours provides a good balance between responsiveness and stability
+
+#### Use Time-of-Day Weighting
+- **Field**: `runtime_use_dayparts`
+- **Type**: Boolean
+- **Default**: True
+- **Description**: When enabled, calculates separate baselines for different times of day
+- **Time periods**:
+  - **Night** (00:00-07:59): Typical sleep hours with minimal activity
+  - **Day** (08:00-15:59): Daytime hours with normal household activity
+  - **Evening** (16:00-23:59): Peak hours with cooking, entertainment, etc.
+- **Purpose**: Provides more accurate battery runtime estimates based on time of day
+
 #### EMA Smoothing Factor (Alpha)
 - **Field**: `runtime_alpha`
 - **Type**: Number (0-1)
 - **Default**: 0.2
-- **Description**: Exponential moving average smoothing factor
+- **Description**: Exponential moving average smoothing factor (used when lookback is 0)
 - **Lower values** (e.g., 0.1): More smoothing, slower response to changes
 - **Higher values** (e.g., 0.5): Less smoothing, faster response to changes
 
@@ -418,7 +437,7 @@ Configure how Energy Dispatcher calculates your house's baseline electricity con
 - **Field**: `runtime_window_min`
 - **Type**: Number (5-60 minutes)
 - **Default**: 15
-- **Description**: Time window for baseline calculations
+- **Description**: Time window for baseline calculations (used for bootstrap)
 - **Recommendation**: 15 minutes aligns with typical smart meter intervals
 
 ### Exclusion Settings
@@ -541,6 +560,51 @@ service: energy_dispatcher.create_dashboard_notification
 ```
 
 **Use case:** You deleted the hub and re-added it, or you dismissed the notification and want to see the dashboard setup instructions again.
+
+## Available Sensors
+
+Energy Dispatcher provides several sensors for monitoring your energy system:
+
+### Baseline Load Sensors
+
+#### House Load Baseline Now
+- **Entity**: `sensor.house_load_baseline_now`
+- **Unit**: W (Watts)
+- **Description**: Current house baseline power consumption
+- **Attributes**:
+  - `method`: Calculation method (counter_kwh, power_w, or power_w_48h)
+  - `source_value`: Raw value from source sensor
+  - `baseline_kwh_per_h`: Baseline in kWh/h
+  - `exclusion_reason`: Reason if current sample is excluded (ev_charging, batt_grid_charge)
+
+#### House Load Baseline Night
+- **Entity**: `sensor.house_load_baseline_night`
+- **Unit**: W (Watts)
+- **Description**: Average house load during night hours (00:00-07:59)
+- **Note**: Only available when using 48-hour historical baseline (runtime_lookback_hours > 0)
+- **Purpose**: Provides accurate baseline for battery runtime calculations during night
+
+#### House Load Baseline Day
+- **Entity**: `sensor.house_load_baseline_day`
+- **Unit**: W (Watts)
+- **Description**: Average house load during day hours (08:00-15:59)
+- **Note**: Only available when using 48-hour historical baseline (runtime_lookback_hours > 0)
+- **Purpose**: Provides accurate baseline for battery runtime calculations during day
+
+#### House Load Baseline Evening
+- **Entity**: `sensor.house_load_baseline_evening`
+- **Unit**: W (Watts)
+- **Description**: Average house load during evening hours (16:00-23:59)
+- **Note**: Only available when using 48-hour historical baseline (runtime_lookback_hours > 0)
+- **Purpose**: Provides accurate baseline for battery runtime calculations during evening
+
+### Other Sensors
+
+See the main [README.md](../README.md) for a complete list of all available sensors including:
+- Battery runtime and cost tracking
+- Solar production and forecast
+- EV charging status
+- Price information
 
 ## Troubleshooting
 
