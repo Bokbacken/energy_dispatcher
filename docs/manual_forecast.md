@@ -74,6 +74,8 @@ The Manual PV Forecast Engine provides a free, physics-based alternative to Fore
 
 The engine automatically detects available weather data and uses the best path:
 
+**Note**: The engine requests **hourly forecast data** from your weather service when available (e.g., Met.no, OpenWeatherMap). This provides time-specific weather conditions for each forecast hour, resulting in more accurate predictions. If hourly forecast data is unavailable, the engine falls back to using current weather state.
+
 ### Tier 1: Irradiance Data (Excellent)
 **Best case**: Weather provider includes irradiance measurements
 - **Direct + Diffuse**: `direct_normal_irradiance` (DNI) + `diffuse_horizontal_irradiance` (DHI)

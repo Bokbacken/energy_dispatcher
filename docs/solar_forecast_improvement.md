@@ -17,7 +17,7 @@ This release introduces major improvements to solar forecasting in Energy Dispat
 ## How It Works
 
 - The integration fetches your solar forecast from Forecast.Solar as before.
-- It reads current or forecasted “cloudiness” from a selected weather entity.
+- It requests **hourly forecast data** from your weather entity (e.g., Met.no, OpenWeatherMap) to get time-specific cloudiness for each hour. If unavailable, it reads current cloudiness from the weather entity state.
 - The forecast is adjusted using your parameters for 0% and 100% cloud cover.
 - Both the raw and compensated forecasts are exposed as sensors for easy comparison.
 

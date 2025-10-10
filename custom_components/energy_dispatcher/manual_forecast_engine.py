@@ -648,12 +648,74 @@ class ManualForecastEngine:
         
         return azimuth_map.get(az_str, 180.0)
     
-    def _get_weather_data(self, dt: datetime) -> Dict[str, Optional[float]]:
+    async def _get_hourly_weather_forecast(self) -> Dict[datetime, Dict[str, float]]:
+        """
+        Get hourly weather forecast data from weather entity.
+        
+        Returns:
+            Dict mapping datetime to weather data dict with keys like 'cloud_coverage', 'temperature', etc.
+        """
+        if not self.weather_entity:
+            return {}
+        
+        try:
+            # Call weather.get_forecasts service to get hourly forecast
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {
+                    "entity_id": self.weather_entity,
+                    "type": "hourly",
+                },
+                blocking=True,
+                return_response=True,
+            )
+            
+            if not response or self.weather_entity not in response:
+                _LOGGER.debug("No forecast data returned from weather service for %s", self.weather_entity)
+                return {}
+            
+            forecast_data = response[self.weather_entity].get("forecast", [])
+            if not forecast_data:
+                _LOGGER.debug("Empty forecast data from weather service")
+                return {}
+            
+            # Build a dict mapping datetime to weather data
+            forecast_dict = {}
+            for entry in forecast_data:
+                if "datetime" in entry:
+                    try:
+                        # Parse datetime string (ISO 8601 format)
+                        dt_str = entry["datetime"]
+                        if isinstance(dt_str, str):
+                            # Parse ISO format datetime
+                            from homeassistant.util import dt as dt_util
+                            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+                            # Convert to local timezone
+                            dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
+                        else:
+                            dt = dt_str
+                        
+                        # Store the weather data
+                        forecast_dict[dt] = entry
+                    except (ValueError, TypeError) as e:
+                        _LOGGER.debug("Failed to parse datetime from forecast entry: %s", e)
+                        continue
+            
+            _LOGGER.debug("Retrieved %d hourly forecast points from weather service", len(forecast_dict))
+            return forecast_dict
+            
+        except Exception as e:
+            _LOGGER.debug("Failed to get hourly forecast from weather service: %s", e)
+            return {}
+    
+    def _get_weather_data(self, dt: datetime, hourly_forecast: Optional[Dict[datetime, Dict[str, float]]] = None) -> Dict[str, Optional[float]]:
         """
         Get weather data from entity at specified time.
         
         Args:
-            dt: Datetime to get weather for (currently uses current state)
+            dt: Datetime to get weather for
+            hourly_forecast: Optional dict of hourly forecast data (from _get_hourly_weather_forecast)
         
         Returns:
             Dict with weather fields (ghi, dni, dhi, cloud_cover, temperature, wind_speed)
@@ -670,6 +732,74 @@ class ManualForecastEngine:
         if not self.weather_entity:
             return data
         
+        # If hourly forecast is provided, try to use it first
+        if hourly_forecast:
+            # Find the closest forecast time
+            closest_forecast = None
+            min_diff = timedelta(hours=2)  # Search within 2 hours
+            
+            for forecast_time in hourly_forecast.keys():
+                diff = abs(dt - forecast_time)
+                if diff < min_diff:
+                    min_diff = diff
+                    closest_forecast = forecast_time
+            
+            if closest_forecast is not None:
+                forecast_entry = hourly_forecast[closest_forecast]
+                
+                # Get irradiance
+                if "global_horizontal_irradiance" in forecast_entry:
+                    try:
+                        data["ghi"] = float(forecast_entry["global_horizontal_irradiance"])
+                    except (ValueError, TypeError):
+                        pass
+                elif "shortwave_radiation" in forecast_entry:
+                    try:
+                        data["ghi"] = float(forecast_entry["shortwave_radiation"])
+                    except (ValueError, TypeError):
+                        pass
+                
+                if "direct_normal_irradiance" in forecast_entry:
+                    try:
+                        data["dni"] = float(forecast_entry["direct_normal_irradiance"])
+                    except (ValueError, TypeError):
+                        pass
+                
+                if "diffuse_horizontal_irradiance" in forecast_entry:
+                    try:
+                        data["dhi"] = float(forecast_entry["diffuse_horizontal_irradiance"])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Get cloud cover
+                for key in ["cloud_cover", "cloudiness", "cloud_coverage", "cloud"]:
+                    if key in forecast_entry:
+                        try:
+                            # Assume 0-100 scale
+                            data["cloud_cover"] = float(forecast_entry[key])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+                
+                # Get temperature
+                if "temperature" in forecast_entry:
+                    try:
+                        data["temperature"] = float(forecast_entry["temperature"])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Get wind speed
+                if "wind_speed" in forecast_entry:
+                    try:
+                        data["wind_speed"] = float(forecast_entry["wind_speed"])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # If we got data from forecast, return it
+                if any(v is not None for v in data.values()):
+                    return data
+        
+        # Fallback to current state if forecast is not available
         state = self.hass.states.get(self.weather_entity)
         if not state:
             return data
@@ -771,6 +901,13 @@ class ManualForecastEngine:
             self.lat, self.lon, len(self.planes), self.step_minutes, hours_ahead
         )
         
+        # Get hourly weather forecast once for all time steps
+        hourly_forecast = await self._get_hourly_weather_forecast()
+        if hourly_forecast:
+            _LOGGER.info("Using hourly weather forecast data for manual forecast (%d points)", len(hourly_forecast))
+        else:
+            _LOGGER.info("Hourly forecast not available, falling back to current weather state")
+        
         for i in range(num_steps):
             dt = start_time + timedelta(minutes=i * self.step_minutes)
             
@@ -782,8 +919,8 @@ class ManualForecastEngine:
                 forecast_points.append(ForecastPoint(time=dt, watts=0.0))
                 continue
             
-            # Get weather data
-            weather = self._get_weather_data(dt)
+            # Get weather data (with hourly forecast if available)
+            weather = self._get_weather_data(dt, hourly_forecast)
             
             # Calculate extraterrestrial DNI (Direct Normal Irradiance outside atmosphere)
             doy = dt.timetuple().tm_yday
