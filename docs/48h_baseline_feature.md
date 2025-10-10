@@ -1,67 +1,103 @@
-# 48-Hour Baseline with Time-of-Day Weighting
+# Simplified 48-Hour Baseline Using Energy Counters
 
 ## Overview
 
-This feature enhances the house load baseline calculation by using historical data from the last 48 hours instead of a simple exponential moving average (EMA). It provides more accurate and realistic battery runtime estimates by analyzing actual consumption patterns across different times of day.
+This feature calculates house load baseline using energy counter deltas over the last 48 hours. It provides more accurate and fail-safe battery runtime estimates by using cumulative energy readings (kWh) instead of instantaneous power samples.
 
 ## Key Features
 
-### 1. Historical Data Analysis
-- Analyzes power consumption data from the last 48 hours (configurable)
-- Uses Home Assistant's Recorder database for historical lookback
-- More realistic than EMA which can be too reactive to short-term changes
+### 1. Energy Counter-Based Calculation
+- Uses energy counters (kWh) with delta values over 48 hours (configurable)
+- Missing data points don't matter - only start and end values are needed
+- More robust than power-based sampling which requires continuous data
+- Simple and reliable approach
 
-### 2. Time-of-Day Weighting
-When enabled, calculates separate baselines for three distinct time periods:
+### 2. Time-of-Day Weighting (Optional)
+When enabled, provides separate baseline estimates for three distinct time periods:
 
 - **Night** (00:00-07:59): Typically lowest consumption (sleep hours)
 - **Day** (08:00-15:59): Daytime household activity
 - **Evening** (16:00-23:59): Peak hours (cooking, entertainment, etc.)
 
-This provides more accurate battery runtime estimates based on the current time of day.
+Note: Currently distributes the overall average evenly across time periods.
 
-### 3. Intelligent Exclusions
-The system automatically excludes from baseline calculations:
+### 3. Intelligent Exclusions via Energy Counters
+The system automatically excludes consumption from controllable loads:
 
-- **EV Charging**: Removes periods when EV was charging (> 100W)
-- **Battery Grid Charging**: Removes periods when battery was charging from grid (> 100W surplus beyond PV)
+- **EV Charging**: Subtracts energy charged to EV (from EV energy counter)
+- **Battery Grid Charging**: Subtracts battery charging from grid (battery charged - PV generated)
 
 This ensures the baseline reflects only "normal" household consumption.
 
 ## Configuration
 
-### Configuration Options
+### Required Configuration
+
+#### `runtime_counter_entity`
+- **Type**: Entity ID
+- **Required**: Yes
+- **Description**: Total house load energy counter (kWh)
+- **Example**: `sensor.house_total_energy`
+
+### Optional Configuration
+
+#### `evse_total_energy_sensor`
+- **Type**: Entity ID
+- **Optional**: Yes
+- **Description**: Total EV charging energy counter (kWh)
+- **Example**: `sensor.ev_total_energy`
+- **Used For**: Excluding EV charging from baseline
+
+#### `batt_total_charged_energy_entity`
+- **Type**: Entity ID
+- **Optional**: Yes
+- **Description**: Total battery charged energy counter (kWh)
+- **Example**: `sensor.battery_total_charged`
+- **Used For**: Excluding battery grid charging from baseline
+
+#### `pv_total_energy_entity`
+- **Type**: Entity ID
+- **Optional**: Yes
+- **Description**: Total PV generation energy counter (kWh)
+- **Example**: `sensor.pv_total_generation`
+- **Used For**: Calculating battery charging from PV vs grid
+
+### Calculation Options
 
 #### `runtime_lookback_hours`
-- **Type**: Integer (0-168)
+- **Type**: Integer (1-168)
 - **Default**: 48
 - **Description**: Number of hours to look back for calculating baseline
-- **Special**: Set to 0 to disable and use traditional EMA instead
+- **Note**: Larger values smooth out variations but reduce responsiveness
 
 #### `runtime_use_dayparts`
 - **Type**: Boolean
 - **Default**: True
-- **Description**: Enable time-of-day specific baseline calculations
-- **Effect**: Creates separate baselines for night/day/evening periods
+- **Description**: Enable time-of-day specific baseline estimates
+- **Effect**: Provides separate estimates for night/day/evening periods
 
-### Backward Compatibility
+#### `runtime_exclude_ev`
+- **Type**: Boolean
+- **Default**: True
+- **Description**: Exclude EV charging energy from baseline
+- **Requires**: `evse_total_energy_sensor` to be configured
 
-The feature is designed to be fully backward compatible:
-
-1. **Default Behavior**: New installations use 48-hour lookback by default
-2. **Legacy Support**: Setting `runtime_lookback_hours: 0` reverts to EMA mode
-3. **Counter Method**: The `counter_kwh` method continues to work as before
-4. **Existing Configs**: Existing configurations work without changes
+#### `runtime_exclude_batt_grid`
+- **Type**: Boolean
+- **Default**: True
+- **Description**: Exclude battery grid charging energy from baseline
+- **Requires**: `batt_total_charged_energy_entity` and `pv_total_energy_entity` to be configured
 
 ## New Sensors
 
 ### House Load Baseline Now
 - **Entity**: `sensor.house_load_baseline_now`
 - **Unit**: W (Watts)
-- **Description**: Overall baseline (48h average or current time-of-day specific)
+- **Description**: Overall baseline calculated from energy counter deltas
 - **Attributes**:
-  - `method`: Shows `power_w_48h` when using historical calculation
+  - `method`: Shows `energy_counter_48h` for the simplified calculation
   - `baseline_kwh_per_h`: Baseline in kWh/h
+  - `source_value`: Current house energy counter value (kWh)
 
 ### House Load Baseline Night
 - **Entity**: `sensor.house_load_baseline_night`
@@ -85,36 +121,55 @@ The feature is designed to be fully backward compatible:
 
 ### Data Flow
 
-1. **Historical Fetch**: Queries Recorder for power sensor data over lookback period
-2. **Sample Collection**: Collects all valid power readings with timestamps
-3. **Exclusion Check**: For each sample, checks if EV or battery grid charging was active
-4. **Time Classification**: Classifies each sample into night/day/evening based on hour
-5. **Average Calculation**: Calculates average for each period and overall
+1. **Historical Fetch**: Queries Recorder for energy counter values at start and end of lookback period
+2. **Delta Calculation**: Calculates energy consumed: `end_value - start_value`
+3. **Counter Reset Handling**: If delta is negative (counter reset), uses end value as approximation
+4. **Exclusion Calculation**: Subtracts EV and battery grid charging energy from total
+5. **Average Calculation**: Divides net consumption by lookback hours to get kWh/h
 6. **Clipping**: Ensures values are within reasonable range (0.05-5.0 kWh/h)
+
+### Calculation Formula
+
+```python
+# Get energy counter deltas
+house_delta = house_end - house_start
+ev_delta = ev_end - ev_start (if configured)
+batt_delta = batt_end - batt_start (if configured)
+pv_delta = pv_end - pv_start (if configured)
+
+# Calculate net house consumption
+net_house_kwh = house_delta
+if exclude_ev:
+    net_house_kwh -= ev_delta
+if exclude_batt_grid:
+    batt_grid_kwh = max(0, batt_delta - pv_delta)
+    net_house_kwh -= batt_grid_kwh
+
+# Calculate average rate
+baseline_kwh_per_h = net_house_kwh / lookback_hours
+```
 
 ### Exclusion Logic
 
 #### EV Charging Exclusion
 ```python
-if ev_power > 100W:
-    # Exclude this sample from baseline
+# Subtract total EV energy charged over the period
+net_consumption -= ev_total_energy_delta
 ```
 
 #### Battery Grid Charging Exclusion
 ```python
-if battery_power > 0:  # Charging
-    pv_surplus = max(0, pv_power - house_load)
-    grid_charge = max(0, battery_power - pv_surplus)
-    if grid_charge > 100W:
-        # Exclude this sample from baseline
+# Estimate grid charging: battery charged minus PV generated
+battery_grid_charge = max(0, battery_charged - pv_generated)
+net_consumption -= battery_grid_charge
 ```
 
-### Fallback Mechanism
+### Robustness Features
 
-If historical calculation fails:
-1. Logs debug message
-2. Falls back to traditional EMA calculation
-3. Ensures system continues to function
+- **Missing Data**: Only needs 2 data points (start and end), not continuous sampling
+- **Counter Resets**: Automatically handles daily/monthly counter resets
+- **No EMA Fallback**: Simple calculation always works if counters exist
+- **Fail-Safe**: Returns None if insufficient data, system continues operating
 
 ## Benefits
 
@@ -137,20 +192,32 @@ If historical calculation fails:
 
 ### Typical Configuration
 ```yaml
-runtime_source: power_w
-runtime_power_entity: sensor.house_power
+runtime_counter_entity: sensor.house_total_energy
+evse_total_energy_sensor: sensor.ev_total_energy
+batt_total_charged_energy_entity: sensor.battery_total_charged
+pv_total_energy_entity: sensor.pv_total_generation
 runtime_lookback_hours: 48
 runtime_use_dayparts: true
 runtime_exclude_ev: true
 runtime_exclude_batt_grid: true
 ```
 
-### Example Output
-With this configuration, you might see:
-- Overall baseline: 850W
-- Night baseline: 450W
-- Day baseline: 800W
-- Evening baseline: 1200W
+### Example Calculation
+Given these counter values over 48 hours:
+- House energy: 1000 kWh → 1058 kWh (58 kWh consumed)
+- EV energy: 500 kWh → 510 kWh (10 kWh charged)
+- Battery charged: 200 kWh → 210 kWh (10 kWh charged)
+- PV generated: 300 kWh → 305 kWh (5 kWh generated)
+
+Calculation:
+```
+Net house = 58 kWh (total house consumption)
+          - 10 kWh (EV charging)
+          - 5 kWh (battery grid charging: 10 charged - 5 from PV)
+          = 43 kWh over 48 hours
+          = 0.896 kWh/h average
+          ≈ 896W baseline
+```
 
 These values help the system:
 1. Calculate battery runtime more accurately
@@ -167,34 +234,48 @@ This provides a realistic estimate without suggesting more precision than the ca
 
 ## Troubleshooting
 
-### Baseline shows as "unavailable"
-- Check that `runtime_power_entity` is configured
-- Verify sensor has sufficient historical data (needs at least a few hours)
-- Check Home Assistant logs for errors
+### Baseline shows as "unknown"
+- Check that `runtime_counter_entity` is configured
+- Verify energy counter sensor exists and is reporting values
+- Check that sensor has at least 2 historical data points (start and end of period)
+- Check Home Assistant logs for detailed error messages
 
 ### Historical calculation not working
 - Ensure Recorder integration is enabled
-- Verify power sensor is being recorded
-- Check that lookback period doesn't exceed your retention period
-- System will fall back to EMA if historical fetch fails
+- Verify energy counter sensor is being recorded (check recorder configuration)
+- Check that lookback period doesn't exceed your recorder retention period
+- Verify counter values are numeric (not "unknown" or "unavailable")
 
-### Exclusions not working
-- Verify EV and battery power sensors are configured
-- Check sensor values are being reported correctly
-- Ensure sign convention is correct (use `batt_power_invert_sign` if needed)
+### Exclusions not working correctly
+- Verify optional energy counter sensors are configured correctly
+- Check that EV and battery energy sensors are cumulative counters (always increasing)
+- Verify PV generation sensor is also a cumulative counter
+- Check sensor units are in kWh (not Wh or MWh)
+
+### Counter reset issues
+- System automatically handles counter resets by using end value
+- If resets happen frequently, baseline may be less accurate
+- Consider using counters that don't reset, or use longer lookback periods
 
 ## Performance Considerations
 
 - Historical queries run every 5 minutes (coordinator update interval)
-- Queries are optimized to fetch only needed entities
-- Results are cached between updates
-- Minimal impact on system performance
+- Only fetches 2 data points per sensor (start and end of period)
+- Very lightweight compared to power-based sampling
+- Minimal impact on system performance and database
 
-## Future Enhancements
+## Advantages Over Power-Based Sampling
 
-Potential future improvements:
-- Configurable time period boundaries
-- Custom weighting factors for different periods
-- Integration with weather forecasts
-- Machine learning for pattern recognition
-- Seasonal adjustments
+1. **Robustness**: Missing data points don't affect calculation
+2. **Simplicity**: Only needs start and end values
+3. **Accuracy**: Uses actual energy consumed, not estimated from power
+4. **Efficiency**: Minimal database queries
+5. **Reliability**: No dependency on continuous power sensor readings
+
+## Migration from Power-Based Method
+
+If you were previously using `runtime_source: power_w`:
+1. Configure `runtime_counter_entity` with your house energy counter
+2. Optionally configure EV, battery, and PV energy counters for exclusions
+3. The system will automatically use the new energy counter method
+4. Remove `runtime_power_entity`, `load_power_entity`, and `batt_power_entity` (no longer used)
