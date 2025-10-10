@@ -7,6 +7,7 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN,
@@ -154,76 +155,172 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
 
     # Build schema with all fields visible regardless of forecast source selection
     schema_dict = {
-        vol.Required(CONF_NORDPOOL_ENTITY, default=d.get(CONF_NORDPOOL_ENTITY, "")): str,
-        vol.Optional(CONF_PRICE_TAX, default=d.get(CONF_PRICE_TAX, 0.0)): vol.Coerce(float),
-        vol.Optional(CONF_PRICE_TRANSFER, default=d.get(CONF_PRICE_TRANSFER, 0.0)): vol.Coerce(float),
-        vol.Optional(CONF_PRICE_SURCHARGE, default=d.get(CONF_PRICE_SURCHARGE, 0.0)): vol.Coerce(float),
-        vol.Optional(CONF_PRICE_VAT, default=d.get(CONF_PRICE_VAT, 0.25)): vol.Coerce(float),
-        vol.Optional(CONF_PRICE_FIXED_MONTHLY, default=d.get(CONF_PRICE_FIXED_MONTHLY, 0.0)): vol.Coerce(float),
-        vol.Optional(CONF_PRICE_INCLUDE_FIXED, default=d.get(CONF_PRICE_INCLUDE_FIXED, False)): bool,
+        vol.Required(CONF_NORDPOOL_ENTITY, default=d.get(CONF_NORDPOOL_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_PRICE_TAX, default=d.get(CONF_PRICE_TAX, 0.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=10, step=0.01, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_PRICE_TRANSFER, default=d.get(CONF_PRICE_TRANSFER, 0.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=10, step=0.01, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_PRICE_SURCHARGE, default=d.get(CONF_PRICE_SURCHARGE, 0.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=10, step=0.01, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_PRICE_VAT, default=d.get(CONF_PRICE_VAT, 0.25)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=1, step=0.01, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_PRICE_FIXED_MONTHLY, default=d.get(CONF_PRICE_FIXED_MONTHLY, 0.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=1000, step=1, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_PRICE_INCLUDE_FIXED, default=d.get(CONF_PRICE_INCLUDE_FIXED, False)): selector.BooleanSelector(),
 
-        vol.Required(CONF_BATT_CAP_KWH, default=d.get(CONF_BATT_CAP_KWH, 15.0)): vol.Coerce(float),
-        vol.Optional(CONF_BATT_CAPACITY_ENTITY, default=d.get(CONF_BATT_CAPACITY_ENTITY, "")): str,
-        vol.Required(CONF_BATT_SOC_ENTITY, default=d.get(CONF_BATT_SOC_ENTITY, "")): str,
-        vol.Optional(CONF_BATT_MAX_CHARGE_W, default=d.get(CONF_BATT_MAX_CHARGE_W, 4000)): vol.Coerce(int),
-        vol.Optional(CONF_BATT_MAX_DISCH_W, default=d.get(CONF_BATT_MAX_DISCH_W, 4000)): vol.Coerce(int),
-        vol.Optional(CONF_BATT_ADAPTER, default=d.get(CONF_BATT_ADAPTER, "huawei")): vol.In(["huawei"]),
-        vol.Optional(CONF_HUAWEI_DEVICE_ID, default=d.get(CONF_HUAWEI_DEVICE_ID, "")): str,
-        vol.Optional(CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY, default=d.get(CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY, "")): str,
-        vol.Optional(CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY, default=d.get(CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY, "")): str,
+        vol.Required(CONF_BATT_CAP_KWH, default=d.get(CONF_BATT_CAP_KWH, 15.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=1, max=100, step=0.5, unit_of_measurement="kWh", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_BATT_CAPACITY_ENTITY, default=d.get(CONF_BATT_CAPACITY_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Required(CONF_BATT_SOC_ENTITY, default=d.get(CONF_BATT_SOC_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_BATT_MAX_CHARGE_W, default=d.get(CONF_BATT_MAX_CHARGE_W, 4000)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=100, max=20000, step=100, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_BATT_MAX_DISCH_W, default=d.get(CONF_BATT_MAX_DISCH_W, 4000)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=100, max=20000, step=100, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_BATT_ADAPTER, default=d.get(CONF_BATT_ADAPTER, "huawei")): selector.SelectSelector(
+            selector.SelectSelectorConfig(options=["huawei"], mode=selector.SelectSelectorMode.DROPDOWN)
+        ),
+        vol.Optional(CONF_HUAWEI_DEVICE_ID, default=d.get(CONF_HUAWEI_DEVICE_ID, "")): selector.TextSelector(),
+        vol.Optional(CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY, default=d.get(CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY, default=d.get(CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
 
-        vol.Optional(CONF_EV_MODE, default=d.get(CONF_EV_MODE, "manual")): vol.In(["manual"]),
-        vol.Optional(CONF_EV_BATT_KWH, default=d.get(CONF_EV_BATT_KWH, 75.0)): vol.Coerce(float),
-        vol.Optional(CONF_EV_CURRENT_SOC, default=d.get(CONF_EV_CURRENT_SOC, 40.0)): vol.Coerce(float),
-        vol.Optional(CONF_EV_TARGET_SOC, default=d.get(CONF_EV_TARGET_SOC, 80.0)): vol.Coerce(float),
-        vol.Optional(CONF_EVSE_START_SWITCH, default=d.get(CONF_EVSE_START_SWITCH, "")): str,
-        vol.Optional(CONF_EVSE_STOP_SWITCH, default=d.get(CONF_EVSE_STOP_SWITCH, "")): str,
-        vol.Optional(CONF_EVSE_CURRENT_NUMBER, default=d.get(CONF_EVSE_CURRENT_NUMBER, "")): str,
-        vol.Optional(CONF_EVSE_MIN_A, default=d.get(CONF_EVSE_MIN_A, 6)): vol.Coerce(int),
-        vol.Optional(CONF_EVSE_MAX_A, default=d.get(CONF_EVSE_MAX_A, 16)): vol.Coerce(int),
-        vol.Optional(CONF_EVSE_PHASES, default=d.get(CONF_EVSE_PHASES, 3)): vol.Coerce(int),
-        vol.Optional(CONF_EVSE_VOLTAGE, default=d.get(CONF_EVSE_VOLTAGE, 230)): vol.Coerce(int),
-        vol.Optional(CONF_EVSE_POWER_SENSOR, default=d.get(CONF_EVSE_POWER_SENSOR, "")): str,
-        vol.Optional(CONF_EVSE_ENERGY_SENSOR, default=d.get(CONF_EVSE_ENERGY_SENSOR, "")): str,
-        vol.Optional(CONF_EVSE_TOTAL_ENERGY_SENSOR, default=d.get(CONF_EVSE_TOTAL_ENERGY_SENSOR, "")): str,
+        vol.Optional(CONF_EV_MODE, default=d.get(CONF_EV_MODE, "manual")): selector.SelectSelector(
+            selector.SelectSelectorConfig(options=["manual"], mode=selector.SelectSelectorMode.DROPDOWN)
+        ),
+        vol.Optional(CONF_EV_BATT_KWH, default=d.get(CONF_EV_BATT_KWH, 75.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=10, max=200, step=0.5, unit_of_measurement="kWh", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_EV_CURRENT_SOC, default=d.get(CONF_EV_CURRENT_SOC, 40.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=100, step=1, unit_of_measurement="%", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_EV_TARGET_SOC, default=d.get(CONF_EV_TARGET_SOC, 80.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=100, step=1, unit_of_measurement="%", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_EVSE_START_SWITCH, default=d.get(CONF_EVSE_START_SWITCH, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="switch")
+        ),
+        vol.Optional(CONF_EVSE_STOP_SWITCH, default=d.get(CONF_EVSE_STOP_SWITCH, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="switch")
+        ),
+        vol.Optional(CONF_EVSE_CURRENT_NUMBER, default=d.get(CONF_EVSE_CURRENT_NUMBER, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="number")
+        ),
+        vol.Optional(CONF_EVSE_MIN_A, default=d.get(CONF_EVSE_MIN_A, 6)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=6, max=32, step=1, unit_of_measurement="A", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_EVSE_MAX_A, default=d.get(CONF_EVSE_MAX_A, 16)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=6, max=32, step=1, unit_of_measurement="A", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_EVSE_PHASES, default=d.get(CONF_EVSE_PHASES, 3)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=1, max=3, step=2, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_EVSE_VOLTAGE, default=d.get(CONF_EVSE_VOLTAGE, 230)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=110, max=240, step=1, unit_of_measurement="V", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_EVSE_POWER_SENSOR, default=d.get(CONF_EVSE_POWER_SENSOR, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_EVSE_ENERGY_SENSOR, default=d.get(CONF_EVSE_ENERGY_SENSOR, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_EVSE_TOTAL_ENERGY_SENSOR, default=d.get(CONF_EVSE_TOTAL_ENERGY_SENSOR, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
 
         # Solar forecasting fields - all visible regardless of source selection
-        vol.Optional(CONF_FS_USE, default=d.get(CONF_FS_USE, True)): bool,
-        vol.Optional(CONF_FORECAST_SOURCE, default=d.get(CONF_FORECAST_SOURCE, "forecast_solar")): vol.In(["forecast_solar", "manual_physics"]),
-        vol.Optional(CONF_FS_LAT, default=d.get(CONF_FS_LAT, 56.6967208731)): vol.Coerce(float),
-        vol.Optional(CONF_FS_LON, default=d.get(CONF_FS_LON, 13.0196173488)): vol.Coerce(float),
-        vol.Optional(CONF_FS_PLANES, default=d.get(CONF_FS_PLANES, '[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]')): str,
-        vol.Optional(CONF_FS_HORIZON, default=d.get(CONF_FS_HORIZON, "18,16,11,7,5,4,3,2,2,4,7,10")): str,
+        vol.Optional(CONF_FS_USE, default=d.get(CONF_FS_USE, True)): selector.BooleanSelector(),
+        vol.Optional(CONF_FORECAST_SOURCE, default=d.get(CONF_FORECAST_SOURCE, "forecast_solar")): selector.SelectSelector(
+            selector.SelectSelectorConfig(options=["forecast_solar", "manual_physics"], mode=selector.SelectSelectorMode.DROPDOWN)
+        ),
+        vol.Optional(CONF_FS_LAT, default=d.get(CONF_FS_LAT, 56.6967208731)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=-90, max=90, step=0.0001, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_FS_LON, default=d.get(CONF_FS_LON, 13.0196173488)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=-180, max=180, step=0.0001, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_FS_PLANES, default=d.get(CONF_FS_PLANES, '[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]')): selector.TextSelector(
+            selector.TextSelectorConfig(multiline=True)
+        ),
+        vol.Optional(CONF_FS_HORIZON, default=d.get(CONF_FS_HORIZON, "18,16,11,7,5,4,3,2,2,4,7,10")): selector.TextSelector(),
         
         # Forecast.solar specific fields (always visible)
-        vol.Optional(CONF_FS_APIKEY, default=d.get(CONF_FS_APIKEY, "")): str,
-        vol.Optional(CONF_WEATHER_ENTITY, default=d.get(CONF_WEATHER_ENTITY, "")): weather_select,
-        vol.Optional(CONF_CLOUD_0, default=d.get(CONF_CLOUD_0, 250)): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
-        vol.Optional(CONF_CLOUD_100, default=d.get(CONF_CLOUD_100, 20)): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
+        vol.Optional(CONF_FS_APIKEY, default=d.get(CONF_FS_APIKEY, "")): selector.TextSelector(),
+        vol.Optional(CONF_WEATHER_ENTITY, default=d.get(CONF_WEATHER_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="weather")
+        ),
+        vol.Optional(CONF_CLOUD_0, default=d.get(CONF_CLOUD_0, 250)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=500, step=1, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_CLOUD_100, default=d.get(CONF_CLOUD_100, 20)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=500, step=1, mode=selector.NumberSelectorMode.BOX)
+        ),
         
         # Manual physics specific fields (always visible)
-        vol.Optional(CONF_MANUAL_STEP_MINUTES, default=d.get(CONF_MANUAL_STEP_MINUTES, 15)): vol.In([15, 30, 60]),
-        vol.Optional(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, default=d.get(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, 0.95)): vol.All(vol.Coerce(float), vol.Range(min=0.7, max=1.0)),
-        vol.Optional(CONF_MANUAL_TEMP_COEFF, default=d.get(CONF_MANUAL_TEMP_COEFF, -0.38)): vol.Coerce(float),
-        vol.Optional(CONF_MANUAL_INVERTER_AC_CAP, default=d.get(CONF_MANUAL_INVERTER_AC_CAP, None)): vol.Any(None, vol.Coerce(float)),
-        vol.Optional(CONF_MANUAL_CALIBRATION_ENABLED, default=d.get(CONF_MANUAL_CALIBRATION_ENABLED, False)): bool,
+        vol.Optional(CONF_MANUAL_STEP_MINUTES, default=d.get(CONF_MANUAL_STEP_MINUTES, 15)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=15, max=60, step=15, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, default=d.get(CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR, 0.95)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0.7, max=1.0, step=0.01, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_MANUAL_TEMP_COEFF, default=d.get(CONF_MANUAL_TEMP_COEFF, -0.38)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=-1.0, max=0.0, step=0.01, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_MANUAL_INVERTER_AC_CAP, default=d.get(CONF_MANUAL_INVERTER_AC_CAP, None)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=1, max=100, step=0.1, unit_of_measurement="kW", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_MANUAL_CALIBRATION_ENABLED, default=d.get(CONF_MANUAL_CALIBRATION_ENABLED, False)): selector.BooleanSelector(),
 
-        vol.Optional(CONF_PV_POWER_ENTITY, default=d.get(CONF_PV_POWER_ENTITY, "")): str,
-        vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d.get(CONF_PV_ENERGY_TODAY_ENTITY, "")): str,
-        vol.Optional(CONF_PV_TOTAL_ENERGY_ENTITY, default=d.get(CONF_PV_TOTAL_ENERGY_ENTITY, "")): str,
+        vol.Optional(CONF_PV_POWER_ENTITY, default=d.get(CONF_PV_POWER_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_PV_ENERGY_TODAY_ENTITY, default=d.get(CONF_PV_ENERGY_TODAY_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_PV_TOTAL_ENERGY_ENTITY, default=d.get(CONF_PV_TOTAL_ENERGY_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
 
-        vol.Optional(CONF_BATT_TOTAL_CHARGED_ENERGY_ENTITY, default=d.get(CONF_BATT_TOTAL_CHARGED_ENERGY_ENTITY, "")): str,
+        vol.Optional(CONF_BATT_TOTAL_CHARGED_ENERGY_ENTITY, default=d.get(CONF_BATT_TOTAL_CHARGED_ENERGY_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
         
-        vol.Optional(CONF_RUNTIME_COUNTER_ENTITY, default=d.get(CONF_RUNTIME_COUNTER_ENTITY, "")): str,
-        vol.Optional(CONF_GRID_IMPORT_TODAY_ENTITY, default=d.get(CONF_GRID_IMPORT_TODAY_ENTITY, "")): str,
-        vol.Optional(CONF_RUNTIME_LOOKBACK_HOURS, default=d.get(CONF_RUNTIME_LOOKBACK_HOURS, 48)): vol.Coerce(int),
-        vol.Optional(CONF_RUNTIME_USE_DAYPARTS, default=d.get(CONF_RUNTIME_USE_DAYPARTS, True)): bool,
-        vol.Optional(CONF_RUNTIME_EXCLUDE_EV, default=d.get(CONF_RUNTIME_EXCLUDE_EV, True)): bool,
-        vol.Optional(CONF_RUNTIME_EXCLUDE_BATT_GRID, default=d.get(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)): bool,
-        vol.Optional(CONF_RUNTIME_SOC_FLOOR, default=d.get(CONF_RUNTIME_SOC_FLOOR, 10)): vol.Coerce(float),
-        vol.Optional(CONF_RUNTIME_SOC_CEILING, default=d.get(CONF_RUNTIME_SOC_CEILING, 95)): vol.Coerce(float),
+        vol.Optional(CONF_RUNTIME_COUNTER_ENTITY, default=d.get(CONF_RUNTIME_COUNTER_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_GRID_IMPORT_TODAY_ENTITY, default=d.get(CONF_GRID_IMPORT_TODAY_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_RUNTIME_LOOKBACK_HOURS, default=d.get(CONF_RUNTIME_LOOKBACK_HOURS, 48)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=12, max=168, step=1, unit_of_measurement="hours", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_RUNTIME_USE_DAYPARTS, default=d.get(CONF_RUNTIME_USE_DAYPARTS, True)): selector.BooleanSelector(),
+        vol.Optional(CONF_RUNTIME_EXCLUDE_EV, default=d.get(CONF_RUNTIME_EXCLUDE_EV, True)): selector.BooleanSelector(),
+        vol.Optional(CONF_RUNTIME_EXCLUDE_BATT_GRID, default=d.get(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)): selector.BooleanSelector(),
+        vol.Optional(CONF_RUNTIME_SOC_FLOOR, default=d.get(CONF_RUNTIME_SOC_FLOOR, 10)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=100, step=1, unit_of_measurement="%", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_RUNTIME_SOC_CEILING, default=d.get(CONF_RUNTIME_SOC_CEILING, 95)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=100, step=1, unit_of_measurement="%", mode=selector.NumberSelectorMode.BOX)
+        ),
         
-        vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): bool,
+        vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): selector.BooleanSelector(),
     }
 
     return vol.Schema(schema_dict)
