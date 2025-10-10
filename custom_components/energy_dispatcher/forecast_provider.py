@@ -226,52 +226,165 @@ class ForecastSolarProvider:
         
         return raw, compensated
 
+    async def _get_hourly_weather_forecast(self) -> Dict[datetime, Dict[str, float]]:
+        """
+        Get hourly weather forecast data from weather entity.
+        
+        Returns:
+            Dict mapping datetime to weather data dict with keys like 'cloud_coverage', 'temperature', etc.
+        """
+        if not self.weather_entity:
+            return {}
+        
+        try:
+            # Call weather.get_forecasts service to get hourly forecast
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {
+                    "entity_id": self.weather_entity,
+                    "type": "hourly",
+                },
+                blocking=True,
+                return_response=True,
+            )
+            
+            if not response or self.weather_entity not in response:
+                _LOGGER.debug("No forecast data returned from weather service for %s", self.weather_entity)
+                return {}
+            
+            forecast_data = response[self.weather_entity].get("forecast", [])
+            if not forecast_data:
+                _LOGGER.debug("Empty forecast data from weather service")
+                return {}
+            
+            # Build a dict mapping datetime to weather data
+            forecast_dict = {}
+            for entry in forecast_data:
+                if "datetime" in entry:
+                    try:
+                        # Parse datetime string (ISO 8601 format)
+                        dt_str = entry["datetime"]
+                        if isinstance(dt_str, str):
+                            # Parse ISO format datetime
+                            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+                            # Convert to local timezone
+                            dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
+                        else:
+                            dt = dt_str
+                        
+                        # Store the weather data
+                        forecast_dict[dt] = entry
+                    except (ValueError, TypeError) as e:
+                        _LOGGER.debug("Failed to parse datetime from forecast entry: %s", e)
+                        continue
+            
+            _LOGGER.debug("Retrieved %d hourly forecast points from weather service", len(forecast_dict))
+            return forecast_dict
+            
+        except Exception as e:
+            _LOGGER.debug("Failed to get hourly forecast from weather service: %s", e)
+            return {}
+    
     async def _apply_cloud_compensation(self, raw: List[ForecastPoint]) -> List[ForecastPoint]:
         """
-        Apply cloud compensation to raw forecast based on weather entity cloudiness.
-        If no weather entity is configured, return a copy of raw data.
+        Apply cloud compensation to raw forecast based on weather entity hourly forecast.
+        If no weather entity is configured or hourly forecast is unavailable, falls back to current state.
         """
         if not self.weather_entity or not raw:
             return list(raw)
         
-        # Get current cloudiness from weather entity
-        state = self.hass.states.get(self.weather_entity)
-        if not state:
-            _LOGGER.debug("Weather entity %s not found, returning raw forecast", self.weather_entity)
-            return list(raw)
+        # Try to get hourly forecast data first
+        hourly_forecast = await self._get_hourly_weather_forecast()
         
-        attrs = state.attributes
-        cloudiness = None
+        if not hourly_forecast:
+            # Fallback to current state if hourly forecast is not available
+            _LOGGER.debug("Hourly forecast not available, falling back to current state")
+            state = self.hass.states.get(self.weather_entity)
+            if not state:
+                _LOGGER.debug("Weather entity %s not found, returning raw forecast", self.weather_entity)
+                return list(raw)
+            
+            attrs = state.attributes
+            cloudiness = None
+            
+            # Try to get cloudiness from various possible attribute names
+            for key in ["cloudiness", "cloud_coverage", "cloud_cover", "cloud"]:
+                if key in attrs:
+                    try:
+                        cloudiness = float(attrs[key])
+                        break
+                    except (ValueError, TypeError):
+                        continue
+            
+            if cloudiness is None:
+                _LOGGER.debug("No cloudiness data in weather entity %s, returning raw forecast", self.weather_entity)
+                return list(raw)
+            
+            # Ensure cloudiness is in range 0-100
+            cloudiness = max(0.0, min(100.0, cloudiness))
+            
+            # Calculate compensation factor
+            factor_percent = self.cloud_0_factor - (cloudiness / 100.0) * (self.cloud_0_factor - self.cloud_100_factor)
+            factor = factor_percent / 100.0
+            
+            _LOGGER.debug("Cloud compensation (current state): cloudiness=%.1f%%, factor=%.2f", cloudiness, factor)
+            
+            # Apply same factor to all forecast points
+            compensated = [
+                ForecastPoint(time=point.time, watts=point.watts * factor)
+                for point in raw
+            ]
+            
+            return compensated
         
-        # Try to get cloudiness from various possible attribute names
-        for key in ["cloudiness", "cloud_coverage", "cloud_cover", "cloud"]:
-            if key in attrs:
-                try:
-                    cloudiness = float(attrs[key])
-                    break
-                except (ValueError, TypeError):
-                    continue
+        # Use hourly forecast data to apply time-varying compensation
+        _LOGGER.debug("Using hourly forecast data for cloud compensation")
+        compensated = []
         
-        if cloudiness is None:
-            _LOGGER.debug("No cloudiness data in weather entity %s, returning raw forecast", self.weather_entity)
-            return list(raw)
+        for point in raw:
+            # Find the closest forecast time (within 1 hour)
+            closest_forecast = None
+            min_diff = timedelta(hours=2)  # Search within 2 hours
+            
+            for forecast_time in hourly_forecast.keys():
+                diff = abs(point.time - forecast_time)
+                if diff < min_diff:
+                    min_diff = diff
+                    closest_forecast = forecast_time
+            
+            if closest_forecast is None:
+                # No close forecast found, use raw value
+                compensated.append(point)
+                continue
+            
+            # Get cloudiness from forecast
+            forecast_entry = hourly_forecast[closest_forecast]
+            cloudiness = None
+            
+            # Try to get cloudiness from various possible attribute names
+            for key in ["cloudiness", "cloud_coverage", "cloud_cover", "cloud"]:
+                if key in forecast_entry:
+                    try:
+                        cloudiness = float(forecast_entry[key])
+                        break
+                    except (ValueError, TypeError):
+                        continue
+            
+            if cloudiness is None:
+                # No cloudiness in this forecast entry, use raw value
+                compensated.append(point)
+                continue
+            
+            # Ensure cloudiness is in range 0-100
+            cloudiness = max(0.0, min(100.0, cloudiness))
+            
+            # Calculate compensation factor
+            factor_percent = self.cloud_0_factor - (cloudiness / 100.0) * (self.cloud_0_factor - self.cloud_100_factor)
+            factor = factor_percent / 100.0
+            
+            # Apply factor to this point
+            compensated.append(ForecastPoint(time=point.time, watts=point.watts * factor))
         
-        # Ensure cloudiness is in range 0-100
-        cloudiness = max(0.0, min(100.0, cloudiness))
-        
-        # Calculate compensation factor
-        # cloud_0_factor (default 250) = 2.5x at 0% clouds (clear sky)
-        # cloud_100_factor (default 20) = 0.2x at 100% clouds (overcast)
-        # Linear interpolation between the two
-        factor_percent = self.cloud_0_factor - (cloudiness / 100.0) * (self.cloud_0_factor - self.cloud_100_factor)
-        factor = factor_percent / 100.0
-        
-        _LOGGER.debug("Cloud compensation: cloudiness=%.1f%%, factor=%.2f", cloudiness, factor)
-        
-        # Apply factor to all forecast points
-        compensated = [
-            ForecastPoint(time=point.time, watts=point.watts * factor)
-            for point in raw
-        ]
-        
+        _LOGGER.debug("Cloud compensation complete using hourly forecast data")
         return compensated
