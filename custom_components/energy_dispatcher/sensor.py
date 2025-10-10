@@ -21,6 +21,9 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     entities = [
         EnrichedPriceSensor(coordinator, entry.entry_id),
         HouseBaselineSensor(coordinator, entry.entry_id),
+        BaselineNightSensor(coordinator, entry.entry_id),
+        BaselineDaySensor(coordinator, entry.entry_id),
+        BaselineEveningSensor(coordinator, entry.entry_id),
         BatteryRuntimeSensor(coordinator, entry.entry_id),
         BatteryCostSensor(coordinator, entry.entry_id),
         BatteryVsGridDeltaSensor(coordinator, entry.entry_id),
@@ -125,6 +128,72 @@ class HouseBaselineSensor(BaseEDSensor):
             "source_value": self.coordinator.data.get("baseline_source_value"),
             "baseline_kwh_per_h": self.coordinator.data.get("baseline_kwh_per_h"),
             "exclusion_reason": self.coordinator.data.get("baseline_exclusion_reason"),
+        }
+
+
+class BaselineNightSensor(BaseEDSensor):
+    _attr_name = "House Load Baseline Night"
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:weather-night"
+    _attr_device_class = "power"
+    _attr_state_class = "measurement"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_baseline_night_w_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("baseline_night_w")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "time_period": "00:00-07:59",
+        }
+
+
+class BaselineDaySensor(BaseEDSensor):
+    _attr_name = "House Load Baseline Day"
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:white-balance-sunny"
+    _attr_device_class = "power"
+    _attr_state_class = "measurement"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_baseline_day_w_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("baseline_day_w")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "time_period": "08:00-15:59",
+        }
+
+
+class BaselineEveningSensor(BaseEDSensor):
+    _attr_name = "House Load Baseline Evening"
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:weather-sunset"
+    _attr_device_class = "power"
+    _attr_state_class = "measurement"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_baseline_evening_w_{self._entry_id}"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("baseline_evening_w")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "time_period": "16:00-23:59",
         }
 
 

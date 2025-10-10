@@ -92,6 +92,10 @@ CONF_RUNTIME_EXCLUDE_BATT_GRID = "runtime_exclude_batt_grid"
 CONF_RUNTIME_SOC_FLOOR = "runtime_soc_floor"
 CONF_RUNTIME_SOC_CEILING = "runtime_soc_ceiling"
 
+# 48-hour historical baseline with time-of-day weighting
+CONF_RUNTIME_LOOKBACK_HOURS = "runtime_lookback_hours"  # Default 48
+CONF_RUNTIME_USE_DAYPARTS = "runtime_use_dayparts"  # Enable time-of-day weighting
+
 # Kontextsensors för exkludering
 CONF_LOAD_POWER_ENTITY = "load_power_entity"  # W
 CONF_BATT_POWER_ENTITY = "batt_power_entity"  # W (+ ladd, - urladd)
