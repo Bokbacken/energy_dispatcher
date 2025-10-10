@@ -366,6 +366,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         # Get the power entity
         ent = self._get_cfg(CONF_RUNTIME_POWER_ENTITY, "") or self._get_cfg(CONF_LOAD_POWER_ENTITY, "") or self._get_cfg(CONF_HOUSE_CONS_SENSOR, "")
         if not ent:
+            _LOGGER.debug(
+                "48h baseline: No power entity configured (runtime_power_entity, load_power_entity, or house_cons_sensor)"
+            )
             return None
             
         try:
@@ -553,6 +556,13 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             if baseline_48h:
                 # Use 48h historical baseline
                 visible_kwh_h = baseline_48h.get("overall")
+                _LOGGER.debug(
+                    "48h baseline calculation succeeded: overall=%s night=%s day=%s evening=%s",
+                    baseline_48h.get("overall"),
+                    baseline_48h.get("night"),
+                    baseline_48h.get("day"),
+                    baseline_48h.get("evening"),
+                )
                 
                 # Get current hour daypart for displaying relevant baseline
                 current_hour = now.hour
@@ -563,9 +573,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 day_w = baseline_48h.get("day")
                 evening_w = baseline_48h.get("evening")
                 
-                self.data["baseline_night_w"] = round(night_w * 1000.0, 1) if night_w else None
-                self.data["baseline_day_w"] = round(day_w * 1000.0, 1) if day_w else None
-                self.data["baseline_evening_w"] = round(evening_w * 1000.0, 1) if evening_w else None
+                self.data["baseline_night_w"] = round(night_w * 1000.0, 1) if night_w is not None else None
+                self.data["baseline_day_w"] = round(day_w * 1000.0, 1) if day_w is not None else None
+                self.data["baseline_evening_w"] = round(evening_w * 1000.0, 1) if evening_w is not None else None
                 
                 # Get current sensor value for display
                 ent = self._get_cfg(CONF_RUNTIME_POWER_ENTITY, "") or self._get_cfg(CONF_LOAD_POWER_ENTITY, "") or self._get_cfg(CONF_HOUSE_CONS_SENSOR, "")
@@ -589,12 +599,20 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 )
             else:
                 # Fall back to EMA if 48h calculation fails
+                _LOGGER.info(
+                    "48h baseline calculation returned None - falling back to EMA mode. "
+                    "Check that runtime_power_entity is configured and has historical data."
+                )
                 visible_kwh_h = None
         else:
             visible_kwh_h = None
 
         # Fallback to original EMA logic if 48h didn't work or not configured
         if visible_kwh_h is None:
+            _LOGGER.debug(
+                "Entering EMA fallback mode: method=%s lookback_hours=%d",
+                method, lookback_hours
+            )
             if method == "counter_kwh":
                 ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
                 st = self.hass.states.get(ent) if ent else None
