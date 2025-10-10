@@ -132,6 +132,7 @@ DEFAULTS = {
     CONF_RUNTIME_SOURCE: "counter_kwh",
     CONF_RUNTIME_COUNTER_ENTITY: "",
     CONF_RUNTIME_POWER_ENTITY: "",
+    # Legacy EMA parameters kept for backward compatibility but not exposed in UI
     CONF_RUNTIME_ALPHA: 0.2,
     CONF_RUNTIME_WINDOW_MIN: 15,
     CONF_RUNTIME_EXCLUDE_EV: True,
@@ -228,8 +229,6 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         vol.Optional(CONF_BATT_POWER_ENTITY, default=d.get(CONF_BATT_POWER_ENTITY, "")): str,
         vol.Optional(CONF_BATT_POWER_INVERT_SIGN, default=d.get(CONF_BATT_POWER_INVERT_SIGN, False)): bool,
         vol.Optional(CONF_GRID_IMPORT_TODAY_ENTITY, default=d.get(CONF_GRID_IMPORT_TODAY_ENTITY, "")): str,
-        vol.Optional(CONF_RUNTIME_ALPHA, default=d.get(CONF_RUNTIME_ALPHA, 0.2)): vol.Coerce(float),
-        vol.Optional(CONF_RUNTIME_WINDOW_MIN, default=d.get(CONF_RUNTIME_WINDOW_MIN, 15)): vol.Coerce(int),
         vol.Optional(CONF_RUNTIME_LOOKBACK_HOURS, default=d.get(CONF_RUNTIME_LOOKBACK_HOURS, 48)): vol.Coerce(int),
         vol.Optional(CONF_RUNTIME_USE_DAYPARTS, default=d.get(CONF_RUNTIME_USE_DAYPARTS, True)): bool,
         vol.Optional(CONF_RUNTIME_EXCLUDE_EV, default=d.get(CONF_RUNTIME_EXCLUDE_EV, True)): bool,

@@ -85,8 +85,9 @@ CONF_PV_ENERGY_TODAY_ENTITY = "pv_energy_today_entity" # Wh/kWh/MWh
 CONF_RUNTIME_SOURCE = "runtime_source"  # power_w | counter_kwh | manual_dayparts
 CONF_RUNTIME_COUNTER_ENTITY = "runtime_counter_entity"
 CONF_RUNTIME_POWER_ENTITY = "runtime_power_entity"
-CONF_RUNTIME_ALPHA = "runtime_alpha"
-CONF_RUNTIME_WINDOW_MIN = "runtime_window_min"
+# Legacy EMA parameters (kept for backward compatibility, not exposed in UI)
+CONF_RUNTIME_ALPHA = "runtime_alpha"  # EMA smoothing factor (0-1) - only used when lookback_hours=0
+CONF_RUNTIME_WINDOW_MIN = "runtime_window_min"  # Calculation window (minutes) - only used in bootstrap
 CONF_RUNTIME_EXCLUDE_EV = "runtime_exclude_ev"
 CONF_RUNTIME_EXCLUDE_BATT_GRID = "runtime_exclude_batt_grid"
 CONF_RUNTIME_SOC_FLOOR = "runtime_soc_floor"
