@@ -692,7 +692,18 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             span = max(1.0, soc_ceil - soc_floor)
             usable = max(0.0, min(1.0, (soc_state - soc_floor) / span))
             energy_kwh = usable * batt_cap
-            runtime_h = round(energy_kwh / visible_kwh_h, 2) if visible_kwh_h > 0 else None
+            raw_runtime_h = energy_kwh / visible_kwh_h if visible_kwh_h > 0 else None
+            
+            # Round to appropriate precision: 15-min intervals for >= 2h, 5-min for < 2h
+            if raw_runtime_h is not None:
+                if raw_runtime_h >= 2.0:
+                    # Round to nearest 15 minutes (0.25 hours)
+                    runtime_h = round(raw_runtime_h * 4) / 4
+                else:
+                    # Round to nearest 5 minutes (1/12 hours)
+                    runtime_h = round(raw_runtime_h * 12) / 12
+            else:
+                runtime_h = None
         else:
             runtime_h = None
 

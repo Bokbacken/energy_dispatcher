@@ -157,6 +157,14 @@ These values help the system:
 2. Understand consumption patterns
 3. Make better charging decisions
 
+### Battery Runtime Precision
+
+Battery runtime estimates are rounded to appropriate precision to avoid false accuracy:
+- **>= 2 hours**: Rounded to 15-minute intervals (e.g., 5.75h, 3.25h, 2.50h)
+- **< 2 hours**: Rounded to 5-minute intervals (e.g., 1.83h, 1.42h, 0.75h)
+
+This provides a realistic estimate without suggesting more precision than the calculation can provide.
+
 ## Troubleshooting
 
 ### Baseline shows as "unavailable"
