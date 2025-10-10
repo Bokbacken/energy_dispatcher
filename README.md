@@ -115,6 +115,9 @@ The [Dashboard Guide](./docs/dashboard_guide.md) explains:
 - [Future Improvements](./docs/future_improvements.md) - Planned usability enhancements
 - [Changelog](./CHANGELOG.md) - Version history
 
+### Troubleshooting
+- [Diagnostic Guide](./DIAGNOSTIC_GUIDE.md) 🔧 **Baseline Sensor Issues** - Fix "unknown" baseline values
+
 ## Quick Start Examples
 
 ### Example 1: Tesla Model Y with Deadline Charging
