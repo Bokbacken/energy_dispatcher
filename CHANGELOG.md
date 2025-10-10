@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 ### Added
+- **Enhanced Diagnostic Logging**: Added comprehensive logging for 48h baseline calculation to help troubleshoot issues
+  - Logs when 48h calculation succeeds with all daypart values
+  - Logs when falling back to EMA mode with helpful guidance
+  - Logs when power entity is not configured
+  - Logs when entering EMA fallback mode for debugging
+
+### Fixed
+- **48h Baseline Daypart Sensors**: Fixed bug where daypart sensors (Night/Day/Evening) showed "unknown" instead of values
+  - Root cause: Falsy check (`if night_w`) treated 0 as False instead of checking for None
+  - Fix: Changed to explicit None check (`if night_w is not None`)
+  - Impact: Even 0W baselines now display correctly instead of showing "unknown"
+
+### Changed
+- **Configuration Cleanup**: Removed deprecated EMA parameters from configuration UI
+  - Removed `runtime_alpha` (EMA Smoothing Factor 0-1) from config flow
+  - Removed `runtime_window_min` (Calculation Windows minutes) from config flow
+  - These parameters are kept in code for backward compatibility (EMA fallback mode)
+  - Existing configurations will continue to work without changes
+
+### Removed
+- **Code Cleanup**: Archived unused files to `archive/` directory
+  - `planner.py`: simple_plan() function was never imported or used
+  - `vehicle_manager.py`: VehicleManager class was never imported or used
+  - Files can be restored from archive if needed in the future
+
+### Added
 - **Automated Dashboard Setup Assistance**: New users now receive a helpful welcome notification
   - Persistent notification appears after integration setup with dashboard guidance
   - Provides direct link to comprehensive Dashboard Setup Guide
