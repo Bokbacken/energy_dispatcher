@@ -63,14 +63,56 @@ class Test48HourBaseline:
     """Test 48-hour baseline calculation."""
     
     @pytest.mark.asyncio
+    async def test_no_counter_configured(self, coordinator, mock_hass):
+        """Test diagnostic reason when no energy counter is configured."""
+        # Remove counter entity from config
+        mock_hass.data["energy_dispatcher"]["test_entry"]["config"]["runtime_counter_entity"] = ""
+        
+        result = await coordinator._calculate_48h_baseline()
+        assert result is not None
+        assert result.get("overall") is None
+        assert result.get("failure_reason") == "No house energy counter configured (runtime_counter_entity)"
+    
+    @pytest.mark.asyncio
     async def test_no_historical_data(self, coordinator, mock_hass):
-        """Test that None is returned when no historical data is available."""
+        """Test that diagnostic reason is returned when no historical data is available."""
         # Mock empty history
         with patch('homeassistant.components.recorder.history'):
             mock_hass.async_add_executor_job = AsyncMock(return_value={})
             
             result = await coordinator._calculate_48h_baseline()
-            assert result is None
+            assert result is not None
+            assert result.get("overall") is None
+            assert result.get("failure_reason") == "Insufficient historical data: 0 data points (need 2+)"
+    
+    @pytest.mark.asyncio
+    async def test_invalid_sensor_values(self, coordinator, mock_hass):
+        """Test diagnostic reason when sensor values are invalid (unknown/unavailable)."""
+        now = datetime.now()
+        
+        # House energy counter with invalid values
+        house_states = []
+        start_state = MagicMock()
+        start_state.state = "unknown"
+        start_state.last_changed = now - timedelta(hours=48)
+        house_states.append(start_state)
+        
+        end_state = MagicMock()
+        end_state.state = "unavailable"
+        end_state.last_changed = now
+        house_states.append(end_state)
+        
+        history_data = {
+            "sensor.house_energy": house_states
+        }
+        
+        with patch('homeassistant.components.recorder.history'):
+            mock_hass.async_add_executor_job = AsyncMock(return_value=history_data)
+            
+            result = await coordinator._calculate_48h_baseline()
+            assert result is not None
+            assert result.get("overall") is None
+            assert "Invalid sensor values" in result.get("failure_reason", "")
     
     @pytest.mark.asyncio
     async def test_baseline_calculation_with_data(self, coordinator, mock_hass):

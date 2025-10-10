@@ -323,6 +323,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         """
         Calculate baseline from last 48 hours using energy counter deltas.
         Returns dict with keys: overall, night, day, evening (all in kWh/h).
+        Also includes 'failure_reason' key if calculation fails.
         Uses energy counters (kWh) to calculate consumption, excluding EV charging 
         and battery grid charging based on their respective energy counters.
         """
@@ -335,7 +336,13 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             _LOGGER.debug(
                 "48h baseline: No house energy counter configured (runtime_counter_entity)"
             )
-            return None
+            return {
+                "overall": None,
+                "night": None,
+                "day": None,
+                "evening": None,
+                "failure_reason": "No house energy counter configured (runtime_counter_entity)"
+            }
         
         # Get optional energy counter entities for exclusions
         ev_energy_ent = self._get_cfg(CONF_EVSE_TOTAL_ENERGY_SENSOR, "")
@@ -367,8 +374,19 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             
             house_states = all_hist.get(house_energy_ent, [])
             if not house_states or len(house_states) < 2:
-                _LOGGER.debug("No historical data available for baseline calculation (need at least 2 data points)")
-                return None
+                _LOGGER.warning(
+                    "48h baseline: No historical data available for %s (need at least 2 data points, got %d). "
+                    "Check: (1) Sensor exists and reports values, (2) Recorder is enabled, "
+                    "(3) Recorder retention period >= %d hours",
+                    house_energy_ent, len(house_states), lookback_hours
+                )
+                return {
+                    "overall": None,
+                    "night": None,
+                    "day": None,
+                    "evening": None,
+                    "failure_reason": f"Insufficient historical data: {len(house_states)} data points (need 2+)"
+                }
             
             # Get energy counter states for exclusions
             ev_states = all_hist.get(ev_energy_ent, []) if ev_energy_ent and exclude_ev else []
@@ -380,8 +398,18 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             house_end = _safe_float(house_states[-1].state)
             
             if house_start is None or house_end is None:
-                _LOGGER.debug("Invalid house energy counter values")
-                return None
+                _LOGGER.warning(
+                    "48h baseline: Invalid house energy counter values for %s (start=%s, end=%s). "
+                    "Check: Sensor reports numeric values (not 'unknown', 'unavailable')",
+                    house_energy_ent, house_start, house_end
+                )
+                return {
+                    "overall": None,
+                    "night": None,
+                    "day": None,
+                    "evening": None,
+                    "failure_reason": f"Invalid sensor values: start={house_start}, end={house_end}"
+                }
             
             # Calculate total house energy consumed (handle counter resets)
             house_delta = house_end - house_start
@@ -466,7 +494,13 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             
         except Exception as e:
             _LOGGER.warning("Failed to calculate 48h baseline: %s", e, exc_info=True)
-            return None
+            return {
+                "overall": None,
+                "night": None,
+                "day": None,
+                "evening": None,
+                "failure_reason": f"Exception during calculation: {str(e)}"
+            }
 
     async def _update_baseline_and_runtime(self):
         """
@@ -482,7 +516,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
 
         # Calculate baseline using 48h energy counter deltas
         baseline_48h = await self._calculate_48h_baseline()
-        if baseline_48h:
+        if baseline_48h and baseline_48h.get("overall") is not None:
             # Use 48h historical baseline
             visible_kwh_h = baseline_48h.get("overall")
             _LOGGER.debug(
@@ -523,17 +557,23 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             )
         else:
             # 48h calculation failed - set all to None with diagnostic message
+            failure_reason = baseline_48h.get("failure_reason", "Unknown error") if baseline_48h else "No result returned"
             _LOGGER.warning(
-                "48h baseline calculation failed. Sensors will show 'unknown'. "
-                "Check: (1) runtime_counter_entity is configured, "
-                "(2) sensor has historical data in Recorder, "
-                "(3) Recorder retention period is sufficient."
+                "48h baseline calculation failed: %s. Sensors will show 'unknown'. "
+                "Check Home Assistant logs for detailed diagnostics.",
+                failure_reason
             )
+            
+            # Get current house energy counter value for diagnostic display
+            house_energy_ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
+            st = self.hass.states.get(house_energy_ent) if house_energy_ent else None
+            source_val = _safe_float(st.state) if st else None
+            
             self.data["house_baseline_w"] = None
             self.data["baseline_method"] = "energy_counter_48h"
-            self.data["baseline_source_value"] = None
+            self.data["baseline_source_value"] = source_val
             self.data["baseline_kwh_per_h"] = None
-            self.data["baseline_exclusion_reason"] = ""
+            self.data["baseline_exclusion_reason"] = failure_reason
             self.data["baseline_night_w"] = None
             self.data["baseline_day_w"] = None
             self.data["baseline_evening_w"] = None
