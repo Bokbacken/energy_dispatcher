@@ -6,6 +6,13 @@
   - Logs when 48h calculation succeeds with all daypart values
   - Logs WARNING when 48h calculation fails with specific checks to perform
   - Logs when power entity is not configured
+  - **New**: Failure reason now displayed in sensor attribute `exclusion_reason` for easy debugging
+  - **New**: Enhanced diagnostic messages with specific guidance for common issues:
+    - "No house energy counter configured (runtime_counter_entity)"
+    - "Insufficient historical data: X data points (need 2+)"
+    - "Invalid sensor values: start=X, end=Y"
+    - "Exception during calculation: <error message>"
+  - **New**: Source value now shows even when calculation fails (shows current counter value for verification)
 
 ### Fixed
 - **48h Baseline Daypart Sensors**: Fixed bug where daypart sensors (Night/Day/Evening) showed "unknown" instead of values
