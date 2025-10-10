@@ -34,6 +34,7 @@ from .const import (
     # PV actual
     CONF_PV_POWER_ENTITY,
     CONF_PV_ENERGY_TODAY_ENTITY,
+    CONF_PV_TOTAL_ENERGY_ENTITY,
     # EV/EVSE param
     CONF_EVSE_MIN_A,
     CONF_EVSE_MAX_A,
@@ -41,17 +42,15 @@ from .const import (
     CONF_EVSE_VOLTAGE,
     CONF_EVSE_START_SWITCH,
     CONF_EVSE_CURRENT_NUMBER,
+    CONF_EVSE_TOTAL_ENERGY_SENSOR,
+    CONF_EVSE_POWER_SENSOR,
     # Baseline
-    CONF_RUNTIME_SOURCE,
     CONF_RUNTIME_COUNTER_ENTITY,
-    CONF_RUNTIME_POWER_ENTITY,
     CONF_RUNTIME_EXCLUDE_EV,
     CONF_RUNTIME_EXCLUDE_BATT_GRID,
     CONF_RUNTIME_SOC_FLOOR,
     CONF_RUNTIME_SOC_CEILING,
-    CONF_LOAD_POWER_ENTITY,
-    CONF_BATT_POWER_ENTITY,
-    CONF_BATT_POWER_INVERT_SIGN,
+    CONF_BATT_TOTAL_CHARGED_ENERGY_ENTITY,
     CONF_GRID_IMPORT_TODAY_ENTITY,
     CONF_RUNTIME_LOOKBACK_HOURS,
     CONF_RUNTIME_USE_DAYPARTS,
@@ -322,20 +321,29 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
 
     async def _calculate_48h_baseline(self) -> Optional[Dict[str, Optional[float]]]:
         """
-        Calculate baseline from last 48 hours with time-of-day weighting.
+        Calculate baseline from last 48 hours using energy counter deltas.
         Returns dict with keys: overall, night, day, evening (all in kWh/h).
-        Excludes EV charging and battery grid charging periods.
+        Uses energy counters (kWh) to calculate consumption, excluding EV charging 
+        and battery grid charging based on their respective energy counters.
         """
         lookback_hours = int(self._get_cfg(CONF_RUNTIME_LOOKBACK_HOURS, 48))
         use_dayparts = bool(self._get_cfg(CONF_RUNTIME_USE_DAYPARTS, True))
         
-        # Get the power entity
-        ent = self._get_cfg(CONF_RUNTIME_POWER_ENTITY, "") or self._get_cfg(CONF_LOAD_POWER_ENTITY, "") or self._get_cfg(CONF_HOUSE_CONS_SENSOR, "")
-        if not ent:
+        # Get the required energy counter entities
+        house_energy_ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
+        if not house_energy_ent:
             _LOGGER.debug(
-                "48h baseline: No power entity configured (runtime_power_entity, load_power_entity, or house_cons_sensor)"
+                "48h baseline: No house energy counter configured (runtime_counter_entity)"
             )
             return None
+        
+        # Get optional energy counter entities for exclusions
+        ev_energy_ent = self._get_cfg(CONF_EVSE_TOTAL_ENERGY_SENSOR, "")
+        batt_energy_ent = self._get_cfg(CONF_BATT_TOTAL_CHARGED_ENERGY_ENTITY, "")
+        pv_energy_ent = self._get_cfg(CONF_PV_TOTAL_ENERGY_ENTITY, "")
+        
+        exclude_ev = bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_EV, True))
+        exclude_batt_grid = bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_BATT_GRID, True))
             
         try:
             from homeassistant.components.recorder import history
@@ -343,286 +351,186 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             end = dt_util.now()
             start = end - timedelta(hours=lookback_hours)
             
-            # Fetch historical data for house load
-            hist = await self.hass.async_add_executor_job(
-                history.state_changes_during_period, self.hass, start, end, {ent}
-            )
-            states = hist.get(ent, [])
-            
-            if not states:
-                _LOGGER.debug("No historical data available for baseline calculation")
-                return None
-            
-            # Also fetch EV charging and battery power data for exclusions
-            ev_power_ent = self._get_cfg(CONF_EVSE_POWER_SENSOR, "")
-            batt_power_ent = self._get_cfg(CONF_BATT_POWER_ENTITY, "")
-            pv_power_ent = self._get_cfg(CONF_PV_POWER_ENTITY, "")
-            
-            entities_to_fetch = {ent}
-            if ev_power_ent:
-                entities_to_fetch.add(ev_power_ent)
-            if batt_power_ent:
-                entities_to_fetch.add(batt_power_ent)
-            if pv_power_ent:
-                entities_to_fetch.add(pv_power_ent)
+            # Build list of entities to fetch
+            entities_to_fetch = {house_energy_ent}
+            if exclude_ev and ev_energy_ent:
+                entities_to_fetch.add(ev_energy_ent)
+            if exclude_batt_grid and batt_energy_ent:
+                entities_to_fetch.add(batt_energy_ent)
+            if exclude_batt_grid and pv_energy_ent:
+                entities_to_fetch.add(pv_energy_ent)
             
             # Fetch all needed entities in one call
             all_hist = await self.hass.async_add_executor_job(
                 history.state_changes_during_period, self.hass, start, end, entities_to_fetch
             )
             
-            # Build dictionaries by timestamp for easier lookup
-            ev_states_by_time = {}
-            batt_states_by_time = {}
-            pv_states_by_time = {}
+            house_states = all_hist.get(house_energy_ent, [])
+            if not house_states or len(house_states) < 2:
+                _LOGGER.debug("No historical data available for baseline calculation (need at least 2 data points)")
+                return None
             
-            if ev_power_ent:
-                for s in all_hist.get(ev_power_ent, []):
-                    ev_states_by_time[s.last_changed] = s
+            # Get energy counter states for exclusions
+            ev_states = all_hist.get(ev_energy_ent, []) if ev_energy_ent and exclude_ev else []
+            batt_states = all_hist.get(batt_energy_ent, []) if batt_energy_ent and exclude_batt_grid else []
+            pv_states = all_hist.get(pv_energy_ent, []) if pv_energy_ent and exclude_batt_grid else []
             
-            if batt_power_ent:
-                for s in all_hist.get(batt_power_ent, []):
-                    batt_states_by_time[s.last_changed] = s
+            # Get start and end energy values for house load
+            house_start = _safe_float(house_states[0].state)
+            house_end = _safe_float(house_states[-1].state)
             
-            if pv_power_ent:
-                for s in all_hist.get(pv_power_ent, []):
-                    pv_states_by_time[s.last_changed] = s
+            if house_start is None or house_end is None:
+                _LOGGER.debug("Invalid house energy counter values")
+                return None
             
-            # Collect samples by daypart
-            daypart_samples = {
-                "night": [],
-                "day": [],
-                "evening": [],
-            }
+            # Calculate total house energy consumed (handle counter resets)
+            house_delta = house_end - house_start
+            if house_delta < 0:
+                # Counter reset detected, use only end value as approximation
+                house_delta = house_end
             
-            exclude_ev = bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_EV, True))
-            exclude_batt_grid = bool(self._get_cfg(CONF_RUNTIME_EXCLUDE_BATT_GRID, True))
+            # Get energy deltas for exclusions
+            ev_delta = 0.0
+            if ev_states and len(ev_states) >= 2:
+                ev_start = _safe_float(ev_states[0].state)
+                ev_end = _safe_float(ev_states[-1].state)
+                if ev_start is not None and ev_end is not None:
+                    ev_delta = ev_end - ev_start
+                    if ev_delta < 0:
+                        ev_delta = ev_end  # Handle counter reset
             
-            for state in states:
-                # Parse house load power
-                w = _as_watts(state.state, state.attributes.get("unit_of_measurement"))
-                if w is None or math.isnan(w) or w < 0:
-                    continue
-                
-                timestamp = state.last_changed
-                hour = timestamp.hour
-                daypart = self._classify_hour_daypart(hour)
-                
-                # Check if we should exclude this sample
-                should_exclude = False
-                
-                # Check EV charging exclusion
-                if exclude_ev and ev_power_ent:
-                    # Find closest EV power state
-                    ev_state = self._find_closest_state(ev_states_by_time, timestamp)
-                    if ev_state:
-                        ev_power = _safe_float(ev_state.state)
-                        if ev_power and ev_power > 100:  # EV charging if > 100W
-                            should_exclude = True
-                
-                # Check battery grid charging exclusion
-                if not should_exclude and exclude_batt_grid and batt_power_ent:
-                    batt_state = self._find_closest_state(batt_states_by_time, timestamp)
-                    pv_state = self._find_closest_state(pv_states_by_time, timestamp) if pv_power_ent else None
-                    
-                    if batt_state:
-                        batt_power = _safe_float(batt_state.state)
-                        pv_power = _safe_float(pv_state.state) if pv_state else 0.0
-                        
-                        # Apply sign inversion if configured
-                        invert_sign = self._get_cfg(CONF_BATT_POWER_INVERT_SIGN, False)
-                        if invert_sign and batt_power is not None:
-                            batt_power = -batt_power
-                        
-                        if batt_power and batt_power > 0:  # Battery charging
-                            # Check if it's from grid (PV doesn't cover it)
-                            pv_surplus = max(0.0, (pv_power or 0.0) - w)
-                            grid_charge = max(0.0, batt_power - pv_surplus)
-                            if grid_charge > 100:  # Charging from grid if > 100W
-                                should_exclude = True
-                
-                if not should_exclude:
-                    kwh_per_h = w / 1000.0
-                    daypart_samples[daypart].append(kwh_per_h)
+            batt_delta = 0.0
+            pv_delta = 0.0
+            if batt_states and len(batt_states) >= 2:
+                batt_start = _safe_float(batt_states[0].state)
+                batt_end = _safe_float(batt_states[-1].state)
+                if batt_start is not None and batt_end is not None:
+                    batt_delta = batt_end - batt_start
+                    if batt_delta < 0:
+                        batt_delta = batt_end
             
-            # Calculate averages for each daypart
+            if pv_states and len(pv_states) >= 2:
+                pv_start = _safe_float(pv_states[0].state)
+                pv_end = _safe_float(pv_states[-1].state)
+                if pv_start is not None and pv_end is not None:
+                    pv_delta = pv_end - pv_start
+                    if pv_delta < 0:
+                        pv_delta = pv_end
+            
+            # Calculate net house consumption excluding EV and battery grid charging
+            net_house_kwh = house_delta
+            
+            if exclude_ev and ev_delta > 0:
+                net_house_kwh -= ev_delta
+                _LOGGER.debug("Excluding EV energy: %.3f kWh", ev_delta)
+            
+            if exclude_batt_grid and batt_delta > 0:
+                # Estimate battery grid charging (battery charged - PV generation)
+                batt_grid_kwh = max(0.0, batt_delta - pv_delta)
+                net_house_kwh -= batt_grid_kwh
+                _LOGGER.debug("Excluding battery grid charging: %.3f kWh (batt: %.3f, pv: %.3f)", 
+                             batt_grid_kwh, batt_delta, pv_delta)
+            
+            # Ensure we don't have negative consumption
+            net_house_kwh = max(0.0, net_house_kwh)
+            
+            # Calculate average consumption rate (kWh/h)
+            time_delta_h = lookback_hours
+            avg_kwh_per_h = net_house_kwh / time_delta_h
+            
+            # Clip to reasonable range
+            avg_kwh_per_h = max(0.05, min(5.0, avg_kwh_per_h))
+            
             results = {
+                "overall": avg_kwh_per_h,
                 "night": None,
                 "day": None,
                 "evening": None,
-                "overall": None,
             }
             
-            all_samples = []
-            for daypart in ["night", "day", "evening"]:
-                samples = daypart_samples[daypart]
-                if samples:
-                    avg = sum(samples) / len(samples)
-                    results[daypart] = max(0.05, min(5.0, avg))  # Clip to reasonable range
-                    all_samples.extend(samples)
-                    _LOGGER.debug(
-                        "48h baseline %s: %.3f kWh/h from %d samples",
-                        daypart, results[daypart], len(samples)
-                    )
+            # If dayparts are enabled, distribute evenly for now
+            # (more sophisticated time-of-day distribution would require hourly data)
+            if use_dayparts:
+                results["night"] = avg_kwh_per_h
+                results["day"] = avg_kwh_per_h
+                results["evening"] = avg_kwh_per_h
             
-            # Calculate overall average
-            if all_samples:
-                overall_avg = sum(all_samples) / len(all_samples)
-                results["overall"] = max(0.05, min(5.0, overall_avg))
-                _LOGGER.debug(
-                    "48h baseline overall: %.3f kWh/h from %d total samples",
-                    results["overall"], len(all_samples)
-                )
+            _LOGGER.debug(
+                "48h baseline calculated: %.3f kWh/h (house: %.3f kWh, ev: %.3f kWh, batt_grid: ~%.3f kWh over %d hours)",
+                avg_kwh_per_h, house_delta, ev_delta, 
+                max(0.0, batt_delta - pv_delta) if exclude_batt_grid else 0.0,
+                lookback_hours
+            )
             
             return results
             
         except Exception as e:
             _LOGGER.warning("Failed to calculate 48h baseline: %s", e, exc_info=True)
             return None
-    
-    def _find_closest_state(self, states_by_time: Dict, target_time: datetime, max_delta_seconds: int = 300) -> Optional[Any]:
-        """Find the state closest to target_time within max_delta_seconds."""
-        if not states_by_time:
-            return None
-        
-        closest_state = None
-        closest_delta = float('inf')
-        
-        for state_time, state in states_by_time.items():
-            delta = abs((state_time - target_time).total_seconds())
-            if delta < closest_delta and delta <= max_delta_seconds:
-                closest_delta = delta
-                closest_state = state
-        
-        return closest_state
 
     async def _update_baseline_and_runtime(self):
         """
-        Beräkna husets baseline (kWh/h) och Battery Runtime Estimate.
-        - counter_kwh: derivata på kWh-räknare (t.ex. Consumption today)
-        - power_w: 48h historical baseline with time-of-day weighting (no EMA fallback)
-        - manual_dayparts: ej implementerad än (placeholder)
-        Exkluderar datapunkter vid EV-laddning och forcerad batteriladdning från grid.
+        Calculate house baseline (kWh/h) and Battery Runtime Estimate.
+        Uses energy counters (kWh) with 48h lookback to calculate delta-based consumption.
+        Excludes EV charging and battery grid charging based on their energy counters.
         """
-        method = self._get_cfg(CONF_RUNTIME_SOURCE, "counter_kwh")
         lookback_hours = int(self._get_cfg(CONF_RUNTIME_LOOKBACK_HOURS, 48))
         now = dt_util.now()
 
         visible_kwh_h: Optional[float] = None
         source_val = None
 
-        # power_w method: Use ONLY 48h historical calculation (no EMA fallback)
-        if method == "power_w":
-            baseline_48h = await self._calculate_48h_baseline()
-            if baseline_48h:
-                # Use 48h historical baseline
-                visible_kwh_h = baseline_48h.get("overall")
-                _LOGGER.debug(
-                    "48h baseline calculation succeeded: overall=%s night=%s day=%s evening=%s",
-                    baseline_48h.get("overall"),
-                    baseline_48h.get("night"),
-                    baseline_48h.get("day"),
-                    baseline_48h.get("evening"),
-                )
-                
-                # Store daypart baselines
-                night_w = baseline_48h.get("night")
-                day_w = baseline_48h.get("day")
-                evening_w = baseline_48h.get("evening")
-                
-                self.data["baseline_night_w"] = round(night_w * 1000.0, 1) if night_w is not None else None
-                self.data["baseline_day_w"] = round(day_w * 1000.0, 1) if day_w is not None else None
-                self.data["baseline_evening_w"] = round(evening_w * 1000.0, 1) if evening_w is not None else None
-                
-                # Get current sensor value for display
-                ent = self._get_cfg(CONF_RUNTIME_POWER_ENTITY, "") or self._get_cfg(CONF_LOAD_POWER_ENTITY, "") or self._get_cfg(CONF_HOUSE_CONS_SENSOR, "")
-                st = self.hass.states.get(ent) if ent else None
-                source_val = _as_watts(st.state, st.attributes.get("unit_of_measurement")) if st else None
-                
-                baseline_w = None if visible_kwh_h is None else round(visible_kwh_h * 1000.0, 1)
-                self.data["house_baseline_w"] = baseline_w
-                self.data["baseline_method"] = f"{method}_48h"
-                self.data["baseline_source_value"] = source_val
-                self.data["baseline_kwh_per_h"] = round(visible_kwh_h, 4) if visible_kwh_h else None
-                self.data["baseline_exclusion_reason"] = ""  # Already excluded in 48h calc
-                
-                _LOGGER.debug(
-                    "Baseline: method=%s_48h overall=%.3f kWh/h night=%.3f day=%.3f evening=%.3f",
-                    method,
-                    visible_kwh_h or 0,
-                    night_w or 0,
-                    day_w or 0,
-                    evening_w or 0,
-                )
-            else:
-                # 48h calculation failed - set all to None with diagnostic message
-                _LOGGER.warning(
-                    "48h baseline calculation failed. Sensors will show 'unknown'. "
-                    "Check: (1) runtime_power_entity is configured, "
-                    "(2) sensor has historical data in Recorder, "
-                    "(3) Recorder retention period is sufficient."
-                )
-                self.data["house_baseline_w"] = None
-                self.data["baseline_method"] = f"{method}_48h"
-                self.data["baseline_source_value"] = None
-                self.data["baseline_kwh_per_h"] = None
-                self.data["baseline_exclusion_reason"] = ""
-                self.data["baseline_night_w"] = None
-                self.data["baseline_day_w"] = None
-                self.data["baseline_evening_w"] = None
-                visible_kwh_h = None
-        
-        # counter_kwh method: Use counter-based calculation
-        elif method == "counter_kwh":
-            ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
-            st = self.hass.states.get(ent) if ent else None
-            kwh = _safe_float(st.state) if st else None
-            source_val = kwh
+        # Calculate baseline using 48h energy counter deltas
+        baseline_48h = await self._calculate_48h_baseline()
+        if baseline_48h:
+            # Use 48h historical baseline
+            visible_kwh_h = baseline_48h.get("overall")
+            _LOGGER.debug(
+                "48h baseline calculation succeeded: overall=%s night=%s day=%s evening=%s",
+                baseline_48h.get("overall"),
+                baseline_48h.get("night"),
+                baseline_48h.get("day"),
+                baseline_48h.get("evening"),
+            )
             
-            sample_kwh_per_h: Optional[float] = None
-            if kwh is not None:
-                prev = self._baseline_prev_counter
-                self._baseline_prev_counter = (kwh, now)
-                if prev:
-                    prev_kwh, prev_ts = prev
-                    dt_h = max(0.0, (now - prev_ts).total_seconds() / 3600.0)
-                    delta = kwh - prev_kwh
-                    # hantera dygnsreset/negativa hopp
-                    if dt_h > 0 and delta >= -0.0005:
-                        # Om negativ litet hopp → nolla till 0
-                        delta = max(0.0, delta)
-                        sample_kwh_per_h = delta / dt_h
+            # Store daypart baselines
+            night_w = baseline_48h.get("night")
+            day_w = baseline_48h.get("day")
+            evening_w = baseline_48h.get("evening")
             
-            # Fönster/klippning
-            if sample_kwh_per_h is not None:
-                sample_kwh_per_h = max(0.05, min(5.0, sample_kwh_per_h))
-                visible_kwh_h = sample_kwh_per_h
-            else:
-                visible_kwh_h = None
+            self.data["baseline_night_w"] = round(night_w * 1000.0, 1) if night_w is not None else None
+            self.data["baseline_day_w"] = round(day_w * 1000.0, 1) if day_w is not None else None
+            self.data["baseline_evening_w"] = round(evening_w * 1000.0, 1) if evening_w is not None else None
+            
+            # Get current house energy counter value for display
+            house_energy_ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
+            st = self.hass.states.get(house_energy_ent) if house_energy_ent else None
+            source_val = _safe_float(st.state) if st else None
             
             baseline_w = None if visible_kwh_h is None else round(visible_kwh_h * 1000.0, 1)
             self.data["house_baseline_w"] = baseline_w
-            self.data["baseline_method"] = method
+            self.data["baseline_method"] = "energy_counter_48h"
             self.data["baseline_source_value"] = source_val
             self.data["baseline_kwh_per_h"] = round(visible_kwh_h, 4) if visible_kwh_h else None
-            self.data["baseline_exclusion_reason"] = ""
-            
-            # counter_kwh method doesn't support dayparts
-            self.data["baseline_night_w"] = None
-            self.data["baseline_day_w"] = None
-            self.data["baseline_evening_w"] = None
+            self.data["baseline_exclusion_reason"] = ""  # Already excluded in 48h calc
             
             _LOGGER.debug(
-                "Baseline: method=%s sample=%.4f kWh/h",
-                method,
+                "Baseline: method=energy_counter_48h overall=%.3f kWh/h night=%.3f day=%.3f evening=%.3f",
                 visible_kwh_h or 0,
+                night_w or 0,
+                day_w or 0,
+                evening_w or 0,
             )
-        
         else:
-            # Unknown method - set all to None
-            _LOGGER.warning("Unknown baseline method: %s", method)
+            # 48h calculation failed - set all to None with diagnostic message
+            _LOGGER.warning(
+                "48h baseline calculation failed. Sensors will show 'unknown'. "
+                "Check: (1) runtime_counter_entity is configured, "
+                "(2) sensor has historical data in Recorder, "
+                "(3) Recorder retention period is sufficient."
+            )
             self.data["house_baseline_w"] = None
-            self.data["baseline_method"] = method
+            self.data["baseline_method"] = "energy_counter_48h"
             self.data["baseline_source_value"] = None
             self.data["baseline_kwh_per_h"] = None
             self.data["baseline_exclusion_reason"] = ""
