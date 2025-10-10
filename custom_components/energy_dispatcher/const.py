@@ -80,11 +80,13 @@ CONF_MANUAL_CALIBRATION_ENABLED = "manual_calibration_enabled"
 # PV actual (frivilligt)
 CONF_PV_POWER_ENTITY = "pv_power_entity"               # W/kW/MW
 CONF_PV_ENERGY_TODAY_ENTITY = "pv_energy_today_entity" # Wh/kWh/MWh
+CONF_PV_TOTAL_ENERGY_ENTITY = "pv_total_energy_entity" # Total kWh Solar generation counter
 
-# Huslast-baseline
-CONF_RUNTIME_SOURCE = "runtime_source"  # power_w | counter_kwh | manual_dayparts
-CONF_RUNTIME_COUNTER_ENTITY = "runtime_counter_entity"
-CONF_RUNTIME_POWER_ENTITY = "runtime_power_entity"
+# Batteri total energy
+CONF_BATT_TOTAL_CHARGED_ENERGY_ENTITY = "batt_total_charged_energy_entity"  # Total kWh battery charging counter
+
+# Huslast-baseline (simplified to only use energy counters)
+CONF_RUNTIME_COUNTER_ENTITY = "runtime_counter_entity"  # Total kWh House Load counter
 # Legacy EMA parameters (kept for backward compatibility, not exposed in UI)
 CONF_RUNTIME_ALPHA = "runtime_alpha"  # EMA smoothing factor (0-1) - only used when lookback_hours=0
 CONF_RUNTIME_WINDOW_MIN = "runtime_window_min"  # Calculation window (minutes) - only used in bootstrap
