@@ -42,3 +42,6 @@ Accessibility and clarity
 When suggesting changes
 - Propose concrete English and Swedish text and point to exact files/lines when possible.
 - If a string lacks units or is ambiguous for typical users, recommend clearer wording and include the unit.
+
+Version handling
+- Always bump version number in manifest.json to prepare for a new release
