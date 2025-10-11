@@ -134,6 +134,109 @@ def _fetch_history_for_multiple_entities(hass, start_time, end_time, entity_ids)
     return combined
 
 
+def _interpolate_energy_value(
+    timestamp: datetime,
+    prev_time: datetime,
+    prev_value: float,
+    next_time: datetime,
+    next_value: float,
+) -> Optional[float]:
+    """
+    Linearly interpolate energy counter value at a given timestamp.
+    
+    Args:
+        timestamp: The timestamp to interpolate for
+        prev_time: Timestamp of previous known value
+        prev_value: Previous known energy value (kWh)
+        next_time: Timestamp of next known value
+        next_value: Next known energy value (kWh)
+    
+    Returns:
+        Interpolated energy value (kWh), or None if interpolation not possible
+    """
+    if prev_time >= next_time or timestamp < prev_time or timestamp > next_time:
+        return None
+    
+    # Handle counter reset (negative delta)
+    if next_value < prev_value:
+        # Can't reliably interpolate across a counter reset
+        return None
+    
+    # Linear interpolation
+    time_fraction = (timestamp - prev_time).total_seconds() / (next_time - prev_time).total_seconds()
+    interpolated = prev_value + time_fraction * (next_value - prev_value)
+    return interpolated
+
+
+def _is_data_stale(last_update: Optional[datetime], max_age_minutes: int = 15) -> bool:
+    """
+    Check if data is too old to be considered valid.
+    
+    Args:
+        last_update: Timestamp of last data update
+        max_age_minutes: Maximum age in minutes before data is considered stale
+    
+    Returns:
+        True if data is stale or last_update is None, False otherwise
+    """
+    if last_update is None:
+        return True
+    
+    now = dt_util.now()
+    age = (now - last_update).total_seconds() / 60.0
+    return age > max_age_minutes
+
+
+def _fill_missing_hourly_data(
+    time_index: Dict[datetime, float],
+    max_gap_hours: float = 8.0
+) -> Dict[datetime, float]:
+    """
+    Fill missing hourly data points using linear interpolation.
+    
+    For gaps up to max_gap_hours, interpolates values between known points.
+    For gaps larger than max_gap_hours, leaves them empty (no interpolation).
+    
+    Args:
+        time_index: Dictionary mapping hour timestamps to energy values (kWh)
+        max_gap_hours: Maximum gap size to interpolate (default 8 hours)
+    
+    Returns:
+        New dictionary with interpolated values added
+    """
+    if not time_index or len(time_index) < 2:
+        return time_index.copy()
+    
+    filled = time_index.copy()
+    sorted_times = sorted(time_index.keys())
+    
+    # Iterate through consecutive pairs
+    for i in range(len(sorted_times) - 1):
+        start_time = sorted_times[i]
+        end_time = sorted_times[i + 1]
+        start_val = time_index[start_time]
+        end_val = time_index[end_time]
+        
+        # Calculate gap in hours
+        gap_hours = (end_time - start_time).total_seconds() / 3600.0
+        
+        # Only interpolate if gap is within acceptable limits
+        if gap_hours <= max_gap_hours and gap_hours > 1.0:
+            # Generate hourly timestamps between start and end
+            current = start_time + timedelta(hours=1)
+            while current < end_time:
+                if current not in filled:
+                    # Interpolate value at this timestamp
+                    interpolated = _interpolate_energy_value(
+                        current, start_time, start_val, end_time, end_val
+                    )
+                    if interpolated is not None:
+                        filled[current] = interpolated
+                current += timedelta(hours=1)
+    
+    return filled
+
+
 class EnergyDispatcherCoordinator(DataUpdateCoordinator):
     """
     Samlar:
@@ -205,6 +308,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         self._batt_prev_charged_today: Optional[float] = None  # kWh charged today (previous value)
         self._batt_prev_discharged_today: Optional[float] = None  # kWh discharged today (previous value)
         self._batt_last_reset_date: Optional[Any] = None  # Track daily reset
+        self._batt_last_update_time: Optional[datetime] = None  # Track last successful BEC update
         
         # Energy delta tracking for accurate solar vs grid classification
         self._prev_pv_energy_today: Optional[float] = None  # kWh PV today (previous value)
@@ -373,7 +477,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         Calculate separate baseline values for night, day, and evening periods.
         
         Groups hourly consumption data by time of day and calculates average
-        consumption rate for each daypart.
+        consumption rate for each daypart. Handles missing data by interpolating
+        between known points for gaps up to 8 hours.
         
         Args:
             house_states: List of house energy counter states
@@ -411,6 +516,26 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             batt_index = build_time_index(batt_states) if batt_states else {}
             pv_index = build_time_index(pv_states) if pv_states else {}
             
+            # Maximum acceptable gap for baseline calculation (8 hours)
+            MAX_GAP_HOURS = 8.0
+            
+            # Count data points before interpolation
+            original_house_count = len(house_index)
+            
+            # Fill in missing hourly data points using interpolation
+            house_index = _fill_missing_hourly_data(house_index, MAX_GAP_HOURS)
+            ev_index = _fill_missing_hourly_data(ev_index, MAX_GAP_HOURS) if ev_index else {}
+            batt_index = _fill_missing_hourly_data(batt_index, MAX_GAP_HOURS) if batt_index else {}
+            pv_index = _fill_missing_hourly_data(pv_index, MAX_GAP_HOURS) if pv_index else {}
+            
+            # Log if interpolation was used
+            interpolated_count = len(house_index) - original_house_count
+            if interpolated_count > 0:
+                _LOGGER.info(
+                    "Daypart baseline: Interpolated %d missing hourly data points (max gap: %.1f hours)",
+                    interpolated_count, MAX_GAP_HOURS
+                )
+            
             # Get all hour timestamps, sorted
             all_hours = sorted(house_index.keys())
             
@@ -425,8 +550,12 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 
                 # Calculate time delta in hours
                 time_delta_h = (hour_end - hour_start).total_seconds() / 3600.0
-                if time_delta_h <= 0 or time_delta_h > 2:
-                    # Skip if time gap is too large (> 2 hours) or invalid
+                if time_delta_h <= 0 or time_delta_h > MAX_GAP_HOURS:
+                    # Skip if time gap is too large (> 8 hours) or invalid
+                    _LOGGER.debug(
+                        "Skipping large gap in baseline data: %.1f hours between %s and %s",
+                        time_delta_h, hour_start, hour_end
+                    )
                     continue
                 
                 # Get energy values at start and end
@@ -920,6 +1049,10 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         Track battery charge/discharge events using daily energy counters.
         Uses energy deltas (kWh) for accurate solar vs grid classification.
         Calls bec.on_charge() when battery charges and bec.on_discharge() when it discharges.
+        
+        Handles missing data:
+        - If data is unavailable for > 1 hour, resets tracking to avoid incorrect deltas
+        - Waits up to 15 minutes for data before assuming sensor is unavailable
         """
         store = self._get_store()
         bec = store.get("bec")
@@ -937,6 +1070,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self._prev_pv_energy_today = None
             self._prev_house_energy = None
             self._prev_grid_import_today = None
+            self._batt_last_update_time = None
             self._batt_last_reset_date = current_date
             _LOGGER.debug("Battery tracking reset for new day: %s", current_date)
         
@@ -947,6 +1081,24 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         if not charged_entity and not discharged_entity:
             # No tracking entities configured
             return
+        
+        # Check if previous data is too old (> 1 hour for BEC)
+        # This prevents incorrect deltas when sensors were unavailable
+        if self._batt_last_update_time is not None:
+            gap_minutes = (now - self._batt_last_update_time).total_seconds() / 60.0
+            if gap_minutes > 60:  # 1 hour max gap for BEC
+                _LOGGER.warning(
+                    "BEC: Data gap of %.1f minutes exceeds 1 hour limit. "
+                    "Resetting tracking to avoid incorrect deltas.",
+                    gap_minutes
+                )
+                # Reset tracking to start fresh
+                self._batt_prev_charged_today = None
+                self._batt_prev_discharged_today = None
+                self._prev_pv_energy_today = None
+                self._prev_house_energy = None
+                self._prev_grid_import_today = None
+                self._batt_last_update_time = None
         
         # Get current price for charging cost calculation (the only reliable direct cost value)
         current_price = self.data.get("current_enriched", 0.0) or 0.0
@@ -975,12 +1127,16 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             if st and st.state not in (None, "", "unknown", "unavailable"):
                 grid_import_today = _safe_float(st.state)
         
+        # Track if we got valid data in this update cycle
+        got_valid_data = False
+        
         # Track charging
         if charged_entity:
             st = self.hass.states.get(charged_entity)
             if st and st.state not in (None, "", "unknown", "unavailable"):
                 charged_today = _safe_float(st.state)
                 if charged_today is not None:
+                    got_valid_data = True
                     if self._batt_prev_charged_today is not None:
                         delta_charged = charged_today - self._batt_prev_charged_today
                         if delta_charged > 0.001:  # At least 1 Wh change
@@ -1025,6 +1181,13 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                             await bec.async_save()
                     
                     self._batt_prev_charged_today = charged_today
+            else:
+                # Data unavailable - check if we should wait or reset
+                if _is_data_stale(self._batt_last_update_time, max_age_minutes=15):
+                    _LOGGER.debug(
+                        "BEC: Charged energy sensor %s unavailable for > 15 minutes, treating as no data",
+                        charged_entity
+                    )
         
         # Track discharging
         if discharged_entity:
@@ -1032,6 +1195,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             if st and st.state not in (None, "", "unknown", "unavailable"):
                 discharged_today = _safe_float(st.state)
                 if discharged_today is not None:
+                    got_valid_data = True
                     if self._batt_prev_discharged_today is not None:
                         delta_discharged = discharged_today - self._batt_prev_discharged_today
                         if delta_discharged > 0.001:  # At least 1 Wh change
@@ -1040,6 +1204,17 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                             await bec.async_save()
                     
                     self._batt_prev_discharged_today = discharged_today
+            else:
+                # Data unavailable - check if we should wait or reset
+                if _is_data_stale(self._batt_last_update_time, max_age_minutes=15):
+                    _LOGGER.debug(
+                        "BEC: Discharged energy sensor %s unavailable for > 15 minutes, treating as no data",
+                        discharged_entity
+                    )
+        
+        # Update last update timestamp if we got any valid data
+        if got_valid_data:
+            self._batt_last_update_time = now
         
         # Update previous energy values for next iteration
         if pv_energy_today is not None:
