@@ -359,13 +359,13 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             start = end - timedelta(hours=lookback_hours)
             
             # Build list of entities to fetch
-            entities_to_fetch = {house_energy_ent}
+            entities_to_fetch = [house_energy_ent]
             if exclude_ev and ev_energy_ent:
-                entities_to_fetch.add(ev_energy_ent)
+                entities_to_fetch.append(ev_energy_ent)
             if exclude_batt_grid and batt_energy_ent:
-                entities_to_fetch.add(batt_energy_ent)
+                entities_to_fetch.append(batt_energy_ent)
             if exclude_batt_grid and pv_energy_ent:
-                entities_to_fetch.add(pv_energy_ent)
+                entities_to_fetch.append(pv_energy_ent)
             
             # Fetch all needed entities in one call
             all_hist = await self.hass.async_add_executor_job(
