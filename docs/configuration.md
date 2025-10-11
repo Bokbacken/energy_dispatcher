@@ -573,6 +573,10 @@ Energy Dispatcher provides several sensors for monitoring your energy system:
 - **Entity**: `sensor.house_load_baseline_now`
 - **Unit**: W (Watts)
 - **Description**: Current house baseline power consumption
+- **Behavior**: 
+  - When dayparts are enabled (`runtime_use_dayparts: true`): Shows the baseline for the current time of day (night/day/evening)
+  - When dayparts are disabled: Shows the overall 48-hour average
+  - Falls back to overall average if current daypart baseline is unavailable
 - **Attributes**:
   - `method`: Calculation method (counter_kwh, power_w, or power_w_48h)
   - `source_value`: Raw value from source sensor
