@@ -810,20 +810,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                     results["night"] = daypart_result.get("night", avg_kwh_per_h)
                     results["day"] = daypart_result.get("day", avg_kwh_per_h)
                     results["evening"] = daypart_result.get("evening", avg_kwh_per_h)
-                    
-                    # Recalculate overall as weighted average of dayparts for consistency
-                    # This ensures overall is mathematically consistent with daypart values
-                    # Each daypart represents 8 hours in a 24-hour cycle
-                    night_val = results["night"] if results["night"] is not None else avg_kwh_per_h
-                    day_val = results["day"] if results["day"] is not None else avg_kwh_per_h
-                    evening_val = results["evening"] if results["evening"] is not None else avg_kwh_per_h
-                    results["overall"] = (night_val * 8 + day_val * 8 + evening_val * 8) / 24
-                    
-                    _LOGGER.debug(
-                        "Recalculated overall from dayparts: %.3f kWh/h "
-                        "(was %.3f kWh/h from start/end delta)",
-                        results["overall"], avg_kwh_per_h
-                    )
                 else:
                     # Fall back to overall average if daypart calculation fails
                     results["night"] = avg_kwh_per_h
