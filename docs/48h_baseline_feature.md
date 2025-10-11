@@ -93,11 +93,7 @@ This ensures the baseline reflects only "normal" household consumption.
 ### House Load Baseline Now
 - **Entity**: `sensor.house_load_baseline_now`
 - **Unit**: W (Watts)
-- **Description**: Current time-of-day baseline calculated from energy counter deltas
-- **Behavior**:
-  - When dayparts enabled (`runtime_use_dayparts: true`): Shows baseline for current time period (night/day/evening)
-  - When dayparts disabled: Shows overall 48-hour average
-  - Falls back to overall if current daypart unavailable
+- **Description**: Overall baseline calculated from energy counter deltas
 - **Attributes**:
   - `method`: Shows `energy_counter_48h` for the simplified calculation
   - `baseline_kwh_per_h`: Baseline in kWh/h
