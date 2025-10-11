@@ -99,6 +99,7 @@ def _available_weather_entities(hass):
     return entities
 
 DEFAULTS = {
+    CONF_NORDPOOL_ENTITY: "",
     CONF_PRICE_VAT: 0.25,
     CONF_PRICE_TAX: 0.0,
     CONF_PRICE_TRANSFER: 0.0,
@@ -106,6 +107,7 @@ DEFAULTS = {
     CONF_PRICE_FIXED_MONTHLY: 0.0,
     CONF_PRICE_INCLUDE_FIXED: False,
     CONF_BATT_CAP_KWH: 15.0,
+    CONF_BATT_SOC_ENTITY: "",
     CONF_BATT_CAPACITY_ENTITY: "",
     CONF_BATT_MAX_CHARGE_W: 4000,
     CONF_BATT_MAX_DISCH_W: 4000,
