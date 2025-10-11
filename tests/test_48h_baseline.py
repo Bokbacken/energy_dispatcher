@@ -198,6 +198,131 @@ class Test48HourBaseline:
                 assert 0.9 <= result["overall"] <= 1.1
 
 
+class TestDaypartCalculation:
+    """Test daypart-specific baseline calculation."""
+    
+    @pytest.mark.asyncio
+    async def test_daypart_baselines_differ(self, coordinator, mock_hass):
+        """Test that daypart baselines show different values based on time of day."""
+        now = datetime.now()
+        
+        # Create hourly data with different consumption patterns by time of day
+        house_states = []
+        
+        # Night hours (00:00-07:59): Low consumption ~0.5 kWh/h
+        # Day hours (08:00-15:59): Medium consumption ~1.0 kWh/h  
+        # Evening hours (16:00-23:59): High consumption ~2.0 kWh/h
+        
+        energy = 100.0
+        for hour_offset in range(48):
+            timestamp = now - timedelta(hours=48-hour_offset)
+            hour_of_day = timestamp.hour
+            
+            # Simulate different consumption rates by time of day
+            if 0 <= hour_of_day < 8:  # Night
+                energy += 0.5
+            elif 8 <= hour_of_day < 16:  # Day
+                energy += 1.0
+            else:  # Evening
+                energy += 2.0
+            
+            state = MagicMock()
+            state.state = str(energy)
+            state.last_changed = timestamp
+            house_states.append(state)
+        
+        history_data = {
+            "sensor.house_energy": house_states
+        }
+        
+        with patch('homeassistant.components.recorder.history'):
+            mock_hass.async_add_executor_job = AsyncMock(return_value=history_data)
+            
+            result = await coordinator._calculate_48h_baseline()
+            
+            assert result is not None
+            assert result.get("night") is not None
+            assert result.get("day") is not None
+            assert result.get("evening") is not None
+            
+            # Verify that the values are different
+            night = result["night"]
+            day = result["day"]
+            evening = result["evening"]
+            
+            # Night should be lowest
+            assert night < day
+            assert night < evening
+            
+            # Evening should be highest
+            assert evening > day
+            assert evening > night
+            
+            # Check approximate values (with tolerance for calculation)
+            assert 0.4 <= night <= 0.6  # ~0.5 kWh/h
+            assert 0.9 <= day <= 1.1    # ~1.0 kWh/h
+            assert 1.8 <= evening <= 2.2  # ~2.0 kWh/h
+    
+    @pytest.mark.asyncio
+    async def test_daypart_exclusions_work(self, coordinator, mock_hass):
+        """Test that EV and battery exclusions affect daypart baselines."""
+        now = datetime.now()
+        
+        # Create hourly data with EV charging in evening
+        house_states = []
+        ev_states = []
+        
+        house_energy = 100.0
+        ev_energy = 50.0
+        
+        for hour_offset in range(48):
+            timestamp = now - timedelta(hours=48-hour_offset)
+            hour_of_day = timestamp.hour
+            
+            # Base house consumption: 1 kWh/h
+            house_energy += 1.0
+            
+            # EV charging in evening (16:00-23:59): 3 kWh/h
+            if 16 <= hour_of_day < 24:
+                ev_energy += 3.0
+            
+            house_state = MagicMock()
+            house_state.state = str(house_energy)
+            house_state.last_changed = timestamp
+            house_states.append(house_state)
+            
+            ev_state = MagicMock()
+            ev_state.state = str(ev_energy)
+            ev_state.last_changed = timestamp
+            ev_states.append(ev_state)
+        
+        history_data = {
+            "sensor.house_energy": house_states,
+            "sensor.ev_energy": ev_states,
+        }
+        
+        with patch('homeassistant.components.recorder.history'):
+            mock_hass.async_add_executor_job = AsyncMock(return_value=history_data)
+            
+            result = await coordinator._calculate_48h_baseline()
+            
+            assert result is not None
+            
+            # Without EV charging, evening would show ~4 kWh/h
+            # With EV exclusion, evening should show ~1 kWh/h
+            evening = result.get("evening")
+            assert evening is not None
+            assert 0.8 <= evening <= 1.2  # Should be close to 1 kWh/h after exclusion
+            
+            # Night and day should not be affected (no EV charging)
+            night = result.get("night")
+            day = result.get("day")
+            assert night is not None
+            assert day is not None
+            assert 0.8 <= night <= 1.2
+            assert 0.8 <= day <= 1.2
+
+
 class TestEnergyCounterBaseline:
     """Test energy counter-based baseline calculation."""
     
