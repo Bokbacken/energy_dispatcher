@@ -205,6 +205,11 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         self._batt_prev_charged_today: Optional[float] = None  # kWh charged today (previous value)
         self._batt_prev_discharged_today: Optional[float] = None  # kWh discharged today (previous value)
         self._batt_last_reset_date: Optional[Any] = None  # Track daily reset
+        
+        # Energy delta tracking for accurate solar vs grid classification
+        self._prev_pv_energy_today: Optional[float] = None  # kWh PV today (previous value)
+        self._prev_house_energy: Optional[float] = None  # kWh house total (previous value)
+        self._prev_grid_import_today: Optional[float] = None  # kWh grid import today (previous value)
 
     # ---------- helpers ----------
     def _get_store(self) -> Dict[str, Any]:
@@ -913,6 +918,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
     async def _update_battery_charge_tracking(self):
         """
         Track battery charge/discharge events using daily energy counters.
+        Uses energy deltas (kWh) for accurate solar vs grid classification.
         Calls bec.on_charge() when battery charges and bec.on_discharge() when it discharges.
         """
         store = self._get_store()
@@ -928,6 +934,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         if self._batt_last_reset_date != current_date:
             self._batt_prev_charged_today = None
             self._batt_prev_discharged_today = None
+            self._prev_pv_energy_today = None
+            self._prev_house_energy = None
+            self._prev_grid_import_today = None
             self._batt_last_reset_date = current_date
             _LOGGER.debug("Battery tracking reset for new day: %s", current_date)
         
@@ -939,16 +948,32 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             # No tracking entities configured
             return
         
-        # Get current price for charging cost calculation
+        # Get current price for charging cost calculation (the only reliable direct cost value)
         current_price = self.data.get("current_enriched", 0.0) or 0.0
         
-        # Get PV power to determine if charging from solar or grid
-        pv_power_w = self.data.get("pv_now_w", 0.0) or 0.0
-        load_power_entity = self._get_cfg(CONF_LOAD_POWER_ENTITY, "")
-        load_power_w_raw = self._read_watts(load_power_entity)
-        has_load_sensor = load_power_w_raw is not None
-        load_power_w = load_power_w_raw if has_load_sensor else 0.0
-        batt_power_w = self._read_battery_power_normalized()
+        # Get energy sensors for delta-based calculation
+        pv_energy_entity = self._get_cfg(CONF_PV_ENERGY_TODAY_ENTITY, "")
+        house_energy_entity = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
+        grid_import_entity = self._get_cfg(CONF_GRID_IMPORT_TODAY_ENTITY, "")
+        
+        # Read current energy values
+        pv_energy_today = None
+        if pv_energy_entity:
+            st = self.hass.states.get(pv_energy_entity)
+            if st and st.state not in (None, "", "unknown", "unavailable"):
+                pv_energy_today = _safe_float(st.state)
+        
+        house_energy = None
+        if house_energy_entity:
+            st = self.hass.states.get(house_energy_entity)
+            if st and st.state not in (None, "", "unknown", "unavailable"):
+                house_energy = _safe_float(st.state)
+        
+        grid_import_today = None
+        if grid_import_entity:
+            st = self.hass.states.get(grid_import_entity)
+            if st and st.state not in (None, "", "unknown", "unavailable"):
+                grid_import_today = _safe_float(st.state)
         
         # Track charging
         if charged_entity:
@@ -959,40 +984,42 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                     if self._batt_prev_charged_today is not None:
                         delta_charged = charged_today - self._batt_prev_charged_today
                         if delta_charged > 0.001:  # At least 1 Wh change
-                            # Estimate charge power (if batt_power_w available)
-                            if batt_power_w is not None:
-                                # Standard convention: positive means charging
-                                charge_power_w = max(0.0, batt_power_w)
-                            else:
-                                # Estimate from delta over 5 minutes (300s update interval)
-                                charge_power_w = (delta_charged * 1000.0) / (300.0 / 3600.0)  # Convert to W
+                            # Determine if charging from grid or solar using energy deltas
+                            # This is the safest method - comparing kWh to kWh over the same period
+                            source = "grid"  # Default to grid (conservative)
                             
-                            # Determine if charging from grid or solar
-                            # Conservative approach: assume grid charging unless we're confident it's solar
-                            if has_load_sensor:
-                                # We have load sensor, can calculate PV surplus accurately
-                                pv_surplus_w = max(0.0, pv_power_w - load_power_w)
-                                # 80% threshold: if PV surplus covers 80% of charge power, count as solar
-                                is_solar = pv_surplus_w >= charge_power_w * 0.8
-                            else:
-                                # No load sensor configured - use conservative approach
-                                # Only count as solar if PV significantly exceeds battery charge power
-                                # This accounts for unknown house load
-                                # Use 2.0x multiplier: PV must be at least 2x battery charge to be confident
-                                is_solar = pv_power_w >= charge_power_w * 2.0
+                            # Calculate energy deltas over the same time period
+                            delta_pv = 0.0
+                            if pv_energy_today is not None and self._prev_pv_energy_today is not None:
+                                delta_pv = max(0.0, pv_energy_today - self._prev_pv_energy_today)
                             
-                            if is_solar:
-                                source = "solar"
+                            delta_grid_import = 0.0
+                            if grid_import_today is not None and self._prev_grid_import_today is not None:
+                                delta_grid_import = max(0.0, grid_import_today - self._prev_grid_import_today)
+                            
+                            # Determine source based on energy deltas
+                            if delta_pv > 0:
+                                # We have PV production in this period
+                                # If PV delta >= battery charge delta, it's definitely solar
+                                if delta_pv >= delta_charged * 0.95:  # 95% threshold for measurement tolerances
+                                    source = "solar"
+                                # If we have grid import data, use it for verification
+                                elif delta_grid_import > 0:
+                                    # Grid was imported, so likely grid charging
+                                    source = "grid"
+                                else:
+                                    # No grid import, PV available but less than battery charge
+                                    # This could be mixed solar/grid - be conservative
+                                    source = "grid"
+                            
+                            if source == "solar":
                                 cost = 0.0  # Solar is free
                             else:
-                                source = "grid"
-                                cost = current_price
+                                cost = current_price  # Use enriched price (the only reliable direct cost)
                             
                             _LOGGER.info(
-                                "Battery charged: %.3f kWh from %s @ %.3f SEK/kWh (PV: %.1f W, Load: %.1f W%s, Charge: %.1f W)",
-                                delta_charged, source, cost, pv_power_w, load_power_w,
-                                "" if has_load_sensor else " [estimated]",
-                                charge_power_w
+                                "Battery charged: %.3f kWh from %s @ %.3f SEK/kWh (PV delta: %.3f kWh, Grid import: %.3f kWh)",
+                                delta_charged, source, cost, delta_pv, delta_grid_import
                             )
                             bec.on_charge(delta_charged, cost, source)
                             await bec.async_save()
@@ -1013,6 +1040,14 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                             await bec.async_save()
                     
                     self._batt_prev_discharged_today = discharged_today
+        
+        # Update previous energy values for next iteration
+        if pv_energy_today is not None:
+            self._prev_pv_energy_today = pv_energy_today
+        if house_energy is not None:
+            self._prev_house_energy = house_energy
+        if grid_import_today is not None:
+            self._prev_grid_import_today = grid_import_today
 
     # ---------- Auto EV tick (oförändrad logik v0) ----------
     async def _auto_ev_tick(self):
