@@ -856,14 +856,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         baseline_48h = await self._calculate_48h_baseline()
         if baseline_48h and baseline_48h.get("overall") is not None:
             # Use 48h historical baseline
-            visible_kwh_h = baseline_48h.get("overall")
-            _LOGGER.debug(
-                "48h baseline calculation succeeded: overall=%s night=%s day=%s evening=%s",
-                baseline_48h.get("overall"),
-                baseline_48h.get("night"),
-                baseline_48h.get("day"),
-                baseline_48h.get("evening"),
-            )
+            overall_kwh_h = baseline_48h.get("overall")
             
             # Store daypart baselines
             night_w = baseline_48h.get("night")
@@ -873,6 +866,34 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self.data["baseline_night_w"] = round(night_w * 1000.0, 1) if night_w is not None else None
             self.data["baseline_day_w"] = round(day_w * 1000.0, 1) if day_w is not None else None
             self.data["baseline_evening_w"] = round(evening_w * 1000.0, 1) if evening_w is not None else None
+            
+            # Determine which baseline to use for "House Load Baseline Now"
+            # When dayparts are enabled and available, use the current time-of-day baseline
+            use_dayparts = bool(self._get_cfg(CONF_RUNTIME_USE_DAYPARTS, True))
+            visible_kwh_h = overall_kwh_h  # Default to overall
+            
+            if use_dayparts and any(v is not None for v in [night_w, day_w, evening_w]):
+                # Get current daypart and use its baseline if available
+                current_hour = now.hour
+                current_daypart = self._classify_hour_daypart(current_hour)
+                
+                if current_daypart == "night" and night_w is not None:
+                    visible_kwh_h = night_w
+                elif current_daypart == "day" and day_w is not None:
+                    visible_kwh_h = day_w
+                elif current_daypart == "evening" and evening_w is not None:
+                    visible_kwh_h = evening_w
+                # If current daypart is None, fall back to overall
+            
+            _LOGGER.debug(
+                "48h baseline calculation succeeded: overall=%s night=%s day=%s evening=%s, current_daypart=%s, visible=%s",
+                overall_kwh_h,
+                night_w,
+                day_w,
+                evening_w,
+                self._classify_hour_daypart(now.hour) if use_dayparts else "disabled",
+                visible_kwh_h,
+            )
             
             # Get current house energy counter value for display
             house_energy_ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
@@ -887,11 +908,12 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self.data["baseline_exclusion_reason"] = ""  # Already excluded in 48h calc
             
             _LOGGER.debug(
-                "Baseline: method=energy_counter_48h overall=%.3f kWh/h night=%.3f day=%.3f evening=%.3f",
-                visible_kwh_h or 0,
+                "Baseline: method=energy_counter_48h overall=%.3f kWh/h night=%.3f day=%.3f evening=%.3f, now=%.3f kWh/h",
+                overall_kwh_h or 0,
                 night_w or 0,
                 day_w or 0,
                 evening_w or 0,
+                visible_kwh_h or 0,
             )
         else:
             # 48h calculation failed - set all to None with diagnostic message
