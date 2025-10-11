@@ -371,8 +371,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 entities_to_fetch.append(pv_energy_ent)
             
             # Fetch all needed entities in one call
+            # Note: entity_ids must be passed as positional argument (4th param), not keyword arg
             all_hist = await self.hass.async_add_executor_job(
-                history.state_changes_during_period, self.hass, start, end, entity_ids=entities_to_fetch
+                history.state_changes_during_period, self.hass, start, end, entities_to_fetch
             )
             
             house_states = all_hist.get(house_energy_ent, [])

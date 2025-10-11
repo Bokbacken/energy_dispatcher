@@ -143,7 +143,7 @@ DEFAULTS = {
     CONF_MANUAL_STEP_MINUTES: 15,
     CONF_MANUAL_DIFFUSE_SKY_VIEW_FACTOR: 0.95,
     CONF_MANUAL_TEMP_COEFF: -0.38,
-    CONF_MANUAL_INVERTER_AC_CAP: None,
+    CONF_MANUAL_INVERTER_AC_CAP: 10.0,  # Default 10 kW AC capacity
     CONF_MANUAL_CALIBRATION_ENABLED: False,
     CONF_AUTO_CREATE_DASHBOARD: True,
 }
@@ -282,7 +282,7 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         vol.Optional(CONF_MANUAL_TEMP_COEFF, default=d.get(CONF_MANUAL_TEMP_COEFF, -0.38)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=-1.0, max=0.0, step=0.01, mode=selector.NumberSelectorMode.BOX)
         ),
-        vol.Optional(CONF_MANUAL_INVERTER_AC_CAP, default=d.get(CONF_MANUAL_INVERTER_AC_CAP, None)): selector.NumberSelector(
+        vol.Optional(CONF_MANUAL_INVERTER_AC_CAP, default=d.get(CONF_MANUAL_INVERTER_AC_CAP, 10.0)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=1, max=100, step=0.1, unit_of_measurement="kW", mode=selector.NumberSelectorMode.BOX)
         ),
         vol.Optional(CONF_MANUAL_CALIBRATION_ENABLED, default=d.get(CONF_MANUAL_CALIBRATION_ENABLED, False)): selector.BooleanSelector(),
