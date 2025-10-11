@@ -101,6 +101,39 @@ def _as_watts(value: Any, unit: Optional[str]) -> Optional[float]:
     return val
 
 
+def _fetch_history_for_multiple_entities(hass, start_time, end_time, entity_ids):
+    """
+    Wrapper function to fetch history for multiple entities.
+    
+    This is needed because in newer Home Assistant versions, 
+    history.state_changes_during_period expects entity_id (singular) 
+    as a string, not a list. This wrapper fetches each entity 
+    individually and combines the results.
+    
+    Args:
+        hass: Home Assistant instance
+        start_time: Start datetime for history query
+        end_time: End datetime for history query
+        entity_ids: List of entity IDs to fetch history for
+    
+    Returns:
+        Dict mapping entity_id to list of state objects
+    """
+    from homeassistant.components.recorder import history
+    
+    combined = {}
+    for entity_id in entity_ids:
+        # Fetch history for single entity
+        result = history.state_changes_during_period(
+            hass, start_time, end_time, entity_id
+        )
+        # Merge results
+        if result:
+            combined.update(result)
+    
+    return combined
+
+
 class EnergyDispatcherCoordinator(DataUpdateCoordinator):
     """
     Samlar:
@@ -370,10 +403,10 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             if exclude_batt_grid and pv_energy_ent:
                 entities_to_fetch.append(pv_energy_ent)
             
-            # Fetch all needed entities in one call
-            # Note: entity_ids must be passed as positional argument (4th param), not keyword arg
+            # Fetch all needed entities using wrapper function
+            # (newer HA versions require entity_id as string, not list)
             all_hist = await self.hass.async_add_executor_job(
-                history.state_changes_during_period, self.hass, start, end, entities_to_fetch
+                _fetch_history_for_multiple_entities, self.hass, start, end, entities_to_fetch
             )
             
             house_states = all_hist.get(house_energy_ent, [])
