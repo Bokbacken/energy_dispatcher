@@ -405,9 +405,20 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             
             # Fetch all needed entities using wrapper function
             # (newer HA versions require entity_id as string, not list)
-            all_hist = await self.hass.async_add_executor_job(
-                _fetch_history_for_multiple_entities, self.hass, start, end, entities_to_fetch
-            )
+            # Use recorder's executor for database operations to avoid warnings
+            from homeassistant.components.recorder import get_instance
+            
+            try:
+                # Try to use the recorder's executor (preferred for database operations)
+                recorder = get_instance(self.hass)
+                all_hist = await recorder.async_add_executor_job(
+                    _fetch_history_for_multiple_entities, self.hass, start, end, entities_to_fetch
+                )
+            except (KeyError, RuntimeError):
+                # Fall back to hass executor if recorder not available (e.g., in tests)
+                all_hist = await self.hass.async_add_executor_job(
+                    _fetch_history_for_multiple_entities, self.hass, start, end, entities_to_fetch
+                )
             
             house_states = all_hist.get(house_energy_ent, [])
             if not house_states or len(house_states) < 2:
