@@ -197,6 +197,95 @@ class TestBatteryChargeTracking:
         # Verify small change was updated but didn't trigger charge event
         assert coordinator._batt_prev_charged_today == 10.0005
 
+    @pytest.mark.asyncio
+    async def test_charge_without_load_sensor_grid(self, coordinator, mock_bec):
+        """Test battery charge tracking without load sensor - should be conservative (grid)."""
+        # Setup initial state
+        coordinator._batt_last_reset_date = date.today()
+        coordinator._batt_prev_charged_today = 10.0
+        
+        # Remove load sensor from config (simulate user's setup)
+        coordinator.hass.data["energy_dispatcher"]["test_entry"]["config"]["load_power_entity"] = ""
+        
+        # Mock current state showing 0.5 kWh more charged
+        mock_charged_state = MagicMock()
+        mock_charged_state.state = "10.5"
+        
+        # Mock battery power (4kW charging)
+        mock_batt_power = MagicMock()
+        mock_batt_power.state = "4000"
+        
+        def state_get(entity_id):
+            if "charged_today" in entity_id:
+                return mock_charged_state
+            elif "battery_power" in entity_id:
+                return mock_batt_power
+            return None
+        
+        coordinator.hass.states.get = MagicMock(side_effect=state_get)
+        
+        # Mock current price and PV
+        coordinator.data["current_enriched"] = 2.5
+        coordinator.data["pv_now_w"] = 5000.0  # 5kW PV but no load sensor
+        
+        # Mock the on_charge method to verify call
+        with patch.object(mock_bec, 'on_charge') as mock_on_charge:
+            # Run tracking - without load sensor, can't determine true surplus
+            # Should be conservative and assume grid charging unless PV >> battery charge
+            await coordinator._update_battery_charge_tracking()
+            
+            # With 5kW PV and 4kW battery charging, without load sensor:
+            # PV < battery_charge * 2.0, so should be classified as grid
+            mock_on_charge.assert_called_once()
+            call_args = mock_on_charge.call_args[0]
+            assert call_args[0] == 0.5  # delta_charged
+            assert call_args[1] == 2.5  # cost (grid price, not 0.0)
+            assert call_args[2] == "grid"  # source
+
+    @pytest.mark.asyncio
+    async def test_charge_without_load_sensor_solar(self, coordinator, mock_bec):
+        """Test battery charge tracking without load sensor - high PV should be solar."""
+        # Setup initial state
+        coordinator._batt_last_reset_date = date.today()
+        coordinator._batt_prev_charged_today = 10.0
+        
+        # Remove load sensor from config (simulate user's setup)
+        coordinator.hass.data["energy_dispatcher"]["test_entry"]["config"]["load_power_entity"] = ""
+        
+        # Mock current state showing 0.5 kWh more charged
+        mock_charged_state = MagicMock()
+        mock_charged_state.state = "10.5"
+        
+        # Mock battery power (3kW charging)
+        mock_batt_power = MagicMock()
+        mock_batt_power.state = "3000"
+        
+        def state_get(entity_id):
+            if "charged_today" in entity_id:
+                return mock_charged_state
+            elif "battery_power" in entity_id:
+                return mock_batt_power
+            return None
+        
+        coordinator.hass.states.get = MagicMock(side_effect=state_get)
+        
+        # Mock current price and very high PV
+        coordinator.data["current_enriched"] = 2.5
+        coordinator.data["pv_now_w"] = 10000.0  # 10kW PV, much higher than battery charge
+        
+        # Mock the on_charge method to verify call
+        with patch.object(mock_bec, 'on_charge') as mock_on_charge:
+            # Run tracking - with PV >> battery charge, should be confident it's solar
+            await coordinator._update_battery_charge_tracking()
+            
+            # With 10kW PV and 3kW battery charging, without load sensor:
+            # PV >= battery_charge * 2.0 (10 >= 6), so should be classified as solar
+            mock_on_charge.assert_called_once()
+            call_args = mock_on_charge.call_args[0]
+            assert call_args[0] == 0.5  # delta_charged
+            assert call_args[1] == 0.0  # cost (solar is free)
+            assert call_args[2] == "solar"  # source
+
 
 class TestBatteryCapacitySensor:
     """Test battery capacity from sensor."""

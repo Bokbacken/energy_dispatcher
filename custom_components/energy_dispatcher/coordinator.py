@@ -944,7 +944,10 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         
         # Get PV power to determine if charging from solar or grid
         pv_power_w = self.data.get("pv_now_w", 0.0) or 0.0
-        load_power_w = self._read_watts(self._get_cfg(CONF_LOAD_POWER_ENTITY, "")) or 0.0
+        load_power_entity = self._get_cfg(CONF_LOAD_POWER_ENTITY, "")
+        load_power_w_raw = self._read_watts(load_power_entity)
+        has_load_sensor = load_power_w_raw is not None
+        load_power_w = load_power_w_raw if has_load_sensor else 0.0
         batt_power_w = self._read_battery_power_normalized()
         
         # Track charging
@@ -956,9 +959,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                     if self._batt_prev_charged_today is not None:
                         delta_charged = charged_today - self._batt_prev_charged_today
                         if delta_charged > 0.001:  # At least 1 Wh change
-                            # Determine if charging from grid or solar
-                            # If PV surplus exceeds charging power, it's solar, otherwise grid
-                            pv_surplus_w = max(0.0, pv_power_w - load_power_w)
                             # Estimate charge power (if batt_power_w available)
                             if batt_power_w is not None:
                                 # Standard convention: positive means charging
@@ -967,8 +967,21 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                                 # Estimate from delta over 5 minutes (300s update interval)
                                 charge_power_w = (delta_charged * 1000.0) / (300.0 / 3600.0)  # Convert to W
                             
-                            # Determine source and cost
-                            if pv_surplus_w >= charge_power_w * 0.8:  # 80% threshold for solar
+                            # Determine if charging from grid or solar
+                            # Conservative approach: assume grid charging unless we're confident it's solar
+                            if has_load_sensor:
+                                # We have load sensor, can calculate PV surplus accurately
+                                pv_surplus_w = max(0.0, pv_power_w - load_power_w)
+                                # 80% threshold: if PV surplus covers 80% of charge power, count as solar
+                                is_solar = pv_surplus_w >= charge_power_w * 0.8
+                            else:
+                                # No load sensor configured - use conservative approach
+                                # Only count as solar if PV significantly exceeds battery charge power
+                                # This accounts for unknown house load
+                                # Use 2.0x multiplier: PV must be at least 2x battery charge to be confident
+                                is_solar = pv_power_w >= charge_power_w * 2.0
+                            
+                            if is_solar:
                                 source = "solar"
                                 cost = 0.0  # Solar is free
                             else:
@@ -976,8 +989,10 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                                 cost = current_price
                             
                             _LOGGER.info(
-                                "Battery charged: %.3f kWh from %s @ %.3f SEK/kWh (PV: %.1f W, Load: %.1f W, Charge: %.1f W)",
-                                delta_charged, source, cost, pv_power_w, load_power_w, charge_power_w
+                                "Battery charged: %.3f kWh from %s @ %.3f SEK/kWh (PV: %.1f W, Load: %.1f W%s, Charge: %.1f W)",
+                                delta_charged, source, cost, pv_power_w, load_power_w,
+                                "" if has_load_sensor else " [estimated]",
+                                charge_power_w
                             )
                             bec.on_charge(delta_charged, cost, source)
                             await bec.async_save()
