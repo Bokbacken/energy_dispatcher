@@ -54,6 +54,9 @@ from .const import (
     CONF_GRID_IMPORT_TODAY_ENTITY,
     CONF_RUNTIME_LOOKBACK_HOURS,
     CONF_RUNTIME_USE_DAYPARTS,
+    CONF_LOAD_POWER_ENTITY,
+    CONF_BATT_POWER_ENTITY,
+    CONF_BATT_POWER_INVERT_SIGN,
 )
 from .models import PricePoint
 from .price_provider import PriceProvider, PriceFees
@@ -295,7 +298,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             return False
 
         batt_pw = self._read_battery_power_normalized()
-        load_pw = self._read_watts(self._get_cfg(CONF_LOAD_POWER_ENTITY, "")) or self._read_watts(self._get_cfg(CONF_RUNTIME_POWER_ENTITY, ""))  # W
+        load_pw = self._read_watts(self._get_cfg(CONF_LOAD_POWER_ENTITY, ""))  # W
         pv_pw = self._read_watts(self._get_cfg(CONF_PV_POWER_ENTITY, ""))
 
         if batt_pw is None or load_pw is None or pv_pw is None:
@@ -369,7 +372,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             
             # Fetch all needed entities in one call
             all_hist = await self.hass.async_add_executor_job(
-                history.state_changes_during_period, self.hass, start, end, entities_to_fetch
+                history.state_changes_during_period, self.hass, start, end, entity_ids=entities_to_fetch
             )
             
             house_states = all_hist.get(house_energy_ent, [])
