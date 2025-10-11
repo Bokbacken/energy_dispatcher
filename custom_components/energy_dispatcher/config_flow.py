@@ -112,12 +112,16 @@ DEFAULTS = {
     CONF_BATT_MAX_CHARGE_W: 4000,
     CONF_BATT_MAX_DISCH_W: 4000,
     CONF_BATT_ADAPTER: "huawei",
+    CONF_HUAWEI_DEVICE_ID: "",
     CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY: "",
     CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY: "",
     CONF_EV_MODE: "manual",
     CONF_EV_TARGET_SOC: 80.0,
     CONF_EV_CURRENT_SOC: 40.0,
     CONF_EV_BATT_KWH: 75.0,
+    CONF_EVSE_START_SWITCH: "",
+    CONF_EVSE_STOP_SWITCH: "",
+    CONF_EVSE_CURRENT_NUMBER: "",
     CONF_EVSE_MIN_A: 6,
     CONF_EVSE_MAX_A: 16,
     CONF_EVSE_PHASES: 3,
@@ -126,6 +130,11 @@ DEFAULTS = {
     CONF_EVSE_ENERGY_SENSOR: "",
     CONF_EVSE_TOTAL_ENERGY_SENSOR: "",
     CONF_FS_USE: True,
+    CONF_FS_APIKEY: "",
+    CONF_FS_LAT: 56.6967208731,
+    CONF_FS_LON: 13.0196173488,
+    CONF_FS_PLANES: '[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]',
+    CONF_FS_HORIZON: "18,16,11,7,5,4,3,2,2,4,7,10",
     CONF_PV_POWER_ENTITY: "",
     CONF_PV_ENERGY_TODAY_ENTITY: "",
     CONF_PV_TOTAL_ENERGY_ENTITY: "",
@@ -252,10 +261,10 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
             selector.SelectSelectorConfig(options=["forecast_solar", "manual_physics"], mode=selector.SelectSelectorMode.DROPDOWN)
         ),
         vol.Optional(CONF_FS_LAT, default=d.get(CONF_FS_LAT, 56.6967208731)): selector.NumberSelector(
-            selector.NumberSelectorConfig(min=-90, max=90, step=0.0001, mode=selector.NumberSelectorMode.BOX)
+            selector.NumberSelectorConfig(min=-90, max=90, step=0.001, mode=selector.NumberSelectorMode.BOX)
         ),
         vol.Optional(CONF_FS_LON, default=d.get(CONF_FS_LON, 13.0196173488)): selector.NumberSelector(
-            selector.NumberSelectorConfig(min=-180, max=180, step=0.0001, mode=selector.NumberSelectorMode.BOX)
+            selector.NumberSelectorConfig(min=-180, max=180, step=0.001, mode=selector.NumberSelectorMode.BOX)
         ),
         vol.Optional(CONF_FS_PLANES, default=d.get(CONF_FS_PLANES, '[{"dec":45,"az":"W","kwp":9.43},{"dec":45,"az":"E","kwp":4.92}]')): selector.TextSelector(
             selector.TextSelectorConfig(multiline=True)
