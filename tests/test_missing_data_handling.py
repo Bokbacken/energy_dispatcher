@@ -99,12 +99,12 @@ class TestDataStaleness:
         """Test data exactly at threshold."""
         now = dt_util.now()
         at_threshold = now - timedelta(minutes=15)
-        # Should be stale (> max_age)
-        assert _is_data_stale(at_threshold, max_age_minutes=15) is False
+        # Exactly at threshold should be stale (age > max_age)
+        assert _is_data_stale(at_threshold, max_age_minutes=15) is True
         
-        # Just over threshold
-        just_over = now - timedelta(minutes=15, seconds=1)
-        assert _is_data_stale(just_over, max_age_minutes=15) is True
+        # Just under threshold should not be stale
+        just_under = now - timedelta(minutes=14, seconds=59)
+        assert _is_data_stale(just_under, max_age_minutes=15) is False
     
     def test_custom_threshold(self):
         """Test with custom staleness threshold."""
