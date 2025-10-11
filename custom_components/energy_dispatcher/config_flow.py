@@ -225,10 +225,10 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
             selector.NumberSelectorConfig(min=0, max=100, step=1, unit_of_measurement="%", mode=selector.NumberSelectorMode.BOX)
         ),
         vol.Optional(CONF_EVSE_START_SWITCH, default=d.get(CONF_EVSE_START_SWITCH, "")): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="switch")
+            selector.EntitySelectorConfig(domain=["switch", "button"])
         ),
         vol.Optional(CONF_EVSE_STOP_SWITCH, default=d.get(CONF_EVSE_STOP_SWITCH, "")): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="switch")
+            selector.EntitySelectorConfig(domain=["switch", "button"])
         ),
         vol.Optional(CONF_EVSE_CURRENT_NUMBER, default=d.get(CONF_EVSE_CURRENT_NUMBER, "")): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="number")
