@@ -463,8 +463,10 @@ These settings help calculate the "true" baseline by excluding non-constant load
 #### House Load Power Sensor
 - **Field**: `load_power_entity`
 - **Type**: Entity selector (sensor domain)
-- **Description**: Total house load power for exclusion calculations
+- **Description**: Total house load power for exclusion calculations and accurate battery cost tracking
 - **Example**: `sensor.house_load_power`
+- **Importance**: While optional, this sensor is **highly recommended** for accurate battery energy cost tracking. Without it, the system cannot accurately determine when battery charging is from solar vs grid, which may result in incorrect cost calculations
+- **Impact if missing**: Battery charges will be conservatively classified as "grid" (with cost) unless PV production is at least 2x the battery charging power
 
 #### Battery Power Sensor
 - **Field**: `batt_power_entity`

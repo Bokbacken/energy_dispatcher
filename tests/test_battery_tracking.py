@@ -37,8 +37,11 @@ def coordinator(mock_hass, mock_bec):
                 "batt_energy_charged_today_entity": "sensor.battery_charged_today",
                 "batt_energy_discharged_today_entity": "sensor.battery_discharged_today",
                 "pv_power_entity": "sensor.pv_power",
+                "pv_energy_today_entity": "sensor.pv_energy_today",
                 "load_power_entity": "sensor.load_power",
                 "batt_power_entity": "sensor.battery_power",
+                "runtime_counter_entity": "sensor.house_energy_total",
+                "grid_import_today_entity": "sensor.grid_import_today",
             },
             "bec": mock_bec,
         }
@@ -52,58 +55,88 @@ class TestBatteryChargeTracking:
 
     @pytest.mark.asyncio
     async def test_charge_from_grid(self, coordinator, mock_bec):
-        """Test tracking battery charging from grid."""
+        """Test tracking battery charging from grid using energy deltas."""
         # Setup initial state
         coordinator._batt_last_reset_date = date.today()
         coordinator._batt_prev_charged_today = 10.0
+        coordinator._prev_pv_energy_today = 5.0
+        coordinator._prev_grid_import_today = 2.0
         
         # Mock current state showing 0.5 kWh more charged
-        mock_state = MagicMock()
-        mock_state.state = "10.5"
-        coordinator.hass.states.get = MagicMock(return_value=mock_state)
+        # PV increased by 0.2 kWh, grid import increased by 0.4 kWh
+        # Battery charged 0.5 kWh - more than PV delta, so from grid
+        def state_get(entity_id):
+            mock_state = MagicMock()
+            if "charged_today" in entity_id:
+                mock_state.state = "10.5"
+            elif "pv_energy_today" in entity_id:
+                mock_state.state = "5.2"  # PV delta = 0.2 kWh
+            elif "grid_import_today" in entity_id:
+                mock_state.state = "2.4"  # Grid import delta = 0.4 kWh
+            else:
+                return None
+            return mock_state
+        
+        coordinator.hass.states.get = MagicMock(side_effect=state_get)
         
         # Mock current price
         coordinator.data["current_enriched"] = 2.5
-        coordinator.data["pv_now_w"] = 0.0  # No PV, so charging from grid
         
-        # Run tracking
-        await coordinator._update_battery_charge_tracking()
+        # Mock the on_charge method to verify call
+        with patch.object(mock_bec, 'on_charge') as mock_on_charge:
+            # Run tracking
+            await coordinator._update_battery_charge_tracking()
+            
+            # Verify charge was recorded as grid (cost = 2.5)
+            mock_on_charge.assert_called_once()
+            call_args = mock_on_charge.call_args[0]
+            assert call_args[0] == 0.5  # delta_charged
+            assert call_args[1] == 2.5  # cost (grid price)
+            assert call_args[2] == "grid"  # source
         
         # Verify charge was recorded and value updated
         assert coordinator._batt_prev_charged_today == 10.5
 
     @pytest.mark.asyncio
     async def test_charge_from_solar(self, coordinator, mock_bec):
-        """Test tracking battery charging from solar."""
+        """Test tracking battery charging from solar using energy deltas."""
         # Setup initial state
         coordinator._batt_last_reset_date = date.today()
         coordinator._batt_prev_charged_today = 10.0
+        coordinator._prev_pv_energy_today = 5.0
+        coordinator._prev_grid_import_today = 2.0
         
         # Mock current state showing 0.5 kWh more charged
-        mock_charged_state = MagicMock()
-        mock_charged_state.state = "10.5"
-        
-        # Mock battery power (positive = charging in standard convention)
-        mock_batt_power = MagicMock()
-        mock_batt_power.state = "4000"  # 4kW charging
-        
+        # PV increased by 0.6 kWh, no grid import increase
+        # Battery charged 0.5 kWh - less than PV delta, so from solar
         def state_get(entity_id):
+            mock_state = MagicMock()
             if "charged_today" in entity_id:
-                return mock_charged_state
-            elif "battery_power" in entity_id:
-                return mock_batt_power
-            return None
+                mock_state.state = "10.5"
+            elif "pv_energy_today" in entity_id:
+                mock_state.state = "5.6"  # PV delta = 0.6 kWh (> 0.5 * 0.95)
+            elif "grid_import_today" in entity_id:
+                mock_state.state = "2.0"  # No grid import
+            else:
+                return None
+            return mock_state
         
         coordinator.hass.states.get = MagicMock(side_effect=state_get)
         
         # Mock current price
         coordinator.data["current_enriched"] = 2.5
-        coordinator.data["pv_now_w"] = 5000.0  # 5kW PV output
         
-        # Mock load power
-        with patch.object(coordinator, '_read_watts', return_value=1000.0):  # 1kW load
+        # Mock the on_charge method to verify call
+        with patch.object(mock_bec, 'on_charge') as mock_on_charge:
             # Run tracking
             await coordinator._update_battery_charge_tracking()
+            
+            # Verify charge was recorded as solar (cost = 0.0)
+            mock_on_charge.assert_called_once()
+            call_args = mock_on_charge.call_args[0]
+            assert call_args[0] == 0.5  # delta_charged
+            assert call_args[1] == 0.0  # cost (solar is free)
+            assert call_args[2] == "solar"  # source
         
         # Verify charge was recorded and value updated
         assert coordinator._batt_prev_charged_today == 10.5
@@ -196,6 +229,79 @@ class TestBatteryChargeTracking:
         
         # Verify small change was updated but didn't trigger charge event
         assert coordinator._batt_prev_charged_today == 10.0005
+
+    @pytest.mark.asyncio
+    async def test_charge_without_pv_energy_sensor_grid(self, coordinator, mock_bec):
+        """Test battery charge tracking without PV energy sensor - defaults to grid."""
+        # Setup initial state
+        coordinator._batt_last_reset_date = date.today()
+        coordinator._batt_prev_charged_today = 10.0
+        
+        # Remove PV energy sensor from config
+        coordinator.hass.data["energy_dispatcher"]["test_entry"]["config"]["pv_energy_today_entity"] = ""
+        
+        # Mock current state showing 0.5 kWh more charged
+        def state_get(entity_id):
+            mock_state = MagicMock()
+            if "charged_today" in entity_id:
+                mock_state.state = "10.5"
+            else:
+                return None
+            return mock_state
+        
+        coordinator.hass.states.get = MagicMock(side_effect=state_get)
+        
+        # Mock current price
+        coordinator.data["current_enriched"] = 2.5
+        
+        # Mock the on_charge method to verify call
+        with patch.object(mock_bec, 'on_charge') as mock_on_charge:
+            # Run tracking - without PV energy sensor, defaults to grid
+            await coordinator._update_battery_charge_tracking()
+            
+            # Without PV energy data, should default to grid charging
+            mock_on_charge.assert_called_once()
+            call_args = mock_on_charge.call_args[0]
+            assert call_args[0] == 0.5  # delta_charged
+            assert call_args[1] == 2.5  # cost (grid price, not 0.0)
+            assert call_args[2] == "grid"  # source
+
+    @pytest.mark.asyncio
+    async def test_charge_with_insufficient_pv_grid(self, coordinator, mock_bec):
+        """Test battery charge tracking when PV delta is less than battery charge - grid charging."""
+        # Setup initial state
+        coordinator._batt_last_reset_date = date.today()
+        coordinator._batt_prev_charged_today = 10.0
+        coordinator._prev_pv_energy_today = 5.0
+        
+        # Mock current state showing 0.5 kWh more charged
+        # But PV only increased by 0.3 kWh (not enough to cover battery charge)
+        def state_get(entity_id):
+            mock_state = MagicMock()
+            if "charged_today" in entity_id:
+                mock_state.state = "10.5"
+            elif "pv_energy_today" in entity_id:
+                mock_state.state = "5.3"  # PV delta = 0.3 kWh (< 0.5 * 0.95)
+            else:
+                return None
+            return mock_state
+        
+        coordinator.hass.states.get = MagicMock(side_effect=state_get)
+        
+        # Mock current price
+        coordinator.data["current_enriched"] = 2.5
+        
+        # Mock the on_charge method to verify call
+        with patch.object(mock_bec, 'on_charge') as mock_on_charge:
+            # Run tracking
+            await coordinator._update_battery_charge_tracking()
+            
+            # PV delta (0.3) < battery charge (0.5), should be grid
+            mock_on_charge.assert_called_once()
+            call_args = mock_on_charge.call_args[0]
+            assert call_args[0] == 0.5  # delta_charged
+            assert call_args[1] == 2.5  # cost (grid price)
+            assert call_args[2] == "grid"  # source
 
 
 class TestBatteryCapacitySensor:
