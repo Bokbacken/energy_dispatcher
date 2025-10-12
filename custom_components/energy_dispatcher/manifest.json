@@ -1,1 +1,13 @@
-{"domain": "energy_dispatcher","name": "Energy Dispatcher","version": "0.8.29","documentation": "https://github.com/Bokbacken/energy_dispatcher","issue_tracker": "https://github.com/Bokbacken/energy_dispatcher/issues","codeowners": ["@Bokbacken"],"requirements": [],"config_flow": true,"integration_type": "hub","iot_class": "calculated","description": "Enhanced: Missing data handling with interpolation for gaps up to 8h (baseline) and 1h (BEC), plus 15-minute staleness detection."}
+{
+  "domain": "energy_dispatcher",
+  "name": "Energy Dispatcher",
+  "version": "0.8.29",
+  "documentation": "https://github.com/Bokbacken/energy_dispatcher",
+  "issue_tracker": "https://github.com/Bokbacken/energy_dispatcher/issues",
+  "codeowners": ["@Bokbacken"],
+  "requirements": [],
+  "config_flow": true,
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "description": "Enhanced: Missing data handling with interpolation for gaps up to 8h (baseline) and 1h (BEC), plus 15-minute staleness detection."
+}
