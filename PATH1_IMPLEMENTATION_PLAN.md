@@ -2,7 +2,26 @@
 
 **Date**: 2025-10-13  
 **Current Version**: v0.8.30  
-**Target Version**: v0.9.0
+**Target Version**: v0.9.0 (deferred)
+
+---
+
+## 🎯 REVISED SCOPE (Updated 2025-10-13)
+
+**Decision**: Focus on objectives 1-3 only. Defer objectives 4-5 pending live testing.
+
+### What We're Doing Now:
+1. ✅ **Documentation organization** (already complete)
+2. ⏳ **Test infrastructure setup** (pytest.ini, CI/CD, requirements-test.txt)
+3. ⏳ **Cost strategy integration** (coordinator, sensors, config UI, translations)
+
+### What We're Deferring:
+4. ⏸️ **Phase 1 roadmap items** (charger presets, config bundles, import/export)
+5. ⏸️ **v0.9.0 release** (will prepare after live testing)
+
+**Why**: Need to test cost strategy integration in production first. Will find important improvements during live testing before adding more features.
+
+**Timeline**: 1-2 weeks for objectives 2-3
 
 ---
 
@@ -10,14 +29,16 @@
 
 This document outlines the specific implementation plan for **Path 1: Complete Existing Work** as recommended in the technical evaluation documents. This path focuses on finishing what has been started before adding new features.
 
-### Key Objectives
+### Key Objectives - REVISED SCOPE
 1. ✅ **Organize documentation** - Already done (docs in proper folders)
-2. ✅ **Set up test infrastructure** - Create pytest.ini, CI/CD, requirements-test.txt
-3. ✅ **Integrate Cost Strategy** - Wire existing cost_strategy.py into the coordinator
-4. ✅ **Complete Phase 1 Roadmap** - Add charger profiles, config bundles, import/export
-5. ✅ **Release v0.9.0** - Clean foundation for Phase 2
+2. ⏳ **Set up test infrastructure** - Create pytest.ini, CI/CD, requirements-test.txt
+3. ⏳ **Integrate Cost Strategy** - Wire existing cost_strategy.py into the coordinator
+4. ⏸️ **Complete Phase 1 Roadmap** - **ON HOLD** - Add charger profiles, config bundles, import/export
+5. ⏸️ **Release v0.9.0** - **ON HOLD** - Clean foundation for Phase 2
 
-**Timeline**: 3-4 weeks  
+**Revised Scope**: Focus on objectives 1-3 only. Objectives 4-5 deferred pending live testing of cost strategy integration.
+
+**Timeline**: 1-2 weeks for objectives 2-3  
 **Effort**: Medium  
 **Risk**: Low
 
@@ -625,9 +646,9 @@ Add "Export Configuration" button that calls the export service.
 
 ---
 
-## Timeline & Milestones
+## Timeline & Milestones - REVISED
 
-### Week 1: Foundation (Days 1-7)
+### Week 1: Foundation & Setup (Days 1-5)
 - [x] Day 1-2: Review and approve this plan
 - [ ] Day 2-3: Set up test infrastructure (pytest.ini, CI/CD, requirements)
 - [ ] Day 3-4: Make vehicle manager decision and clean up
@@ -635,52 +656,64 @@ Add "Export Configuration" button that calls the export service.
 
 **Milestone 1**: Test infrastructure complete, codebase cleaned up
 
-### Week 2: Cost Strategy (Days 8-14)
-- [ ] Day 8-10: Complete cost strategy integration
-- [ ] Day 11-12: Add sensors and configuration UI
-- [ ] Day 13-14: Add translations and test thoroughly
+### Week 2: Cost Strategy Integration (Days 6-10)
+- [ ] Day 6-8: Complete cost strategy integration (coordinator, config flow)
+- [ ] Day 9: Add sensors and configuration UI
+- [ ] Day 10: Add translations (EN/SV) and test thoroughly
 
-**Milestone 2**: Cost strategy fully integrated and tested
+**Milestone 2**: Cost strategy fully integrated and ready for live testing
 
-### Week 3: Phase 1 Roadmap (Days 15-21)
-- [ ] Day 15-16: Implement charger profiles (PR-5)
-- [ ] Day 17: Implement configuration bundles (PR-7)
-- [ ] Day 18-20: Implement import/export (PR-9)
-- [ ] Day 21: Test all Phase 1 features
+### DEFERRED - Pending Live Testing Results
 
-**Milestone 3**: Phase 1 roadmap complete
+The following milestones are deferred until cost strategy has been tested in production:
 
-### Week 4: Release (Days 22-28)
-- [ ] Day 22-24: Documentation updates
-- [ ] Day 25: Final testing and bug fixes
-- [ ] Day 26-27: Prepare release notes and changelog
-- [ ] Day 28: Release v0.9.0
+### ~~Week 3: Phase 1 Roadmap (Days 15-21)~~ **ON HOLD**
+- ~~Day 15-16: Implement charger profiles (PR-5)~~
+- ~~Day 17: Implement configuration bundles (PR-7)~~
+- ~~Day 18-20: Implement import/export (PR-9)~~
+- ~~Day 21: Test all Phase 1 features~~
 
-**Milestone 4**: v0.9.0 released
+**Reason**: Need live testing feedback on cost strategy before proceeding with additional features.
+
+### ~~Week 4: Release (Days 22-28)~~ **ON HOLD**
+- ~~Day 22-24: Documentation updates~~
+- ~~Day 25: Final testing and bug fixes~~
+- ~~Day 26-27: Prepare release notes and changelog~~
+- ~~Day 28: Release v0.9.0~~
+
+**Reason**: v0.9.0 release will be prepared after live testing validates cost strategy integration.
 
 ---
 
-## Success Criteria
+## Success Criteria - REVISED SCOPE
 
-### Technical
+### Technical (Objectives 1-3)
+- [x] Documentation already organized
 - [ ] All 92+ existing tests pass
 - [ ] New tests for cost strategy integration (10+ tests)
 - [ ] CI/CD pipeline working on GitHub Actions
 - [ ] Code coverage >= 70%
 - [ ] No breaking changes to existing configurations
 
-### Documentation
+### Documentation (Objectives 1-3)
 - [ ] Test infrastructure documented in README
 - [ ] Cost strategy guide created
-- [ ] Configuration docs updated for new features
-- [ ] Changelog complete for v0.9.0
+- [ ] Configuration docs updated for cost strategy
+- [ ] Changelog entry for cost strategy integration
 
-### Features
+### Features (Objective 3 Only)
 - [ ] Cost strategy integrated and working
-- [ ] 5 charger presets available
-- [ ] 3 configuration bundles available
-- [ ] Import/export working
-- [ ] All features have EN/SV translations
+- [ ] Cost classification (cheap/medium/high) functional
+- [ ] Battery reserve recommendations working
+- [ ] High-cost window prediction operational
+- [ ] All cost strategy features have EN/SV translations
+- [ ] Configuration UI for cost thresholds working
+
+### DEFERRED Features (Objectives 4-5)
+- ~~5 charger presets available~~ **ON HOLD**
+- ~~3 configuration bundles available~~ **ON HOLD**
+- ~~Import/export working~~ **ON HOLD**
+- ~~v0.9.0 release~~ **ON HOLD**
 
 ---
 
@@ -709,29 +742,39 @@ Add "Export Configuration" button that calls the export service.
 
 ---
 
-## Post-Release: Phase 2 Planning
+## Post Cost-Strategy Integration: Next Steps
 
-After v0.9.0 release, move to **Phase 2: Advanced Discovery**
+After cost strategy integration and live testing, the following will be evaluated:
 
-**Focus Areas**:
+### Phase 1b: Complete Remaining Items (If Cost Strategy Works Well)
+1. **PR-5**: Pre-configured charger profiles - 1-2 days
+2. **PR-7**: Configuration bundles - 1 day
+3. **PR-9**: Configuration import/export - 2 days
+4. **Release v0.9.0** - 1-2 days
+
+**Timeline**: 1-2 weeks after successful live testing
+
+### Phase 2: Advanced Discovery (Future)
 1. Device auto-discovery (PR-2) - 5-7 days
 2. Smart entity detection (PR-8) - 3-4 days
 3. Visual dashboard builder (PR-3) - 4-5 days
 
-**Timeline**: 2-3 months after v0.9.0
+**Timeline**: 2-3 months after Phase 1b complete
 
 ---
 
-## Questions for Review
+## Decisions Made
 
-Before proceeding with implementation, please confirm:
+Based on user feedback (comment #3333161760):
 
-1. ✅ **Cost Strategy**: Integrate it (recommended) or remove it?
-2. ✅ **Vehicle Manager**: Remove for now (recommended) or keep archived?
-3. ✅ **Charger Presets**: Are the 5 presets sufficient? Need more?
-4. ✅ **Config Bundles**: Are the 3 bundles appropriate for target users?
-5. ✅ **Timeline**: Is 3-4 weeks realistic for your availability?
-6. ✅ **Phase 1 Scope**: Should we defer any features to focus on core items?
+1. ✅ **Cost Strategy**: INTEGRATE IT - proceed with integration
+2. ✅ **Vehicle Manager**: REMOVE FOR NOW - clean up archived code
+3. ⏸️ **Charger Presets**: DEFERRED - wait for cost strategy live testing
+4. ⏸️ **Config Bundles**: DEFERRED - wait for cost strategy live testing
+5. ✅ **Timeline**: REVISED to 1-2 weeks for objectives 1-3 only
+6. ✅ **Phase 1 Scope**: FOCUS ON OBJECTIVES 1-3 - defer 4-5 for now
+
+**Rationale**: Need to test cost strategy integration live before adding more features. Won't get it right the first time, will find important improvements during testing.
 
 ---
 
