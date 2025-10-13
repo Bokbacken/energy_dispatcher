@@ -11,6 +11,10 @@ This guide provides detailed instructions on how to configure Energy Dispatcher 
 - [Baseline Load Configuration](#baseline-load-configuration)
 - [Advanced Options](#advanced-options)
 
+## Related Guides
+- [Battery Pause Mode with Dynamic Power Limits](battery_pause_mode.md) - Learn how to use sensor-based power limits for advanced battery control
+- [Huawei EMMA Capabilities](huawei_emma_capabilities.md) - Full reference for Huawei battery system features
+
 ## Initial Setup
 
 1. Navigate to **Settings** → **Devices & Services** in Home Assistant
