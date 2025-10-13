@@ -1,7 +1,7 @@
 {
   "domain": "energy_dispatcher",
   "name": "Energy Dispatcher",
-  "version": "0.8.31",
+  "version": "0.8.32",
   "documentation": "https://github.com/Bokbacken/energy_dispatcher",
   "issue_tracker": "https://github.com/Bokbacken/energy_dispatcher/issues",
   "codeowners": ["@Bokbacken"],
@@ -9,5 +9,5 @@
   "config_flow": true,
   "integration_type": "hub",
   "iot_class": "calculated",
-  "description": "Documentation organization: Moved fix summaries to docs/changelog/ and technical docs to docs/technical/. Added comprehensive cost strategy guide."
+  "description": "Updated copilot instructions with planner principles, testing approach, and documentation sync guidance. Fixed data quality report script to handle CSV format."
 }

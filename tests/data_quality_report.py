@@ -57,25 +57,57 @@ def load_csv_series(path: Path):
     times: List[datetime] = []
     values: List[float] = []
     with path.open("r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        if "timestamp" in (reader.fieldnames or []) and "value" in (reader.fieldnames or []):
-            for row in reader:
-                t = parse_timestamp(row["timestamp"])
-                try:
-                    v = float(str(row["value"]).strip())
-                except Exception:
-                    continue
-                if t is not None:
-                    times.append(t)
-                    values.append(v)
-        else:
-            headers = reader.fieldnames or []
-            if len(headers) >= 2:
-                tcol, vcol = headers[0], headers[1]
+        # Try to detect if file has headers
+        first_line = f.readline().strip()
+        f.seek(0)
+        
+        # Check if first line looks like headers (contains "timestamp" or "value")
+        has_headers = "timestamp" in first_line.lower() and "value" in first_line.lower()
+        
+        if has_headers:
+            reader = csv.DictReader(f)
+            if "timestamp" in (reader.fieldnames or []) and "value" in (reader.fieldnames or []):
                 for row in reader:
-                    t = parse_timestamp(row.get(tcol, ""))
+                    t = parse_timestamp(row["timestamp"])
                     try:
-                        v = float(str(row.get(vcol, "")).strip())
+                        v = float(str(row["value"]).strip())
+                    except Exception:
+                        continue
+                    if t is not None:
+                        times.append(t)
+                        values.append(v)
+            else:
+                headers = reader.fieldnames or []
+                if len(headers) >= 2:
+                    tcol, vcol = headers[0], headers[1]
+                    for row in reader:
+                        t = parse_timestamp(row.get(tcol, ""))
+                        try:
+                            v = float(str(row.get(vcol, "")).strip())
+                        except Exception:
+                            continue
+                        if t is not None:
+                            times.append(t)
+                            values.append(v)
+        else:
+            # No headers, assume format: entity_id, value, timestamp
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) >= 3:
+                    # entity_id, value, timestamp
+                    try:
+                        v = float(str(row[1]).strip())
+                        t = parse_timestamp(row[2])
+                    except Exception:
+                        continue
+                    if t is not None:
+                        times.append(t)
+                        values.append(v)
+                elif len(row) >= 2:
+                    # Fallback: timestamp, value
+                    try:
+                        t = parse_timestamp(row[0])
+                        v = float(str(row[1]).strip())
                     except Exception:
                         continue
                     if t is not None:
