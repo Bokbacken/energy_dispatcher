@@ -61,6 +61,7 @@ from .const import (
 from .models import PricePoint
 from .price_provider import PriceProvider, PriceFees
 from .forecast_provider import ForecastSolarProvider
+from .cost_strategy import CostStrategy
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -298,8 +299,16 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             # Forecast vs actual (15m)
             "solar_delta_15m_w": None,
             "solar_delta_15m_pct": None,
+            # Cost strategy
+            "cost_level": None,  # "cheap", "medium", or "high"
+            "battery_reserve_recommendation": None,  # Recommended SOC% to maintain
+            "high_cost_windows": [],  # List of (start, end) tuples for high-cost periods
+            "cost_summary": {},  # Summary of cost classification
         }
 
+        # Cost strategy instance
+        self._cost_strategy = CostStrategy()
+        
         # Historik för baseline (counter_kwh)
         self._baseline_prev_counter: Optional[Tuple[float, Any]] = None  # (kWh, ts)
         self._sf_history: List[Tuple[Any, float, float]] = []  # (ts, forecast_w, actual_w)
@@ -411,6 +420,76 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self.data["cheap_threshold"] = round(enriched[p25_idx], 4)
         else:
             self.data["cheap_threshold"] = None
+        
+        # Update cost strategy analysis
+        await self._update_cost_strategy(hourly)
+
+    # ---------- cost strategy ----------
+    async def _update_cost_strategy(self, hourly_prices: List[PricePoint]):
+        """Update cost strategy analysis based on current price data."""
+        if not hourly_prices:
+            self.data["cost_level"] = None
+            self.data["battery_reserve_recommendation"] = None
+            self.data["high_cost_windows"] = []
+            self.data["cost_summary"] = {}
+            return
+        
+        now = dt_util.now()
+        
+        # Get current price
+        current_price = self.data.get("current_enriched")
+        if current_price is None:
+            self.data["cost_level"] = None
+        else:
+            # Classify current price
+            cost_level = self._cost_strategy.classify_price(current_price)
+            self.data["cost_level"] = cost_level.value
+        
+        # Calculate battery reserve recommendation if we have battery info
+        battery_reserve = None
+        batt_cap_kwh = _safe_float(self._get_cfg(CONF_BATT_CAP_KWH))
+        batt_soc_entity = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
+        current_soc = None
+        if batt_soc_entity:
+            current_soc = self._read_float(batt_soc_entity)
+        
+        if batt_cap_kwh and current_soc is not None:
+            try:
+                battery_reserve = self._cost_strategy.calculate_battery_reserve(
+                    prices=hourly_prices,
+                    now=now,
+                    battery_capacity_kwh=batt_cap_kwh,
+                    current_soc=current_soc
+                )
+            except Exception as e:
+                _LOGGER.debug("Failed to calculate battery reserve: %s", e)
+                battery_reserve = None
+        
+        self.data["battery_reserve_recommendation"] = battery_reserve
+        
+        # Predict high-cost windows
+        try:
+            high_cost_windows = self._cost_strategy.predict_high_cost_windows(
+                prices=hourly_prices,
+                now=now,
+                horizon_hours=24
+            )
+            self.data["high_cost_windows"] = high_cost_windows
+        except Exception as e:
+            _LOGGER.debug("Failed to predict high-cost windows: %s", e)
+            self.data["high_cost_windows"] = []
+        
+        # Generate cost summary
+        try:
+            cost_summary = self._cost_strategy.get_cost_summary(
+                prices=hourly_prices,
+                now=now,
+                horizon_hours=24
+            )
+            self.data["cost_summary"] = cost_summary
+        except Exception as e:
+            _LOGGER.debug("Failed to generate cost summary: %s", e)
+            self.data["cost_summary"] = {}
 
     # ---------- baseline + runtime ----------
     def _is_ev_charging(self) -> bool:
