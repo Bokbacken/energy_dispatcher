@@ -114,6 +114,7 @@ Configure your home battery system for optimal charge/discharge scheduling.
 - **Default**: 4000
 - **Description**: Maximum power at which the battery can be charged
 - **Example**: `5000` for a 5kW system
+- **Note**: This manual setting is overridden when `batt_max_charge_power_entity` is configured
 
 #### Maximum Discharge Power
 - **Field**: `batt_max_disch_w`
@@ -121,6 +122,31 @@ Configure your home battery system for optimal charge/discharge scheduling.
 - **Default**: 4000
 - **Description**: Maximum power at which the battery can discharge
 - **Example**: `5000` for a 5kW system
+- **Note**: This manual setting is overridden when `batt_max_disch_power_entity` is configured
+
+#### Maximum Charge Power Sensor (Dynamic)
+- **Field**: `batt_max_charge_power_entity`
+- **Type**: Entity selector (sensor domain)
+- **Default**: Empty
+- **Description**: Sensor reporting current maximum charge power limit in watts. When configured, this dynamically overrides the manual `batt_max_charge_w` setting
+- **Example**: `sensor.battery_maximum_charge_power` (Huawei systems)
+- **Use Cases**:
+  - **Dynamic power limiting**: Automatically adjust charge power based on battery temperature, grid conditions, or other factors
+  - **Pause mode**: When sensor reports 0 W, battery charging is effectively paused while allowing discharge
+  - **Optimization**: Integrate with price-based or load-based power management strategies
+- **Note**: For Huawei LUNA2000 systems, this typically corresponds to the `STORAGE_MAXIMUM_CHARGE_POWER` register sensor
+
+#### Maximum Discharge Power Sensor (Dynamic)
+- **Field**: `batt_max_disch_power_entity`
+- **Type**: Entity selector (sensor domain)
+- **Default**: Empty
+- **Description**: Sensor reporting current maximum discharge power limit in watts. When configured, this dynamically overrides the manual `batt_max_disch_w` setting
+- **Example**: `sensor.battery_maximum_discharge_power` (Huawei systems)
+- **Use Cases**:
+  - **Dynamic power limiting**: Automatically adjust discharge power based on battery state, load requirements, or grid conditions
+  - **Pause mode**: When sensor reports 0 W, battery discharging is effectively paused while allowing charge
+  - **Grid integration**: Limit discharge during grid instability or follow utility requirements
+- **Note**: For Huawei LUNA2000 systems, this typically corresponds to the `STORAGE_MAXIMUM_DISCHARGE_POWER` register sensor
 
 #### Battery Adapter
 - **Field**: `batt_adapter`
