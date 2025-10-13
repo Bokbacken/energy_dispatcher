@@ -31,9 +31,10 @@ Detailed requirements for additional data collection to enable comprehensive tes
 
 **Critical missing data** (high priority):
 1. Historical weather data (Oct 4-11, 2025) - for solar forecast validation
-2. EV/EVSE sensor data (24-48h) - for EV dispatcher testing
+2. EV/EVSE sensor data (24-48h, with realistic gaps) - for EV dispatcher testing
 3. Grid feed-in tariff data - for export optimization
-4. Perfect 24h dataset (no gaps) - for baseline validation
+
+**Note**: Gaps in existing data are intentional and valuable. The integration uses cumulative energy counters that continue counting during gaps (HA crashes, updates, network issues), so testing with gaps validates real-world scenarios.
 
 **Nice to have** (medium priority):
 - Winter/summer data sets
@@ -167,12 +168,11 @@ pytest tests/test_price_provider_with_data.py -v -s
 - [x] Example integration test (price provider)
 
 ### 🚧 Phase 1 (In Progress) - Foundation with Existing Data
-- [x] `test_price_provider_with_data.py` - 3 tests
+- [x] `test_price_provider_with_data.py` - 11 tests
 - [ ] `test_coordinator_with_real_data.py` - 5 tests
 - [ ] `test_missing_data_real_scenarios.py` - 3 tests
-- [ ] Perfect window fixtures extracted
 
-**Target**: 11 new tests (current: 3)
+**Target**: 19 new tests (current: 11)
 
 ### 📋 Phase 2 - Core Validation with Existing Data
 - [ ] `test_bec_real_battery_cycles.py` - 3 tests
@@ -182,7 +182,7 @@ pytest tests/test_price_provider_with_data.py -v -s
 **Target**: 8 new tests
 
 ### 📋 Phase 3 - Advanced Testing (Requires New Data)
-- [ ] Collect missing data (weather, EV, tariffs, perfect 24h)
+- [ ] Collect missing data (weather, EV with realistic gaps, tariffs)
 - [ ] `test_forecast_provider_validation.py` - 2 tests
 - [ ] `test_e2e_energy_management.py` - 3 tests
 - [ ] Document results and gaps

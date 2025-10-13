@@ -4,6 +4,18 @@
 
 This document analyzes the current test coverage, evaluates how existing sample data can be used to test integration functions, and identifies additional sample data sets needed for comprehensive testing.
 
+## Testing Philosophy: Gaps Are Intentional
+
+**Important**: The sample data contains gaps by design. These represent real-world scenarios:
+- Home Assistant crashes and restarts
+- System updates (may take 30+ minutes offline)
+- Network connectivity issues
+- Sensor failures or temporary unavailability
+
+**Why this matters**: The integration uses cumulative energy counters specifically because they continue counting even when not being read. When sensor values return after a gap, the delta still accurately reflects energy flow during the outage. Testing with gaps ensures the integration handles these real-world scenarios correctly.
+
+**Testing approach**: Use the existing gappy data to validate interpolation, gap detection, and counter-based calculations. This is more valuable than artificial "perfect" data without gaps.
+
 ## Current Test Coverage Analysis
 
 ### Well-Tested Modules (Unit Tests) ✓
@@ -247,25 +259,20 @@ This document analyzes the current test coverage, evaluates how existing sample 
    - **Purpose**: Test export optimization
    - **Source**: User's electricity contract
 
-4. **Perfect 24h Data Set** (all sensors, no gaps)
-   - All current sensors with continuous recording
-   - **Purpose**: Baseline validation without interpolation complications
-   - **Source**: New recording session with stable connectivity
-
 ### Nice to Have (Medium Priority)
 
-5. **Winter Data Set** (Dec-Feb): Low solar, high consumption, different prices
-6. **Summer Data Set** (Jun-Jul): High solar, low consumption, export scenarios
-7. **Price Spike Event**: >5 SEK/kWh periods
-8. **Grid Outage Scenario**: Battery disconnect/reconnect events
-9. **Battery Maintenance Event**: SOC reset, manual interventions
-10. **Multi-Day Cloud Cover**: <20% expected solar for several days
+4. **Winter Data Set** (Dec-Feb): Low solar, high consumption, different prices
+5. **Summer Data Set** (Jun-Jul): High solar, low consumption, export scenarios
+6. **Price Spike Event**: >5 SEK/kWh periods
+7. **Grid Outage Scenario**: Battery disconnect/reconnect events
+8. **Battery Maintenance Event**: SOC reset, manual interventions
+9. **Multi-Day Cloud Cover**: <20% expected solar for several days
 
 ### Low Priority (Optional)
 
-11. **Multiple Battery Systems**: Data from installation with >1 battery
-12. **Different Inverter Types**: Various models, efficiency curves
-13. **Grid Frequency Events**: Frequency regulation activation
+10. **Multiple Battery Systems**: Data from installation with >1 battery
+11. **Different Inverter Types**: Various models, efficiency curves
+12. **Grid Frequency Events**: Frequency regulation activation
 
 ## Implementation Plan
 
@@ -286,7 +293,7 @@ This document analyzes the current test coverage, evaluates how existing sample 
 10. Document results and gaps
 
 ### Phase 4: Data Collection (Ongoing)
-11. Collect missing sample data sets (EV, weather, perfect 24h)
+11. Collect missing sample data sets (EV with realistic gaps, weather)
 12. Add seasonal variations
 13. Document edge cases
 

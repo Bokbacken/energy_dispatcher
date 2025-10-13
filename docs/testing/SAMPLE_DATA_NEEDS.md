@@ -11,6 +11,20 @@ This document provides a prioritized list of sample data sets needed to improve 
 ✓ Energy prices - spot and full (7 days, hourly)
 ✓ Nordpool price structure (YAML format)
 
+## Philosophy: Testing with Gaps is Intentional
+
+**Important**: The existing sample data includes gaps by design. These gaps represent real-world scenarios:
+- Home Assistant crashes and restarts
+- System updates (may take 30+ minutes)
+- Network connectivity issues
+- Sensor failures or temporary unavailability
+
+**Why this matters**: The integration uses cumulative energy counters specifically because they continue counting even when not being read. When values return, the delta still accurately reflects energy flow during the gap. Testing with gaps ensures the integration handles these real-world scenarios correctly.
+
+**Testing approach**: Use the existing gappy data to validate interpolation, gap detection, and counter-based calculations. This is more valuable than artificial "perfect" data.
+
+---
+
 ## Critical Missing Data (High Priority)
 
 ### 1. Historical Weather Data (Oct 4-11, 2025)
@@ -81,28 +95,6 @@ This document provides a prioritized list of sample data sets needed to improve 
 - For Oct 4-11, 2025 period specifically
 
 **Impact**: Enables export optimization testing
-
----
-
-### 4. Perfect 24h Data Set (All Sensors)
-
-**What we need**:
-- All existing sensor types (battery, grid, PV, house, prices)
-- Continuous recording with NO GAPS
-- 30-second intervals or better
-- Ideally includes a full charge/discharge cycle
-
-**Purpose**:
-- Baseline validation without interpolation complications
-- Reference dataset for algorithm validation
-- Simpler debugging when issues arise
-
-**How to obtain**:
-- New recording session with stable network
-- Monitor recording in real-time to ensure continuity
-- May need to wait for good connectivity period
-
-**Impact**: Gold standard dataset for validation
 
 ---
 
@@ -227,7 +219,6 @@ Sample data can be added to:
 | ⭐⭐⭐ | Weather (Oct 4-11) | 7 days | Solar forecast validation | ❌ Missing |
 | ⭐⭐⭐ | EV/EVSE sensors | 24-48h | EV dispatcher testing | ❌ Missing |
 | ⭐⭐⭐ | Feed-in tariff | 7 days | Export optimization | ❌ Missing |
-| ⭐⭐⭐ | Perfect 24h set | 24h | Gold standard validation | ❌ Missing |
 | ⭐⭐ | Winter data | 7 days | Seasonal variation | ❌ Missing |
 | ⭐⭐ | Summer data | 7 days | Export scenarios | ❌ Missing |
 | ⭐⭐ | Price spike | 24h+ | Extreme scenario | ❌ Missing |
@@ -244,12 +235,13 @@ Legend: ⭐⭐⭐ = Critical, ⭐⭐ = Nice to have, ⭐ = Optional
 
 ## Testing Impact
 
-With current sample data, we can implement **Phase 1 & 2** testing (19 new tests).
+With current sample data (including its realistic gaps), we can implement **Phase 1 & 2** testing (19 new tests).
 
-With the 4 critical missing data sets, we can implement **Phase 3** testing (5+ additional tests) and enable full validation of:
+With the 3 critical missing data sets, we can implement **Phase 3** testing (5+ additional tests) and enable full validation of:
 - Solar forecast accuracy
 - EV charging optimization
 - Export optimization
-- Algorithm validation without interpolation artifacts
+
+**Note**: The existing gappy data is already ideal for testing gap handling, interpolation, and cumulative counter calculations. No "perfect" data needed - gaps are a feature, not a bug.
 
 Total potential: **300+ tests** (up from current 236)

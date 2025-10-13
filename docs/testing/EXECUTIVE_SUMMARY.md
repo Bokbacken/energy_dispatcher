@@ -119,35 +119,31 @@ This analysis provides:
    - **Enables**: Solar forecast validation (2 tests)
    - **Source**: Weather API, local weather station
 
-2. **EV/EVSE Sensor Data** (24-48h)
+2. **EV/EVSE Sensor Data** (24-48h, with realistic gaps)
    - EV SOC (%), EVSE power (kW), status, current (A), cumulative energy
    - **Enables**: EV dispatcher testing, adapter validation
    - **Source**: Actual EV/EVSE installation
+   - **Note**: Gaps expected and valuable for testing
 
 3. **Grid Feed-in Tariff Data** (Oct 4-11)
    - Export price (SEK/kWh), compensation rates
    - **Enables**: Export optimization testing
    - **Source**: Electricity contract
 
-4. **Perfect 24h Data Set** (all sensors, no gaps)
-   - All existing sensors, continuous recording
-   - **Enables**: Gold standard baseline validation
-   - **Source**: New recording with stable connectivity
-
 ### Nice to Have (Medium Priority) ⭐⭐
 
-5. **Winter Data Set** (Dec-Feb, 7 days) - Seasonal variations
-6. **Summer Data Set** (Jun-Jul, 7 days) - Export scenarios
-7. **Price Spike Event** (>5 SEK/kWh, 24h+) - Extreme scenarios
-8. **Grid Outage Scenario** - Resilience testing
-9. **Battery Maintenance Event** - Manual override handling
-10. **Multi-Day Cloud Cover** (3-5 days) - Low solar strategy
+4. **Winter Data Set** (Dec-Feb, 7 days) - Seasonal variations
+5. **Summer Data Set** (Jun-Jul, 7 days) - Export scenarios
+6. **Price Spike Event** (>5 SEK/kWh, 24h+) - Extreme scenarios
+7. **Grid Outage Scenario** - Resilience testing
+8. **Battery Maintenance Event** - Manual override handling
+9. **Multi-Day Cloud Cover** (3-5 days) - Low solar strategy
 
 ### Optional (Low Priority) ⭐
 
-11. **Multiple Battery Systems** - Multi-battery support
-12. **Different Inverter Types** - Adapter validation
-13. **Grid Frequency Events** - Future functionality
+10. **Multiple Battery Systems** - Multi-battery support
+11. **Different Inverter Types** - Adapter validation
+12. **Grid Frequency Events** - Future functionality
 
 ## Implementation Roadmap
 
@@ -247,9 +243,11 @@ This analysis provides:
 
 **Deliverables**: Complete analysis, prioritized recommendations, working tools, and example implementation.
 
-**Ready to Execute**: 19 integration tests can be implemented immediately using existing sample data.
+**Ready to Execute**: 19 integration tests can be implemented immediately using existing sample data (with realistic gaps).
 
-**Blocked Items**: 5 tests require new data collection (weather, EV, tariffs, perfect 24h).
+**Blocked Items**: 5 tests require new data collection (weather, EV, tariffs).
+
+**Testing Philosophy**: Gaps in data are intentional and valuable. The integration uses cumulative energy counters that continue counting during gaps, so testing with gaps validates real-world scenarios like HA crashes, updates, and network issues.
 
 **Expected Outcome**: 270+ tests covering all critical modules with real-world validation by end of implementation.
 
