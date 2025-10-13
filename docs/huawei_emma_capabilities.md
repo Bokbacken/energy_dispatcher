@@ -315,8 +315,29 @@ The EMMA controller exposes various registers that can be read or written. Here 
 - `STORAGE_FORCIBLE_CHARGE_DISCHARGE_SOC`: Target SOC (%)
 - `STORAGE_FORCIBLE_CHARGE_DISCHARGE_SETTING_MODE`: Mode (TIME or SOC)
 - `STORAGE_FORCIBLE_CHARGE_DISCHARGE_WRITE`: Command (CHARGE, DISCHARGE, STOP)
-- `STORAGE_MAXIMUM_CHARGE_POWER`: Max charge power limit (W)
-- `STORAGE_MAXIMUM_DISCHARGE_POWER`: Max discharge power limit (W)
+- `STORAGE_MAXIMUM_CHARGE_POWER`: Max charge power limit (W) - **Can be used for pause mode**
+- `STORAGE_MAXIMUM_DISCHARGE_POWER`: Max discharge power limit (W) - **Can be used for pause mode**
+
+**Battery Pause Mode using Power Limits:**
+
+The `STORAGE_MAXIMUM_CHARGE_POWER` and `STORAGE_MAXIMUM_DISCHARGE_POWER` registers can be dynamically adjusted to control battery behavior:
+
+- **Pause Charging**: Set `STORAGE_MAXIMUM_CHARGE_POWER` to 0 W
+  - Use case: Battery is full and spot price is very low - save energy for higher price periods
+  - Battery can still discharge but won't charge from any source (grid or solar)
+  
+- **Pause Discharging**: Set `STORAGE_MAXIMUM_DISCHARGE_POWER` to 0 W
+  - Use case: Preserve battery energy during extended low-price periods or for backup reserves
+  - Battery can still charge but won't discharge to supply loads
+  
+- **Full Pause**: Set both to 0 W
+  - Battery is effectively idle - no charging or discharging
+  - Useful for maintenance, grid instability, or extreme conditions
+
+**Integration with Energy Dispatcher:**
+- Configure `batt_max_charge_power_entity` and `batt_max_disch_power_entity` to read these register values
+- Energy Dispatcher can monitor and use these dynamic limits in optimization algorithms
+- External automations can adjust these registers based on price, SOC, or other conditions
 
 ### EMMA Power Control Registers
 - `EMMA_POWER_CONTROL_MODE_AT_GRID_CONNECTION_POINT`: Power control mode

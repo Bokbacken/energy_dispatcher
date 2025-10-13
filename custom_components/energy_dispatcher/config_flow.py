@@ -22,6 +22,8 @@ from .const import (
     CONF_BATT_SOC_ENTITY,
     CONF_BATT_MAX_CHARGE_W,
     CONF_BATT_MAX_DISCH_W,
+    CONF_BATT_MAX_CHARGE_POWER_ENTITY,
+    CONF_BATT_MAX_DISCH_POWER_ENTITY,
     CONF_BATT_ADAPTER,
     CONF_HUAWEI_DEVICE_ID,
     CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY,
@@ -111,6 +113,8 @@ DEFAULTS = {
     CONF_BATT_CAPACITY_ENTITY: "",
     CONF_BATT_MAX_CHARGE_W: 4000,
     CONF_BATT_MAX_DISCH_W: 4000,
+    CONF_BATT_MAX_CHARGE_POWER_ENTITY: "",
+    CONF_BATT_MAX_DISCH_POWER_ENTITY: "",
     CONF_BATT_ADAPTER: "huawei",
     CONF_HUAWEI_DEVICE_ID: "",
     CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY: "",
@@ -200,6 +204,12 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         ),
         vol.Optional(CONF_BATT_MAX_DISCH_W, default=d.get(CONF_BATT_MAX_DISCH_W, 4000)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=100, max=20000, step=100, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_BATT_MAX_CHARGE_POWER_ENTITY, default=d.get(CONF_BATT_MAX_CHARGE_POWER_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_BATT_MAX_DISCH_POWER_ENTITY, default=d.get(CONF_BATT_MAX_DISCH_POWER_ENTITY, "")): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
         ),
         vol.Optional(CONF_BATT_ADAPTER, default=d.get(CONF_BATT_ADAPTER, "huawei")): selector.SelectSelector(
             selector.SelectSelectorConfig(options=["huawei"], mode=selector.SelectSelectorMode.DROPDOWN)
