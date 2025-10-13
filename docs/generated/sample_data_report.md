@@ -166,3 +166,6 @@ Scanned directory: /home/runner/work/energy_dispatcher/energy_dispatcher/tests/f
 ## nordpool_spot_price_today_tomorrow-01.yaml
 - YAML detected (prices today/tomorrow). Not analyzed as a series.
 
+## nordpool_spot_price_today_tomorrow-02.yaml
+- YAML detected (prices today/tomorrow). Not analyzed as a series.
+
