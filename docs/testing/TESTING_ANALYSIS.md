@@ -46,19 +46,19 @@ This document analyzes the current test coverage, evaluates how existing sample 
    - Temperature effects
    - Inverter efficiency
    - Array orientation
-   - **No real weather data**
+   - ⚠️ **Weather forecast data available** (Met.no format)
 
 5. **Vehicle Manager** - 25 tests
    - Charge planning
    - Ready-by-time optimization
    - Power limit management
-   - **No real EV sensor data**
+   - ✅ **Real EV sensor data now available**
 
 6. **Physics Standalone** - 24 tests
    - GHI calculations
    - Cloud cover modeling
    - DHI/DNI decomposition
-   - **No validation against real measurements**
+   - ⚠️ **Weather forecast available, but no actual measurements for validation**
 
 7. **Config Flow** - 28 tests
    - Schema validation
@@ -106,7 +106,7 @@ This document analyzes the current test coverage, evaluates how existing sample 
 6. **Adapters** (`adapters/`)
    - Huawei, Generic EVSE, Manual EV
    - **No dedicated tests**
-   - **No sample EVSE sensor data**
+   - ✅ **EV sensor data now available**: power, session energy, total energy
 
 
 ## Sample Data Quality Assessment
@@ -200,9 +200,30 @@ This document analyzes the current test coverage, evaluates how existing sample 
     - 6 non-monotonic segments ⚠️
     - **Note**: Non-monotonic indicates possible daily resets
 
-13. **nordpool_spot_price_today_tomorrow.yaml**
+13. **nordpool_spot_price_today_tomorrow-01.yaml** and **-02.yaml**
     - Structured price data with today/tomorrow split
-    - **Good for**: Price provider integration tests
+    - -02 includes price spike (5.72 SEK/kWh peak on Oct 14, 18:45)
+    - **Good for**: Price provider integration tests, spike scenario tests
+
+14. **historic_EV_charging_power.csv**
+    - 3,805 points over ~167 hours
+    - Realistic gaps representing charging sessions
+    - **Good for**: EV charging optimization, power tracking
+
+15. **historic_EV_session_charged_energy.csv**
+    - 5,654 points over ~167 hours
+    - Session-based tracking with resets
+    - **Good for**: Per-session energy accounting
+
+16. **historic_EV_total_charged_energy.csv**
+    - 4,798 points over ~167 hours
+    - Cumulative energy counter
+    - **Good for**: Long-term EV energy tracking
+
+17. **forecast_weather_met.no-01.yaml**
+    - Weather forecast data (Met.no format)
+    - Hourly cloud coverage, temperature, precipitation
+    - **Good for**: Solar forecast algorithm testing (processing, not accuracy validation)
 
 
 ## Recommended Priority 1 Tests (Can Be Implemented Now)
@@ -244,26 +265,34 @@ This document analyzes the current test coverage, evaluates how existing sample 
 
 ### Critical Gaps (High Priority)
 
-1. **Historical Weather Data** (Oct 4-11, 2025)
-   - Cloud cover (%), Temperature (°C), Solar irradiance (W/m²)
-   - **Purpose**: Validate solar forecast accuracy
-   - **Source**: Weather API historical data, nearby weather station
+1. **Historical Weather Data** (Oct 4-11, 2025) - ⚠️ **Partially Available**
+   - ⚠️ Weather forecast available (Met.no format): `forecast_weather_met.no-01.yaml`
+   - ❌ Historical actual measurements not available (HA doesn't log by default)
+   - ❌ Solar irradiance (W/m²) not available
+   - **Purpose**: Validate solar forecast accuracy (can test processing, not accuracy)
+   - **Note**: Can use forecast data alongside actual PV production for validation
 
-2. **EV/EVSE Sensor Data** (any 24-48h period)
-   - EV SOC (%), EVSE power (kW), EVSE status, EVSE current (A), Cumulative EV energy (kWh)
+2. **EV/EVSE Sensor Data** (any 24-48h period) - ✅ **Available**
+   - ✅ EV charging power (kW): `historic_EV_charging_power.csv`
+   - ✅ EV session energy (kWh): `historic_EV_session_charged_energy.csv`
+   - ✅ EV total energy (kWh): `historic_EV_total_charged_energy.csv`
+   - ❌ EV SOC (%) not available
+   - ❌ EVSE status/current not available
    - **Purpose**: Test EV dispatcher and EVSE adapters
-   - **Source**: Actual EV/EVSE installation
+   - **Impact**: Can now test charging optimization, energy tracking
 
-3. **Grid Feed-in Tariff Data** (Oct 4-11, 2025)
-   - Export price (SEK/kWh), Export compensation rates
+3. **Grid Feed-in Tariff Data** (Oct 4-11, 2025) - ✅ **Documented**
+   - ✅ Export compensation structure documented (E.ON Sweden, SE4 region)
+   - ✅ 2025: Spot + 0.687 SEK/kWh (includes 0.60 SEK/kWh tax return)
+   - ✅ 2026+: Spot + 0.087 SEK/kWh (tax return expires)
    - **Purpose**: Test export optimization
-   - **Source**: User's electricity contract
+   - **Impact**: Can now implement export decision logic tests
 
 ### Nice to Have (Medium Priority)
 
 4. **Winter Data Set** (Dec-Feb): Low solar, high consumption, different prices
 5. **Summer Data Set** (Jun-Jul): High solar, low consumption, export scenarios
-6. **Price Spike Event**: >5 SEK/kWh periods
+6. **Price Spike Event**: >5 SEK/kWh periods - ✅ **Available** (`nordpool_spot_price_today_tomorrow-02.yaml`, peak 5.72 SEK/kWh)
 7. **Grid Outage Scenario**: Battery disconnect/reconnect events
 8. **Battery Maintenance Event**: SOC reset, manual interventions
 9. **Multi-Day Cloud Cover**: <20% expected solar for several days
@@ -287,15 +316,19 @@ This document analyzes the current test coverage, evaluates how existing sample 
 6. Create `test_cost_strategy_real_prices.py` - 3 tests
 7. Create `test_helpers_utilities.py` - 2 tests
 
-### Phase 3: Advanced Testing (Week 3) - Requires New Data
-8. Create `test_forecast_provider_validation.py` - 2 tests (needs weather data)
-9. Create `test_e2e_energy_management.py` - 3 tests
-10. Document results and gaps
+### Phase 3: Advanced Testing (Week 3) - Now Possible with New Data
+8. Create `test_forecast_provider_validation.py` - 2 tests (weather forecast available, can test processing)
+9. Create `test_ev_dispatcher_with_data.py` - 3 tests (EV charging data now available)
+10. Create `test_export_optimization.py` - 2 tests (feed-in tariff documented)
+11. Create `test_price_spike_scenarios.py` - 2 tests (spike data available in nordpool-02)
+12. Create `test_e2e_energy_management.py` - 3 tests
+13. Document results and gaps
 
 ### Phase 4: Data Collection (Ongoing)
-11. Collect missing sample data sets (EV with realistic gaps, weather)
-12. Add seasonal variations
-13. Document edge cases
+14. Collect seasonal variations (winter/summer data)
+15. Add grid outage scenarios
+16. Document edge cases and battery maintenance events
+17. **Note**: EV sensor data ✅ Added, Weather forecast ✅ Added, Feed-in tariff ✅ Documented, Price spike ✅ Added
 
 ## Success Metrics
 
