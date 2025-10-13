@@ -64,7 +64,9 @@
           "runtime_exclude_ev": "Exkludera EV-laddning från baslinje",
           "runtime_exclude_batt_grid": "Exkludera batteriladdning från nät i baslinje",
           "runtime_soc_floor": "Batteri SOC-golv (%)",
-          "runtime_soc_ceiling": "Batteri SOC-tak (%)"
+          "runtime_soc_ceiling": "Batteri SOC-tak (%)",
+          "cost_cheap_threshold": "Kostnadsstrategi: Tröskelvärde för billigt pris (SEK/kWh)",
+          "cost_high_threshold": "Kostnadsstrategi: Tröskelvärde för högt pris (SEK/kWh)"
         },
         "data_description": {
           "nordpool_entity": "Välj din Nordpool spotpris-sensor (t.ex., sensor.nordpool_kwh_se3_sek_3_10_025)",
@@ -125,7 +127,9 @@
           "runtime_exclude_ev": "Exkludera EV-laddningseffekt från husets baslinjeberäkning",
           "runtime_exclude_batt_grid": "Exkludera batteriladdning från nät i baslinjeberäkning",
           "runtime_soc_floor": "Minsta batteri-SOC för runtime-beräkningar",
-          "runtime_soc_ceiling": "Maximal batteri-SOC för runtime-beräkningar"
+          "runtime_soc_ceiling": "Maximal batteri-SOC för runtime-beräkningar",
+          "cost_cheap_threshold": "Maxpris (SEK/kWh) för att klassificera som 'billigt'. Priser vid eller under detta tröskelvärde anses vara billiga elperioder lämpliga för laddning",
+          "cost_high_threshold": "Minimipris (SEK/kWh) för att klassificera som 'högt'. Priser vid eller över detta tröskelvärde anses vara dyra perioder där batteriurladdning rekommenderas"
         }
       }
     },

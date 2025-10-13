@@ -57,6 +57,9 @@ from .const import (
     CONF_LOAD_POWER_ENTITY,
     CONF_BATT_POWER_ENTITY,
     CONF_BATT_POWER_INVERT_SIGN,
+    # Cost strategy
+    CONF_COST_CHEAP_THRESHOLD,
+    CONF_COST_HIGH_THRESHOLD,
 )
 from .models import PricePoint
 from .price_provider import PriceProvider, PriceFees
@@ -433,6 +436,11 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self.data["high_cost_windows"] = []
             self.data["cost_summary"] = {}
             return
+        
+        # Update cost strategy thresholds from configuration
+        cheap_threshold = _safe_float(self._get_cfg(CONF_COST_CHEAP_THRESHOLD, 1.5), 1.5)
+        high_threshold = _safe_float(self._get_cfg(CONF_COST_HIGH_THRESHOLD, 3.0), 3.0)
+        self._cost_strategy.update_thresholds(cheap_max=cheap_threshold, high_min=high_threshold)
         
         now = dt_util.now()
         

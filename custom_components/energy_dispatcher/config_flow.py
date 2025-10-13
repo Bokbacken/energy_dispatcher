@@ -64,6 +64,8 @@ from .const import (
     CONF_RUNTIME_USE_DAYPARTS,
     CONF_GRID_IMPORT_TODAY_ENTITY,
     CONF_AUTO_CREATE_DASHBOARD,
+    CONF_COST_CHEAP_THRESHOLD,
+    CONF_COST_HIGH_THRESHOLD,
 )
 
 # Forecast source and weather/cloud compensation
@@ -161,6 +163,8 @@ DEFAULTS = {
     CONF_MANUAL_INVERTER_AC_CAP: 10.0,  # Default 10 kW AC capacity
     CONF_MANUAL_CALIBRATION_ENABLED: False,
     CONF_AUTO_CREATE_DASHBOARD: True,
+    CONF_COST_CHEAP_THRESHOLD: 1.5,  # SEK/kWh
+    CONF_COST_HIGH_THRESHOLD: 3.0,   # SEK/kWh
 }
 
 def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
@@ -339,6 +343,14 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         ),
         vol.Optional(CONF_RUNTIME_SOC_CEILING, default=d.get(CONF_RUNTIME_SOC_CEILING, 95)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=0, max=100, step=1, unit_of_measurement="%", mode=selector.NumberSelectorMode.BOX)
+        ),
+        
+        # Cost strategy thresholds
+        vol.Optional(CONF_COST_CHEAP_THRESHOLD, default=d.get(CONF_COST_CHEAP_THRESHOLD, 1.5)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0.0, max=10.0, step=0.01, unit_of_measurement="SEK/kWh", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_COST_HIGH_THRESHOLD, default=d.get(CONF_COST_HIGH_THRESHOLD, 3.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0.0, max=10.0, step=0.01, unit_of_measurement="SEK/kWh", mode=selector.NumberSelectorMode.BOX)
         ),
         
         vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): selector.BooleanSelector(),
