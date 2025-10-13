@@ -22,9 +22,24 @@ File-specific expectations
 - historic_batteries_SOC.csv: SoC for reserve/limits.
 - historic_energy_spot_price.csv / historic_energy_full_price.csv: alignment and precision vs Nordpool YAML and adders.
 - historic_feed_in_to_grid_today.csv / historic_today_energy_supply_from_grid.csv: daily resets (UI parity; long-horizon accounting prefers cumulative meters).
+- historic_EV_charging_power.csv: EV charging power (kW); validates EV dispatcher and charging optimization.
+- historic_EV_session_charged_energy.csv: per-session energy (kWh); tracks individual charging sessions with resets.
+- historic_EV_total_charged_energy.csv: cumulative EV energy (kWh); long-term EV charging accounting.
+- nordpool_spot_price_today_tomorrow-01.yaml / nordpool_spot_price_today_tomorrow-02.yaml: Nordpool spot prices; -02 includes price spike (5.72 SEK/kWh).
+- forecast_weather_met.no-01.yaml: weather forecast (Met.no format); cloud coverage and temperature for solar forecast validation.
+
+Feed-in tariff (E.ON Sweden, SE4 region)
+- Grid utility: 0.067 SEK/kWh (nätnytta)
+- Energy purchase: Spot + 0.02 SEK/kWh
+- Tax return (2025 only): 0.60 SEK/kWh
+- Total feed-in 2025: Spot + 0.687 SEK/kWh
+- Total feed-in 2026+: Spot + 0.087 SEK/kWh
 
 Suggested scenarios
-- Price spike day: validate peak classification and pre-peak charging.
+- Price spike day: validate peak classification and pre-peak charging (use nordpool-02 with 5.72 SEK/kWh spike).
 - Consecutive peak hours: ensure reserve strategy holds up.
 - Solar-rich day: confirm “free energy” accounting and default “never export.”
 - Missing data stretches: planner should “hold” safely and surface diagnostics.
+- EV charging optimization: test cost-based charging with realistic power/energy data.
+- Export optimization: validate feed-in compensation calculations (spot + 0.687 for 2025, spot + 0.087 for 2026+).
+- Weather-based solar forecasting: test forecast processing with Met.no data.
