@@ -4,6 +4,20 @@ Scanned directory: /home/runner/work/energy_dispatcher/energy_dispatcher/tests/f
 ## forecast_weather_met.no-01.yaml
 - YAML detected (prices today/tomorrow). Not analyzed as a series.
 
+## historic_EV_charging_power.csv
+- Points: 3951
+- Coverage: 2025-10-03 22:00:00+00:00 → 2025-10-11 21:54:54.966000+00:00 (191.92 h)
+- Median interval: 10 s
+- Non-monotonic segments: 0
+- Large gaps (≥ max(1h, 3×median)): 7
+  - Gap: 2025-10-06 15:16:17.314000+00:00 → 2025-10-11 13:28:30.520000+00:00 (118.20 h)
+  - Gap: 2025-10-04 09:54:17.321000+00:00 → 2025-10-05 11:24:14.519000+00:00 (25.50 h)
+  - Gap: 2025-10-05 22:58:59.291000+00:00 → 2025-10-06 15:15:57.478000+00:00 (16.28 h)
+- Suggested validation windows (top 3 continuous):
+  - 2025-10-05 17:28:24.412000+00:00 → 2025-10-05 22:58:59.291000+00:00 (5.51 h)
+  - 2025-10-05 11:24:14.519000+00:00 → 2025-10-05 15:46:47.709000+00:00 (4.38 h)
+  - 2025-10-11 20:21:21.888000+00:00 → 2025-10-11 21:54:54.966000+00:00 (1.56 h)
+
 ## historic_EV_session_charged_energy.csv
 - Points: 4273
 - Coverage: 2025-10-03 22:00:00+00:00 → 2025-10-11 21:54:54.965000+00:00 (191.92 h)
