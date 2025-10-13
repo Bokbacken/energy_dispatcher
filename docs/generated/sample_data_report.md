@@ -1,6 +1,9 @@
 # Sample Data Report
 Scanned directory: /home/runner/work/energy_dispatcher/energy_dispatcher/tests/fixtures
 
+## forecast_weather_met.no-01.yaml
+- YAML detected (prices today/tomorrow). Not analyzed as a series.
+
 ## historic_batteries_SOC.csv
 - Points: 763
 - Coverage: 2025-10-04 22:00:00+00:00 → 2025-10-11 21:54:23.832000+00:00 (167.91 h)
