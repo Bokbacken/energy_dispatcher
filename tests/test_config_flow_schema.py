@@ -61,6 +61,10 @@ class TestConfigFlowSchema:
             CONF_EVSE_STOP_SWITCH,
             CONF_EVSE_CURRENT_NUMBER,
         )
+        from custom_components.energy_dispatcher.const import (
+            CONF_BATT_MAX_CHARGE_POWER_ENTITY,
+            CONF_BATT_MAX_DISCH_POWER_ENTITY,
+        )
         
         optional_fields = [
             CONF_HUAWEI_DEVICE_ID,
@@ -72,6 +76,8 @@ class TestConfigFlowSchema:
             CONF_FS_PLANES,
             CONF_FS_HORIZON,
             CONF_FS_APIKEY,
+            CONF_BATT_MAX_CHARGE_POWER_ENTITY,
+            CONF_BATT_MAX_DISCH_POWER_ENTITY,
         ]
         
         for field in optional_fields:
