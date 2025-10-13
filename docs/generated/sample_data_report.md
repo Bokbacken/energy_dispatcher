@@ -160,6 +160,6 @@ Scanned directory: /home/runner/work/energy_dispatcher/energy_dispatcher/tests/f
 - Suggested validation windows (top 3 continuous):
   - 2025-10-04 22:00:00+00:00 → 2025-10-11 21:54:53.843000+00:00 (167.91 h)
 
-## nordpool_spot_price_today_tomorrow.yaml
+## nordpool_spot_price_today_tomorrow-01.yaml
 - YAML detected (prices today/tomorrow). Not analyzed as a series.
 
