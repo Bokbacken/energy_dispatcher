@@ -63,9 +63,15 @@ from .const import (
     CONF_RUNTIME_LOOKBACK_HOURS,
     CONF_RUNTIME_USE_DAYPARTS,
     CONF_GRID_IMPORT_TODAY_ENTITY,
+    CONF_LOAD_POWER_ENTITY,
+    CONF_BATT_POWER_ENTITY,
     CONF_AUTO_CREATE_DASHBOARD,
     CONF_COST_CHEAP_THRESHOLD,
     CONF_COST_HIGH_THRESHOLD,
+    CONF_ENABLE_APPLIANCE_OPTIMIZATION,
+    CONF_DISHWASHER_POWER_W,
+    CONF_WASHING_MACHINE_POWER_W,
+    CONF_WATER_HEATER_POWER_W,
 )
 
 # Forecast source and weather/cloud compensation
@@ -351,6 +357,18 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         ),
         vol.Optional(CONF_COST_HIGH_THRESHOLD, default=d.get(CONF_COST_HIGH_THRESHOLD, 3.0)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=0.0, max=10.0, step=0.01, unit_of_measurement="SEK/kWh", mode=selector.NumberSelectorMode.BOX)
+        ),
+        
+        # Appliance optimization
+        vol.Optional(CONF_ENABLE_APPLIANCE_OPTIMIZATION, default=d.get(CONF_ENABLE_APPLIANCE_OPTIMIZATION, False)): selector.BooleanSelector(),
+        vol.Optional(CONF_DISHWASHER_POWER_W, default=d.get(CONF_DISHWASHER_POWER_W, 1800)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=100, max=5000, step=50, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_WASHING_MACHINE_POWER_W, default=d.get(CONF_WASHING_MACHINE_POWER_W, 2000)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=100, max=5000, step=50, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_WATER_HEATER_POWER_W, default=d.get(CONF_WATER_HEATER_POWER_W, 3000)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=100, max=10000, step=50, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
         ),
         
         vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): selector.BooleanSelector(),

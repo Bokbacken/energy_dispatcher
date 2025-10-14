@@ -66,7 +66,11 @@
           "runtime_soc_floor": "Batteri SOC-golv (%)",
           "runtime_soc_ceiling": "Batteri SOC-tak (%)",
           "cost_cheap_threshold": "Kostnadsstrategi: Tröskelvärde för billigt pris (SEK/kWh)",
-          "cost_high_threshold": "Kostnadsstrategi: Tröskelvärde för högt pris (SEK/kWh)"
+          "cost_high_threshold": "Kostnadsstrategi: Tröskelvärde för högt pris (SEK/kWh)",
+          "enable_appliance_optimization": "Aktivera Schemaläggning av Apparater",
+          "dishwasher_power_w": "Diskmaskin Effekt (W)",
+          "washing_machine_power_w": "Tvättmaskin Effekt (W)",
+          "water_heater_power_w": "Varmvattenberedare Effekt (W)"
         },
         "data_description": {
           "nordpool_entity": "Välj din Nordpool spotpris-sensor (t.ex., sensor.nordpool_kwh_se3_sek_3_10_025)",
@@ -129,7 +133,11 @@
           "runtime_soc_floor": "Minsta batteri-SOC för runtime-beräkningar",
           "runtime_soc_ceiling": "Maximal batteri-SOC för runtime-beräkningar",
           "cost_cheap_threshold": "Maxpris (SEK/kWh) för att klassificera som 'billigt'. Priser vid eller under detta tröskelvärde anses vara billiga elperioder lämpliga för laddning",
-          "cost_high_threshold": "Minimipris (SEK/kWh) för att klassificera som 'högt'. Priser vid eller över detta tröskelvärde anses vara dyra perioder där batteriurladdning rekommenderas"
+          "cost_high_threshold": "Minimipris (SEK/kWh) för att klassificera som 'högt'. Priser vid eller över detta tröskelvärde anses vara dyra perioder där batteriurladdning rekommenderas",
+          "enable_appliance_optimization": "Aktivera sensorer som föreslår optimala tider för att köra hushållsapparater (diskmaskin, tvättmaskin, varmvattenberedare) baserat på elpriser och solprognos",
+          "dishwasher_power_w": "Effektförbrukning för din diskmaskin i watt (typiskt: 1800W)",
+          "washing_machine_power_w": "Effektförbrukning för din tvättmaskin i watt (typiskt: 2000W)",
+          "water_heater_power_w": "Effektförbrukning för din varmvattenberedare i watt (typiskt: 3000W)"
         }
       }
     },
@@ -143,6 +151,47 @@
       "init": {
         "title": "Energy Dispatcher Inställningar",
         "description": "Uppdatera din Energy Dispatcher-konfiguration. Alla inställningar från den initiala uppsättningen finns tillgängliga här."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "dishwasher_optimal_time": {
+        "name": "Diskmaskin Optimal Starttid"
+      },
+      "washing_machine_optimal_time": {
+        "name": "Tvättmaskin Optimal Starttid"
+      },
+      "water_heater_optimal_time": {
+        "name": "Varmvattenberedare Optimal Tid"
+      }
+    }
+  },
+  "services": {
+    "schedule_appliance": {
+      "name": "Schemalägg Apparat",
+      "description": "Få optimal tid att köra en apparat baserat på elpriser och solprognos",
+      "fields": {
+        "appliance": {
+          "name": "Apparat",
+          "description": "Typ av apparat att optimera"
+        },
+        "power_w": {
+          "name": "Effekt (W)",
+          "description": "Apparatens effektförbrukning i watt"
+        },
+        "duration_hours": {
+          "name": "Varaktighet (timmar)",
+          "description": "Hur länge apparaten körs"
+        },
+        "earliest_start": {
+          "name": "Tidigaste Starttid",
+          "description": "Tidigaste acceptabla starttid (valfritt)"
+        },
+        "latest_end": {
+          "name": "Senaste Sluttid",
+          "description": "Senaste acceptabla sluttid (valfritt)"
+        }
       }
     }
   }
