@@ -61,10 +61,11 @@ from .const import (
     CONF_COST_CHEAP_THRESHOLD,
     CONF_COST_HIGH_THRESHOLD,
 )
-from .models import PricePoint
+from .models import PricePoint, ChargingMode
 from .price_provider import PriceProvider, PriceFees
 from .forecast_provider import ForecastSolarProvider
 from .cost_strategy import CostStrategy
+from .planner import simple_plan
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -307,6 +308,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             "battery_reserve_recommendation": None,  # Recommended SOC% to maintain
             "high_cost_windows": [],  # List of (start, end) tuples for high-cost periods
             "cost_summary": {},  # Summary of cost classification
+            # Optimization plan
+            "optimization_plan": [],  # List of PlanAction objects with hourly recommendations
         }
 
         # Cost strategy instance
@@ -386,6 +389,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             await self._auto_ev_tick()
             self._update_grid_vs_batt_delta()
             self._update_solar_delta_15m()
+            await self._update_optimization_plan()
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Uppdatering misslyckades")
         return self.data
@@ -498,6 +502,62 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         except Exception as e:
             _LOGGER.debug("Failed to generate cost summary: %s", e)
             self.data["cost_summary"] = {}
+
+    # ---------- optimization plan ----------
+    async def _update_optimization_plan(self):
+        """Generate optimization plan using planner module."""
+        # Check if we have necessary data
+        hourly_prices = self.data.get("hourly_prices", [])
+        if not hourly_prices:
+            self.data["optimization_plan"] = []
+            return
+        
+        try:
+            # Get current battery state
+            batt_soc_entity = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
+            batt_soc_pct = self._read_float(batt_soc_entity) if batt_soc_entity else 50.0
+            if batt_soc_pct is None:
+                batt_soc_pct = 50.0
+            
+            # Get battery capacity
+            batt_capacity_kwh = _safe_float(self._get_cfg(CONF_BATT_CAP_KWH), 15.0)
+            
+            # Get battery power limits
+            batt_max_charge_w = int(self._get_cfg(CONF_BATT_MAX_CHARGE_W, 4000))
+            
+            # Get solar forecast data
+            solar_points = self.data.get("solar_points", [])
+            
+            # Get EV needs (simplified - using configured target)
+            # In future, this could be calculated from current vs target SOC
+            ev_need_kwh = 0.0  # Default to no EV charging needed
+            
+            # Get cost thresholds
+            cheap_threshold = _safe_float(self._get_cfg(CONF_COST_CHEAP_THRESHOLD, 1.5), 1.5)
+            
+            # Generate plan
+            now = dt_util.now()
+            plan = simple_plan(
+                now=now,
+                horizon_hours=24,
+                prices=hourly_prices,
+                solar=solar_points,
+                batt_soc_pct=batt_soc_pct,
+                batt_capacity_kwh=batt_capacity_kwh,
+                batt_max_charge_w=batt_max_charge_w,
+                ev_need_kwh=ev_need_kwh,
+                cheap_threshold=cheap_threshold,
+                ev_deadline=None,
+                ev_mode=ChargingMode.ECO,
+                cost_strategy=self._cost_strategy,
+            )
+            
+            self.data["optimization_plan"] = plan
+            _LOGGER.debug("Generated optimization plan with %d actions", len(plan))
+            
+        except Exception as e:
+            _LOGGER.warning("Failed to generate optimization plan: %s", e)
+            self.data["optimization_plan"] = []
 
     # ---------- baseline + runtime ----------
     def _is_ev_charging(self) -> bool:
