@@ -108,6 +108,7 @@ class CostStrategy:
         battery_capacity_kwh: float,
         current_soc: float,
         horizon_hours: int = 24,
+        weather_adjustment: Optional[Dict] = None,
     ) -> float:
         """
         Calculate recommended battery reserve level (SOC %).
@@ -116,6 +117,14 @@ class CostStrategy:
         - Duration of high-cost periods
         - Price differential
         - Current battery state
+        - Weather-adjusted solar forecast (if available)
+        
+        Weather-Aware Adjustment:
+        When weather optimization is enabled and solar forecast is adjusted downward
+        (e.g., cloudy weather expected), the reserve is increased by 10-20% to
+        compensate for reduced solar production. This ensures adequate battery
+        capacity to cover load during high-cost periods when solar contribution
+        is lower than normal.
         """
         high_cost_windows = self.predict_high_cost_windows(prices, now, horizon_hours)
         
@@ -135,6 +144,32 @@ class CostStrategy:
         
         # Calculate required SOC to cover this
         required_soc = (required_energy_kwh / battery_capacity_kwh) * 100
+        
+        # Weather-aware adjustment: increase reserve if solar forecast is reduced
+        if weather_adjustment:
+            reduction_pct = weather_adjustment.get("reduction_percentage", 0.0)
+            
+            # If solar forecast is significantly reduced (>20%), increase reserve
+            if reduction_pct > 20.0:
+                # Scale the increase: 10-20% based on reduction severity
+                # 20-40% reduction -> 10% increase
+                # 40-60% reduction -> 15% increase
+                # >60% reduction -> 20% increase
+                if reduction_pct > 60:
+                    increase_factor = 1.20
+                elif reduction_pct > 40:
+                    increase_factor = 1.15
+                else:
+                    increase_factor = 1.10
+                
+                required_soc = required_soc * increase_factor
+                
+                _LOGGER.debug(
+                    "Weather-aware adjustment: solar forecast reduced by %.1f%%, "
+                    "increasing battery reserve by %.0f%%",
+                    reduction_pct,
+                    (increase_factor - 1.0) * 100,
+                )
         
         # Cap at 80% reserve (leave room for charging)
         reserve_soc = min(80.0, required_soc)

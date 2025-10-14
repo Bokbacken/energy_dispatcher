@@ -78,6 +78,7 @@
           "dishwasher_power_w": "Dishwasher Power (W)",
           "washing_machine_power_w": "Washing Machine Power (W)",
           "water_heater_power_w": "Water Heater Power (W)",
+          "enable_weather_optimization": "Enable Weather-Aware Solar Optimization",
           "auto_create_dashboard": "Auto-create Dashboard"
         },
         "data_description": {
@@ -154,6 +155,7 @@
           "dishwasher_power_w": "Power consumption of your dishwasher in watts (typical: 1800W)",
           "washing_machine_power_w": "Power consumption of your washing machine in watts (typical: 2000W)",
           "water_heater_power_w": "Power consumption of your water heater in watts (typical: 3000W)",
+          "enable_weather_optimization": "Adjust solar forecasts based on weather conditions (cloud cover, temperature) to improve battery reserve calculations and planning accuracy. Increases battery reserve by 10-20% when cloudy weather is expected",
           "auto_create_dashboard": "Automatically create a dashboard with energy dispatcher sensors and controls"
         }
       }
