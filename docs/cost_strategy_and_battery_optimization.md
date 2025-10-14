@@ -1,8 +1,21 @@
 # Cost Strategy and Battery Optimization Guide
 
-**Date**: 2025-10-12  
-**Status**: Technical Guide for Future Integration  
+**Date**: 2025-10-12 (Updated: 2025-10-14)  
+**Status**: Comprehensive Guide with AI-Like Optimization Strategies  
 **Target Audience**: Developers and Advanced Users
+
+---
+
+## 📚 Quick Navigation
+
+**New to AI Optimization?** Start here:
+- [AI Optimization Summary](AI_OPTIMIZATION_SUMMARY.md) - Executive overview and implementation plan
+- [AI Optimization Dashboard Guide](ai_optimization_dashboard_guide.md) - User-friendly dashboard setup
+- [AI Optimization Automation Examples](ai_optimization_automation_examples.md) - Copy-paste automations
+
+**For Developers:**
+- [AI Optimization Implementation Guide](ai_optimization_implementation_guide.md) - Technical specifications
+- This document (below) - Core concepts and advanced strategies
 
 ---
 
