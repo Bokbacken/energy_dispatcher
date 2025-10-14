@@ -71,7 +71,10 @@
           "dishwasher_power_w": "Diskmaskin Effekt (W)",
           "washing_machine_power_w": "Tvättmaskin Effekt (W)",
           "water_heater_power_w": "Varmvattenberedare Effekt (W)",
-          "enable_weather_optimization": "Aktivera Väderbaserad Soloptimering"
+          "enable_weather_optimization": "Aktivera Väderbaserad Soloptimering",
+          "export_mode": "Exportläge",
+          "min_export_price_sek_per_kwh": "Minsta Exportpris (SEK/kWh)",
+          "battery_degradation_cost_per_cycle_sek": "Batterinedbrytningskostnad per Cykel (SEK)"
         },
         "data_description": {
           "nordpool_entity": "Välj din Nordpool spotpris-sensor (t.ex., sensor.nordpool_kwh_se3_sek_3_10_025)",
@@ -139,7 +142,10 @@
           "dishwasher_power_w": "Effektförbrukning för din diskmaskin i watt (typiskt: 1800W)",
           "washing_machine_power_w": "Effektförbrukning för din tvättmaskin i watt (typiskt: 2000W)",
           "water_heater_power_w": "Effektförbrukning för din varmvattenberedare i watt (typiskt: 3000W)",
-          "enable_weather_optimization": "Justera solprognoser baserat på väderförhållanden (molntäcke, temperatur) för att förbättra batteriereservberäkningar och planeringsnoggranhet. Ökar batterireserven med 10-20% när molnigt väder förväntas"
+          "enable_weather_optimization": "Justera solprognoser baserat på väderförhållanden (molntäcke, temperatur) för att förbättra batteriereservberäkningar och planeringsnoggranhet. Ökar batterireserven med 10-20% när molnigt väder förväntas",
+          "export_mode": "Konfigurera när energi ska exporteras till nätet. 'Exportera Aldrig': Standardläge, säljer aldrig till nätet. 'Endast Överskott av Sol': Exportera endast när batteriet är fullt och solen producerar överskott. 'Opportunistisk Toppris': Exportera även vid exceptionellt höga priser (>5 SEK/kWh)",
+          "min_export_price_sek_per_kwh": "Minsta exportpris (SEK/kWh) för att överväga export. Konservativt tröskelvärde för att säkerställa lönsamhet",
+          "battery_degradation_cost_per_cycle_sek": "Uppskattad kostnad för batterinedbrytning per fullständig ladd-urladdningscykel. Används för att beräkna nettovinst från export"
         }
       }
     },
@@ -193,6 +199,20 @@
         "latest_end": {
           "name": "Senaste Sluttid",
           "description": "Senaste acceptabla sluttid (valfritt)"
+        }
+      }
+    },
+    "set_export_mode": {
+      "name": "Ställ In Exportläge",
+      "description": "Konfigurera energiexportbeteende",
+      "fields": {
+        "mode": {
+          "name": "Exportläge",
+          "description": "När energi ska exporteras till nätet"
+        },
+        "min_export_price": {
+          "name": "Minsta Exportpris (SEK/kWh)",
+          "description": "Minsta pris för att överväga export (valfritt)"
         }
       }
     }

@@ -158,3 +158,31 @@ schedule_appliance:
       required: false
       selector:
         time:
+
+set_export_mode:
+  name: Set Export Mode
+  description: Configure energy export behavior
+  fields:
+    mode:
+      name: Export Mode
+      description: When to export energy to grid
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Never Export"
+              value: "never"
+            - label: "Excess Solar Only"
+              value: "excess_solar_only"
+            - label: "Peak Price Opportunistic"
+              value: "peak_price_opportunistic"
+    min_export_price:
+      name: Minimum Export Price (SEK/kWh)
+      description: Minimum price to consider export (optional)
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.1
+          unit_of_measurement: "SEK/kWh"

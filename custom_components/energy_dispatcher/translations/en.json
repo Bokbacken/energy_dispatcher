@@ -79,6 +79,9 @@
           "washing_machine_power_w": "Washing Machine Power (W)",
           "water_heater_power_w": "Water Heater Power (W)",
           "enable_weather_optimization": "Enable Weather-Aware Solar Optimization",
+          "export_mode": "Export Mode",
+          "min_export_price_sek_per_kwh": "Minimum Export Price (SEK/kWh)",
+          "battery_degradation_cost_per_cycle_sek": "Battery Degradation Cost per Cycle (SEK)",
           "auto_create_dashboard": "Auto-create Dashboard"
         },
         "data_description": {
@@ -156,6 +159,9 @@
           "washing_machine_power_w": "Power consumption of your washing machine in watts (typical: 2000W)",
           "water_heater_power_w": "Power consumption of your water heater in watts (typical: 3000W)",
           "enable_weather_optimization": "Adjust solar forecasts based on weather conditions (cloud cover, temperature) to improve battery reserve calculations and planning accuracy. Increases battery reserve by 10-20% when cloudy weather is expected",
+          "export_mode": "Configure when to export energy to the grid. 'Never Export': Default conservative mode, never sells to grid. 'Excess Solar Only': Export only when battery is full and solar is producing excess. 'Peak Price Opportunistic': Also export during exceptionally high prices (>5 SEK/kWh)",
+          "min_export_price_sek_per_kwh": "Minimum export price (SEK/kWh) to consider exporting. Conservative threshold to ensure profitability",
+          "battery_degradation_cost_per_cycle_sek": "Estimated cost of battery degradation per full charge-discharge cycle. Used to calculate net revenue from export",
           "auto_create_dashboard": "Automatically create a dashboard with energy dispatcher sensors and controls"
         }
       }
@@ -306,6 +312,20 @@
         "latest_end": {
           "name": "Latest End Time",
           "description": "Latest acceptable completion time (optional)"
+        }
+      }
+    },
+    "set_export_mode": {
+      "name": "Set Export Mode",
+      "description": "Configure energy export behavior",
+      "fields": {
+        "mode": {
+          "name": "Export Mode",
+          "description": "When to export energy to grid"
+        },
+        "min_export_price": {
+          "name": "Minimum Export Price (SEK/kWh)",
+          "description": "Minimum price to consider export (optional)"
         }
       }
     }
