@@ -1,7 +1,7 @@
 {
   "domain": "energy_dispatcher",
   "name": "Energy Dispatcher",
-  "version": "0.8.34",
+  "version": "0.8.35",
   "documentation": "https://github.com/Bokbacken/energy_dispatcher",
   "issue_tracker": "https://github.com/Bokbacken/energy_dispatcher/issues",
   "codeowners": ["@Bokbacken"],
