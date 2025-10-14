@@ -108,3 +108,53 @@ battery_cost_set_soc:
 create_dashboard_notification:
   name: Create dashboard setup notification
   description: Manually create or recreate the dashboard setup notification with instructions and links
+
+schedule_appliance:
+  name: Schedule Appliance
+  description: Get optimal time to run an appliance based on electricity prices and solar forecast
+  fields:
+    appliance:
+      name: Appliance
+      description: Type of appliance
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Dishwasher"
+              value: "dishwasher"
+            - label: "Washing Machine"
+              value: "washing_machine"
+            - label: "Water Heater"
+              value: "water_heater"
+    power_w:
+      name: Power (W)
+      description: Appliance power consumption in watts
+      required: true
+      selector:
+        number:
+          min: 100
+          max: 10000
+          step: 50
+          unit_of_measurement: "W"
+    duration_hours:
+      name: Duration (hours)
+      description: How long the appliance runs
+      required: true
+      selector:
+        number:
+          min: 0.25
+          max: 12
+          step: 0.25
+          unit_of_measurement: "hours"
+    earliest_start:
+      name: Earliest Start Time
+      description: Earliest acceptable start time (optional)
+      required: false
+      selector:
+        time:
+    latest_end:
+      name: Latest End Time
+      description: Latest acceptable completion time (optional)
+      required: false
+      selector:
+        time:

@@ -155,6 +155,129 @@ async def _async_register_services(hass: HomeAssistant):
     if hass.services.has_service(DOMAIN, "battery_cost_reset"):
         return
 
+    async def handle_schedule_appliance(call):
+        """Handle appliance scheduling service call."""
+        from .appliance_optimizer import ApplianceOptimizer
+        from datetime import time as time_type
+        
+        appliance = call.data["appliance"]
+        power_w = call.data["power_w"]
+        duration_hours = call.data["duration_hours"]
+        earliest_start_time = call.data.get("earliest_start")
+        latest_end_time = call.data.get("latest_end")
+        
+        # Get first coordinator entry for optimization
+        entries = [
+            data for data in hass.data.get(DOMAIN, {}).values()
+            if isinstance(data, dict) and "coordinator" in data
+        ]
+        if not entries:
+            _LOGGER.error("No Energy Dispatcher coordinator found for appliance scheduling")
+            return
+        
+        coordinator = entries[0]["coordinator"]
+        
+        # Convert time objects to datetime if provided
+        earliest_start = None
+        latest_end = None
+        from homeassistant.util import dt as dt_util
+        from datetime import datetime, timedelta
+        
+        now = dt_util.now()
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        if earliest_start_time:
+            if isinstance(earliest_start_time, time_type):
+                earliest_start = today.replace(
+                    hour=earliest_start_time.hour,
+                    minute=earliest_start_time.minute,
+                    second=0
+                )
+                # If time has passed today, use tomorrow
+                if earliest_start < now:
+                    earliest_start += timedelta(days=1)
+        
+        if latest_end_time:
+            if isinstance(latest_end_time, time_type):
+                latest_end = today.replace(
+                    hour=latest_end_time.hour,
+                    minute=latest_end_time.minute,
+                    second=0
+                )
+                # If time has passed today, use tomorrow
+                if latest_end < now:
+                    latest_end += timedelta(days=1)
+                # Ensure latest_end is after earliest_start
+                if earliest_start and latest_end <= earliest_start:
+                    latest_end += timedelta(days=1)
+        
+        # Get price and solar data from coordinator
+        optimizer = ApplianceOptimizer()
+        prices = coordinator.data.get("prices", [])
+        solar_forecast = coordinator.data.get("solar_forecast", [])
+        battery_soc = coordinator.data.get("battery_soc")
+        battery_capacity_kwh = coordinator.data.get("battery_capacity_kwh")
+        
+        try:
+            recommendation = optimizer.optimize_schedule(
+                appliance_name=appliance,
+                power_w=power_w,
+                duration_hours=duration_hours,
+                prices=prices,
+                solar_forecast=solar_forecast if solar_forecast else None,
+                earliest_start=earliest_start,
+                latest_end=latest_end,
+                battery_soc=battery_soc,
+                battery_capacity_kwh=battery_capacity_kwh,
+            )
+            
+            # Store recommendation in coordinator data
+            if "appliance_recommendations" not in coordinator.data:
+                coordinator.data["appliance_recommendations"] = {}
+            coordinator.data["appliance_recommendations"][appliance] = recommendation
+            
+            # Trigger coordinator update to refresh sensors
+            await coordinator.async_request_refresh()
+            
+            # Send notification
+            optimal_time = recommendation["optimal_start_time"]
+            await hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "title": f"{appliance.replace('_', ' ').title()} Schedule",
+                    "message": (
+                        f"**Optimal time:** {optimal_time.strftime('%Y-%m-%d %H:%M')}\n"
+                        f"**Estimated cost:** {recommendation['estimated_cost_sek']:.2f} SEK\n"
+                        f"**Savings vs now:** {recommendation['cost_savings_vs_now_sek']:.2f} SEK\n"
+                        f"**Reason:** {recommendation['reason']}\n\n"
+                        f"Confidence: {recommendation['confidence']}"
+                    ),
+                    "notification_id": f"{DOMAIN}_appliance_{appliance}",
+                },
+                blocking=False,
+            )
+            
+            _LOGGER.info(
+                "Appliance scheduling: %s at %s, cost %.2f SEK, savings %.2f SEK",
+                appliance,
+                optimal_time.strftime("%H:%M"),
+                recommendation["estimated_cost_sek"],
+                recommendation["cost_savings_vs_now_sek"],
+            )
+        except Exception as e:
+            _LOGGER.error("Error scheduling appliance %s: %s", appliance, str(e))
+            await hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "title": f"{appliance.replace('_', ' ').title()} Schedule Error",
+                    "message": f"Failed to optimize schedule: {str(e)}",
+                    "notification_id": f"{DOMAIN}_appliance_{appliance}_error",
+                },
+                blocking=False,
+            )
+
     async def handle_battery_cost_reset(call):
         """Handle battery cost reset service call."""
         for entry_id, data in hass.data.get(DOMAIN, {}).items():
@@ -199,6 +322,12 @@ async def _async_register_services(hass: HomeAssistant):
         _LOGGER.info("Manually creating dashboard notification for entry %s", entry.entry_id)
         await create_default_dashboard(hass, entry)
 
+    hass.services.async_register(
+        DOMAIN,
+        "schedule_appliance",
+        handle_schedule_appliance
+    )
+    
     hass.services.async_register(
         DOMAIN,
         "battery_cost_reset",
