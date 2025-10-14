@@ -72,6 +72,7 @@ from .const import (
     CONF_DISHWASHER_POWER_W,
     CONF_WASHING_MACHINE_POWER_W,
     CONF_WATER_HEATER_POWER_W,
+    CONF_ENABLE_WEATHER_OPTIMIZATION,
 )
 
 # Forecast source and weather/cloud compensation
@@ -171,6 +172,7 @@ DEFAULTS = {
     CONF_AUTO_CREATE_DASHBOARD: True,
     CONF_COST_CHEAP_THRESHOLD: 1.5,  # SEK/kWh
     CONF_COST_HIGH_THRESHOLD: 3.0,   # SEK/kWh
+    CONF_ENABLE_WEATHER_OPTIMIZATION: True,  # Enable weather-aware solar optimization
 }
 
 def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:

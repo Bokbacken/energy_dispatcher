@@ -362,6 +362,92 @@ yaxis:
 
 ---
 
+### Step 5.5: Add Weather-Adjusted Solar Forecast Card
+
+Display weather-adjusted solar forecast with comparison to base forecast.
+
+```yaml
+type: entities
+title: ☀️ Weather-Adjusted Solar Forecast
+state_color: true
+entities:
+  - entity: sensor.energy_dispatcher_weather_adjusted_solar_forecast
+    name: Today's Forecast (Weather-Adjusted)
+    icon: mdi:weather-partly-cloudy
+  - type: attribute
+    entity: sensor.energy_dispatcher_weather_adjusted_solar_forecast
+    attribute: base_forecast_kwh
+    name: Base Forecast (Clear Sky)
+    icon: mdi:weather-sunny
+  - type: attribute
+    entity: sensor.energy_dispatcher_weather_adjusted_solar_forecast
+    attribute: confidence_level
+    name: Confidence Level
+    icon: mdi:speedometer
+  - type: attribute
+    entity: sensor.energy_dispatcher_weather_adjusted_solar_forecast
+    attribute: limiting_factor
+    name: Limiting Factor
+    icon: mdi:information-outline
+  - type: attribute
+    entity: sensor.energy_dispatcher_weather_adjusted_solar_forecast
+    attribute: reduction_percentage
+    name: Forecast Reduction
+    icon: mdi:arrow-down-bold
+    suffix: "%"
+```
+
+**Alternative: Visual Comparison Card**
+
+Show base vs adjusted forecast side-by-side:
+
+```yaml
+type: custom:mushroom-template-card
+primary: Solar Forecast (Weather-Adjusted)
+secondary: >
+  Base: {{ state_attr('sensor.energy_dispatcher_weather_adjusted_solar_forecast', 'base_forecast_kwh') | round(1) }} kWh
+  | Adjusted: {{ states('sensor.energy_dispatcher_weather_adjusted_solar_forecast') | round(1) }} kWh
+  | Reduction: {{ state_attr('sensor.energy_dispatcher_weather_adjusted_solar_forecast', 'reduction_percentage') | round(0) }}%
+icon: >
+  {% set factor = state_attr('sensor.energy_dispatcher_weather_adjusted_solar_forecast', 'limiting_factor') %}
+  {% if factor == 'clear' %}
+    mdi:weather-sunny
+  {% elif factor == 'cloud_cover' %}
+    mdi:weather-cloudy
+  {% elif factor == 'temperature' %}
+    mdi:thermometer-alert
+  {% else %}
+    mdi:weather-partly-cloudy
+  {% endif %}
+icon_color: >
+  {% set conf = state_attr('sensor.energy_dispatcher_weather_adjusted_solar_forecast', 'confidence_level') %}
+  {% if conf == 'high' %}
+    green
+  {% elif conf == 'medium' %}
+    amber
+  {% else %}
+    red
+  {% endif %}
+tap_action:
+  action: more-info
+```
+
+**What this shows**:
+- Weather-adjusted solar forecast for today (kWh)
+- Comparison with base forecast (clear sky scenario)
+- Confidence level (high/medium/low) based on weather data availability
+- Limiting factor (clear/cloud_cover/temperature/multiple)
+- Percentage reduction from base forecast
+- Icon changes based on conditions (sunny/cloudy/hot)
+- Color indicates confidence (green=high, amber=medium, red=low)
+
+**When the forecast is significantly reduced (>20%)**:
+- Battery reserve is automatically increased by 10-20%
+- Ensures adequate backup during poor solar conditions
+- Helps avoid grid imports during expensive periods
+
+---
+
 ### Step 6: Add Quick Action Buttons
 
 Control overrides and manual actions easily.

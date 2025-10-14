@@ -130,7 +130,7 @@ class TestBatteryReserve:
         reserve = strategy.calculate_battery_reserve(
             sample_prices,
             now,
-            battery_capacity_kwh=15.0,
+            battery_capacity_kwh=30.0,
             current_soc=50.0,
         )
         
@@ -148,7 +148,7 @@ class TestBatteryReserve:
         reserve = strategy.calculate_battery_reserve(
             cheap_prices,
             now,
-            battery_capacity_kwh=15.0,
+            battery_capacity_kwh=30.0,
             current_soc=50.0,
         )
         
@@ -281,3 +281,100 @@ class TestCostSummary:
         assert summary["total_hours"] == 0
         assert summary["cheap_hours"] == 0
         assert summary["avg_price"] == 0.0
+
+
+class TestWeatherAwareReserve:
+    """Test weather-aware battery reserve adjustments."""
+
+    def test_reserve_without_weather_adjustment(self, strategy, sample_prices):
+        """Test battery reserve calculation without weather adjustment."""
+        now = datetime.now().replace(minute=0, second=0, microsecond=0)
+        
+        # Calculate reserve without weather adjustment
+        reserve = strategy.calculate_battery_reserve(
+            sample_prices, now, battery_capacity_kwh=30.0, current_soc=50.0
+        )
+        
+        # Should be > 0 since we have high-cost periods
+        assert reserve > 0
+
+    def test_reserve_with_minor_weather_adjustment(self, strategy, sample_prices):
+        """Test battery reserve with minor weather adjustment (<20% reduction)."""
+        now = datetime.now().replace(minute=0, second=0, microsecond=0)
+        
+        # Minor reduction (15%) - should not increase reserve
+        weather_adjustment = {
+            "reduction_percentage": 15.0,
+            "avg_adjustment_factor": 0.85,
+        }
+        
+        reserve_with_weather = strategy.calculate_battery_reserve(
+            sample_prices,
+            now,
+            battery_capacity_kwh=30.0,
+            current_soc=50.0,
+            weather_adjustment=weather_adjustment,
+        )
+        
+        reserve_without_weather = strategy.calculate_battery_reserve(
+            sample_prices, now, battery_capacity_kwh=30.0, current_soc=50.0
+        )
+        
+        # Should be same (no increase for <20% reduction)
+        assert reserve_with_weather == pytest.approx(reserve_without_weather, rel=0.01)
+
+    def test_reserve_with_moderate_weather_adjustment(self, strategy, sample_prices):
+        """Test battery reserve with moderate weather adjustment (20-40% reduction)."""
+        now = datetime.now().replace(minute=0, second=0, microsecond=0)
+        
+        # Moderate reduction (30%) - should increase reserve by 10%
+        weather_adjustment = {
+            "reduction_percentage": 30.0,
+            "avg_adjustment_factor": 0.70,
+        }
+        
+        reserve_with_weather = strategy.calculate_battery_reserve(
+            sample_prices,
+            now,
+            battery_capacity_kwh=30.0,
+            current_soc=50.0,
+            weather_adjustment=weather_adjustment,
+        )
+        
+        reserve_without_weather = strategy.calculate_battery_reserve(
+            sample_prices, now, battery_capacity_kwh=30.0, current_soc=50.0
+        )
+        
+        # Should be increased by ~10%
+        assert reserve_with_weather > reserve_without_weather
+        assert reserve_with_weather == pytest.approx(
+            reserve_without_weather * 1.10, rel=0.05
+        )
+
+    def test_reserve_with_severe_weather_adjustment(self, strategy, sample_prices):
+        """Test battery reserve with severe weather adjustment (>60% reduction)."""
+        now = datetime.now().replace(minute=0, second=0, microsecond=0)
+        
+        # Severe reduction (70%) - should increase reserve by 20%
+        weather_adjustment = {
+            "reduction_percentage": 70.0,
+            "avg_adjustment_factor": 0.30,
+        }
+        
+        reserve_with_weather = strategy.calculate_battery_reserve(
+            sample_prices,
+            now,
+            battery_capacity_kwh=30.0,
+            current_soc=50.0,
+            weather_adjustment=weather_adjustment,
+        )
+        
+        reserve_without_weather = strategy.calculate_battery_reserve(
+            sample_prices, now, battery_capacity_kwh=30.0, current_soc=50.0
+        )
+        
+        # Should be increased by ~20%
+        assert reserve_with_weather > reserve_without_weather
+        assert reserve_with_weather == pytest.approx(
+            reserve_without_weather * 1.20, rel=0.05
+        )

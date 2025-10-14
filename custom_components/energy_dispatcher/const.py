@@ -107,6 +107,9 @@ CONF_DISHWASHER_POWER_W = "dishwasher_power_w"
 CONF_WASHING_MACHINE_POWER_W = "washing_machine_power_w"
 CONF_WATER_HEATER_POWER_W = "water_heater_power_w"
 
+# Weather-aware optimization
+CONF_ENABLE_WEATHER_OPTIMIZATION = "enable_weather_optimization"
+
 # 48-hour historical baseline with time-of-day weighting
 CONF_RUNTIME_LOOKBACK_HOURS = "runtime_lookback_hours"  # Default 48
 CONF_RUNTIME_USE_DAYPARTS = "runtime_use_dayparts"  # Enable time-of-day weighting

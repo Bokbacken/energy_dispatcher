@@ -3,13 +3,15 @@
 This module provides sensors for appliance scheduling recommendations,
 showing optimal times to run household appliances based on electricity
 prices and solar production forecasts.
+
+Also provides weather-adjusted solar forecast sensor.
 """
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -22,19 +24,27 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     # Get coordinator from domain data
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     
-    # Check if appliance optimization is enabled
+    # Get config
     config = hass.data[DOMAIN][entry.entry_id]["config"]
-    if not config.get("enable_appliance_optimization", False):
-        # Optimization not enabled, skip sensor creation
-        return
+    
+    sensors = []
+    
+    # Add appliance optimization sensors if enabled
+    if config.get("enable_appliance_optimization", False):
+        sensors.extend([
+            DishwasherOptimalTimeSensor(coordinator, entry.entry_id),
+            WashingMachineOptimalTimeSensor(coordinator, entry.entry_id),
+            WaterHeaterOptimalTimeSensor(coordinator, entry.entry_id),
+        ])
+    
+    # Add weather-adjusted solar forecast sensor if weather optimization is enabled
+    if config.get("enable_weather_optimization", True):
+        sensors.append(
+            WeatherAdjustedSolarForecastSensor(hass, entry, coordinator)
+        )
 
-    sensors = [
-        DishwasherOptimalTimeSensor(coordinator, entry.entry_id),
-        WashingMachineOptimalTimeSensor(coordinator, entry.entry_id),
-        WaterHeaterOptimalTimeSensor(coordinator, entry.entry_id),
-    ]
-
-    async_add_entities(sensors, False)
+    if sensors:
+        async_add_entities(sensors, False)
 
 
 class DishwasherOptimalTimeSensor(BaseEDSensor):
@@ -176,3 +186,56 @@ class WaterHeaterOptimalTimeSensor(BaseEDSensor):
     @property
     def device_class(self) -> str:
         return "timestamp"
+
+    @property
+    def device_class(self) -> str:
+        return "timestamp"
+
+
+class WeatherAdjustedSolarForecastSensor(BaseEDSensor):
+    """Sensor showing weather-adjusted solar forecast."""
+
+    _attr_name = "Weather Adjusted Solar Forecast"
+    _attr_icon = "mdi:weather-partly-cloudy"
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_device_class = "energy"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, hass: HomeAssistant, entry, coordinator):
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry.entry_id)
+        self.hass = hass
+        self._entry = entry
+        self._state = None
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_weather_adjusted_solar_forecast_{self._entry_id}"
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Return the weather-adjusted solar forecast for today in kWh."""
+        return self._state
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return weather-adjusted forecast details."""
+        weather_data = self.coordinator.data.get("weather_adjusted_solar", {})
+        
+        return {
+            "base_forecast_kwh": weather_data.get("base_forecast_kwh", 0.0),
+            "weather_adjusted_kwh": weather_data.get("weather_adjusted_kwh", 0.0),
+            "confidence_level": weather_data.get("confidence_level", "unknown"),
+            "limiting_factor": weather_data.get("limiting_factor", "unknown"),
+            "avg_adjustment_factor": weather_data.get("avg_adjustment_factor", 1.0),
+            "reduction_percentage": weather_data.get("reduction_percentage", 0.0),
+            "forecast": weather_data.get("forecast_points", []),
+        }
+
+    async def async_update(self):
+        """Update the sensor state."""
+        # Get weather-adjusted data from coordinator
+        weather_data = self.coordinator.data.get("weather_adjusted_solar", {})
+        
+        # Set state to the adjusted forecast in kWh
+        self._state = weather_data.get("weather_adjusted_kwh", 0.0)
