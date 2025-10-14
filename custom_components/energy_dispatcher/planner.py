@@ -9,17 +9,8 @@ This module provides cost-based optimization suggestions for:
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-# Import from parent package when used as module
-try:
-    from custom_components.energy_dispatcher.models import PlanAction, PricePoint, ForecastPoint, ChargingMode
-    from custom_components.energy_dispatcher.cost_strategy import CostStrategy, CostLevel
-except ImportError:
-    # Fallback for when running from archive directory
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-    from custom_components.energy_dispatcher.models import PlanAction, PricePoint, ForecastPoint, ChargingMode
-    from custom_components.energy_dispatcher.cost_strategy import CostStrategy, CostLevel
+from .models import PlanAction, PricePoint, ForecastPoint, ChargingMode, CostThresholds
+from .cost_strategy import CostStrategy, CostLevel
 
 def simple_plan(
     now: datetime,
@@ -44,7 +35,6 @@ def simple_plan(
     """
     # Initialize cost strategy if not provided
     if cost_strategy is None:
-        from .models import CostThresholds
         cost_strategy = CostStrategy(CostThresholds(cheap_max=cheap_threshold, high_min=cheap_threshold * 2))
     
     plan: List[PlanAction] = []

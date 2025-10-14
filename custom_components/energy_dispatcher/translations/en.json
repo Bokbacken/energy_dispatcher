@@ -72,6 +72,8 @@
           "evse_total_energy_sensor": "EVSE Total Energy Counter (kWh)",
           "pv_total_energy_entity": "PV Total Energy Counter (kWh)",
           "batt_total_charged_energy_entity": "Battery Total Charged Energy Counter (kWh)",
+          "cost_cheap_threshold": "Cost Strategy: Cheap Price Threshold (SEK/kWh)",
+          "cost_high_threshold": "Cost Strategy: High Price Threshold (SEK/kWh)",
           "auto_create_dashboard": "Auto-create Dashboard"
         },
         "data_description": {
@@ -142,6 +144,8 @@
           "batt_energy_charged_today_entity": "Sensor reporting energy charged to battery today (kWh)",
           "batt_energy_discharged_today_entity": "Sensor reporting energy discharged from battery today (kWh)",
           "batt_total_charged_energy_entity": "Cumulative energy counter for total battery charging (kWh). Used to exclude battery grid charging from house baseline calculation.",
+          "cost_cheap_threshold": "Maximum price (SEK/kWh) to classify as 'cheap'. Prices at or below this threshold are considered cheap electricity periods suitable for charging",
+          "cost_high_threshold": "Minimum price (SEK/kWh) to classify as 'high'. Prices at or above this threshold are considered expensive periods where battery discharge is recommended",
           "auto_create_dashboard": "Automatically create a dashboard with energy dispatcher sensors and controls"
         }
       }

@@ -97,6 +97,10 @@ CONF_RUNTIME_EXCLUDE_BATT_GRID = "runtime_exclude_batt_grid"
 CONF_RUNTIME_SOC_FLOOR = "runtime_soc_floor"
 CONF_RUNTIME_SOC_CEILING = "runtime_soc_ceiling"
 
+# Cost strategy
+CONF_COST_CHEAP_THRESHOLD = "cost_cheap_threshold"  # SEK/kWh
+CONF_COST_HIGH_THRESHOLD = "cost_high_threshold"    # SEK/kWh
+
 # 48-hour historical baseline with time-of-day weighting
 CONF_RUNTIME_LOOKBACK_HOURS = "runtime_lookback_hours"  # Default 48
 CONF_RUNTIME_USE_DAYPARTS = "runtime_use_dayparts"  # Enable time-of-day weighting

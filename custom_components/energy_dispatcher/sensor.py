@@ -40,6 +40,12 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         EVChargingSessionSensor(coordinator, entry.entry_id),
         BattTimeUntilChargeSensor(coordinator, entry.entry_id),
         BattChargeReasonSensor(coordinator, entry.entry_id),
+        # Cost strategy sensors
+        CostLevelSensor(coordinator, entry.entry_id),
+        BatteryReserveSensor(coordinator, entry.entry_id),
+        NextHighCostWindowSensor(coordinator, entry.entry_id),
+        # Optimization planner sensor
+        OptimizationPlanSensor(coordinator, entry.entry_id),
     ]
     
     # Add forecast sensors (raw and cloud compensated)
@@ -647,4 +653,178 @@ class SolarForecastCompensatedSensor(SensorEntity):
         self._state = sum(point.watts for point in compensated)
         self._attr_extra_state_attributes = {
             "forecast": [(point.time.isoformat(), point.watts) for point in compensated]
+        }
+
+
+class CostLevelSensor(BaseEDSensor):
+    """Sensor showing current price cost level (cheap/medium/high)."""
+    _attr_name = "Cost Level"
+    _attr_icon = "mdi:tag-multiple"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_cost_level_{self._entry_id}"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        return self.coordinator.data.get("cost_level")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        cost_summary = self.coordinator.data.get("cost_summary", {})
+        return {
+            "cheap_threshold_sek_per_kwh": cost_summary.get("cheap_threshold"),
+            "high_threshold_sek_per_kwh": cost_summary.get("high_threshold"),
+            "cheap_hours_next_24h": cost_summary.get("cheap_hours"),
+            "medium_hours_next_24h": cost_summary.get("medium_hours"),
+            "high_hours_next_24h": cost_summary.get("high_hours"),
+            "avg_price_next_24h": cost_summary.get("avg_price"),
+            "min_price_next_24h": cost_summary.get("min_price"),
+            "max_price_next_24h": cost_summary.get("max_price"),
+        }
+
+
+class BatteryReserveSensor(BaseEDSensor):
+    """Sensor showing recommended battery reserve SOC based on upcoming prices."""
+    _attr_name = "Battery Reserve Recommendation"
+    _attr_native_unit_of_measurement = "%"
+    _attr_icon = "mdi:battery-alert"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_battery_reserve_{self._entry_id}"
+
+    @property
+    def native_value(self) -> Optional[float]:
+        reserve = self.coordinator.data.get("battery_reserve_recommendation")
+        if reserve is not None:
+            return round(reserve, 1)
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "description": "Recommended minimum battery SOC to maintain for upcoming high-cost periods"
+        }
+
+
+class NextHighCostWindowSensor(BaseEDSensor):
+    """Sensor showing the next high-cost time window."""
+    _attr_name = "Next High Cost Window"
+    _attr_icon = "mdi:clock-alert"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_next_high_cost_window_{self._entry_id}"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        windows = self.coordinator.data.get("high_cost_windows", [])
+        if windows and len(windows) > 0:
+            start, end = windows[0]
+            return start.strftime("%H:%M")
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        windows = self.coordinator.data.get("high_cost_windows", [])
+        attr = {"high_cost_windows_count": len(windows)}
+        
+        if windows:
+            # Add all windows as attributes
+            windows_list = []
+            for i, (start, end) in enumerate(windows):
+                windows_list.append({
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "start_time": start.strftime("%H:%M"),
+                    "end_time": end.strftime("%H:%M"),
+                    "duration_hours": (end - start).total_seconds() / 3600
+                })
+            attr["windows"] = windows_list
+            
+            # Add next window details to state attributes
+            if len(windows) > 0:
+                start, end = windows[0]
+                attr["next_window_start"] = start.isoformat()
+                attr["next_window_end"] = end.isoformat()
+                attr["next_window_duration_hours"] = round((end - start).total_seconds() / 3600, 1)
+        
+        return attr
+
+
+class OptimizationPlanSensor(BaseEDSensor):
+    """Sensor showing the optimization plan for the next 24 hours."""
+    _attr_name = "Optimization Plan"
+    _attr_icon = "mdi:calendar-clock"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_optimization_plan_{self._entry_id}"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return summary of next recommended action."""
+        plan = self.coordinator.data.get("optimization_plan", [])
+        if not plan:
+            return "No plan available"
+        
+        # Find next action with a recommendation
+        for action in plan:
+            if action.charge_batt_w and action.charge_batt_w > 0:
+                return f"Charge battery @ {action.time.strftime('%H:%M')}"
+            elif action.discharge_batt_w and action.discharge_batt_w > 0:
+                return f"Discharge battery @ {action.time.strftime('%H:%M')}"
+            elif action.ev_charge_a and action.ev_charge_a > 0:
+                return f"Charge EV @ {action.time.strftime('%H:%M')}"
+        
+        return "No actions recommended"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return detailed plan as attributes."""
+        plan = self.coordinator.data.get("optimization_plan", [])
+        
+        if not plan:
+            return {"plan_count": 0, "actions": []}
+        
+        # Convert plan to serializable format
+        actions = []
+        charge_hours = 0
+        discharge_hours = 0
+        ev_charge_hours = 0
+        
+        for action in plan:
+            action_dict = {
+                "time": action.time.isoformat(),
+                "time_str": action.time.strftime("%H:%M"),
+            }
+            
+            if action.charge_batt_w and action.charge_batt_w > 0:
+                action_dict["battery_action"] = "charge"
+                action_dict["battery_power_w"] = action.charge_batt_w
+                charge_hours += 1
+            elif action.discharge_batt_w and action.discharge_batt_w > 0:
+                action_dict["battery_action"] = "discharge"
+                action_dict["battery_power_w"] = action.discharge_batt_w
+                discharge_hours += 1
+            else:
+                action_dict["battery_action"] = "idle"
+            
+            if action.ev_charge_a and action.ev_charge_a > 0:
+                action_dict["ev_charge_a"] = action.ev_charge_a
+                ev_charge_hours += 1
+            
+            if hasattr(action, 'notes') and action.notes:
+                action_dict["notes"] = action.notes
+            
+            actions.append(action_dict)
+        
+        return {
+            "plan_count": len(plan),
+            "charge_hours": charge_hours,
+            "discharge_hours": discharge_hours,
+            "ev_charge_hours": ev_charge_hours,
+            "actions": actions,
+            "description": "Hourly optimization plan for battery and EV charging based on price forecasts"
         }

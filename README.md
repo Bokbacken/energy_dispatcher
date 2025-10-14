@@ -154,6 +154,34 @@ charging_mode: cost_saver
 
 See [Multi-Vehicle Setup Guide](./docs/multi_vehicle_setup.md) for detailed examples.
 
+## Development
+
+### Running Tests
+
+Install test dependencies:
+```bash
+pip install -r requirements-test.txt
+```
+
+Run all tests:
+```bash
+pytest tests/
+```
+
+Run specific test file:
+```bash
+pytest tests/test_cost_strategy.py -v
+```
+
+Run with coverage:
+```bash
+pytest tests/ --cov=custom_components/energy_dispatcher --cov-report=html
+```
+
+### CI/CD
+
+Tests are automatically run on push and pull requests via GitHub Actions. See `.github/workflows/test.yml` for configuration.
+
 ## License
 
 MIT
