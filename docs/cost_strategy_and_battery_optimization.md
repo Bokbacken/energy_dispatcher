@@ -624,6 +624,706 @@ The cost strategy and battery optimization system represents a significant value
 
 ---
 
+## Advanced AI-Like Optimization Strategies
+
+This section describes additional optimization capabilities that can be implemented to create an intelligent, automated energy management system that acts like an AI assistant for cost optimization.
+
+### Overview of Advanced Features
+
+The following enhancements build upon the existing cost strategy to provide:
+- **Appliance scheduling recommendations** - Suggest optimal times to run energy-intensive appliances
+- **Weather-aware optimization** - Use weather forecasts to improve solar predictions
+- **Export profitability analysis** - Determine when selling energy back to grid is worthwhile
+- **Load shifting intelligence** - Recommend when to shift flexible loads to cheaper periods
+- **Peak shaving strategies** - Minimize demand charges and peak consumption
+- **Comfort-aware optimization** - Balance cost savings with user comfort and convenience
+
+---
+
+### 1. Appliance Scheduling Optimization
+
+**Goal**: Suggest optimal times to run flexible appliances like dishwashers, washing machines, and water heaters to minimize energy costs.
+
+#### Input Data Required
+- Current and forecast electricity prices (24h)
+- Solar production forecast (24h)
+- Appliance power consumption profiles
+- User preferences (earliest start time, latest completion time)
+- Battery state and capacity
+
+#### Optimization Logic
+
+```python
+def optimize_appliance_schedule(
+    appliance_name: str,
+    power_w: float,
+    duration_hours: float,
+    earliest_start: datetime,
+    latest_end: datetime,
+    prices: List[PricePoint],
+    solar_forecast: List[ForecastPoint],
+    battery_soc: float,
+    battery_capacity_kwh: float,
+) -> Dict[str, Any]:
+    """
+    Recommend optimal time to run an appliance.
+    
+    Strategy:
+    1. Calculate net cost for each potential start time
+    2. Consider solar availability (free energy)
+    3. Account for battery state and opportunity cost
+    4. Prefer times when excess solar is available
+    5. Avoid high-cost periods unless necessary
+    
+    Returns:
+        {
+            "optimal_start_time": datetime,
+            "estimated_cost_sek": float,
+            "cost_savings_vs_now_sek": float,
+            "reason": str,
+            "alternative_times": List[datetime]
+        }
+    """
+    # Implementation details...
+```
+
+#### Key Considerations
+- **Solar priority**: Schedule during excess solar production when possible
+- **Cost minimization**: Choose cheapest electricity price periods
+- **Battery interaction**: Consider if battery could cover the load during expensive times
+- **User convenience**: Respect time constraints (e.g., don't suggest running dishwasher at 3 AM unless user allows)
+- **Sequential optimization**: If multiple appliances need scheduling, optimize together to avoid conflicts
+
+#### Dashboard Sensor Example
+```yaml
+sensor:
+  - platform: energy_dispatcher
+    name: "Dishwasher Optimal Start Time"
+    entity_id: sensor.energy_dispatcher_dishwasher_recommendation
+    attributes:
+      - optimal_time
+      - estimated_cost
+      - savings_vs_now
+      - reason
+```
+
+**User Experience**: 
+- Dashboard shows: "Best time to run dishwasher: 13:00-15:00 (during solar peak, save 3.50 SEK)"
+- Alternative: "If you run now: 2.20 SEK. Wait until 13:00: 0.85 SEK (save 1.35 SEK)"
+
+---
+
+### 2. Weather-Aware Solar Optimization
+
+**Goal**: Improve battery and load management by incorporating weather data to enhance solar production predictions.
+
+#### Input Data Required
+- Weather forecast (cloud cover, temperature, precipitation) 
+- Historical solar production vs. weather correlation
+- Solar panel specifications (azimuth, tilt, capacity)
+- Current and forecast prices
+
+#### Enhancement Logic
+
+```python
+def adjust_solar_forecast_for_weather(
+    base_solar_forecast: List[ForecastPoint],
+    weather_forecast: List[WeatherPoint],
+    historical_adjustment_factors: Dict[str, float],
+) -> List[ForecastPoint]:
+    """
+    Adjust solar forecast based on weather conditions.
+    
+    Adjustments:
+    - Cloud cover: Reduce forecast by 30-80% based on density
+    - Temperature: Account for panel efficiency changes (higher temp = lower efficiency)
+    - Snow/rain: Reduce production or flag for cleaning
+    - Wind: Generally positive effect on panel cooling
+    
+    Returns adjusted solar forecast with confidence intervals.
+    """
+    # Implementation details...
+```
+
+#### Integration with Battery Planning
+
+When solar forecast is adjusted downward (cloudy weather expected):
+1. **Increase battery reserve** - Store more energy anticipating lower solar production
+2. **Advance charging schedule** - Charge earlier than usual to prepare for shortfall
+3. **Reduce export plans** - Less likely to have excess solar to sell
+
+When solar forecast is adjusted upward (clear skies expected):
+1. **Reduce battery pre-charging** - Solar will provide daytime energy
+2. **Plan for export opportunity** - If excess solar expected, prepare to sell
+3. **Schedule appliances during solar peaks** - Use free solar energy
+
+#### Dashboard Sensor Example
+```yaml
+sensor:
+  - platform: energy_dispatcher
+    name: "Adjusted Solar Forecast Today"
+    entity_id: sensor.energy_dispatcher_solar_forecast_weather_adjusted
+    attributes:
+      - base_forecast_kwh
+      - weather_adjusted_kwh
+      - confidence_level
+      - limiting_factor  # e.g., "cloud_cover", "clear"
+```
+
+---
+
+### 3. Export Profitability Analysis
+
+**Goal**: Determine when selling energy back to the grid is financially worthwhile, considering the typically low selling price vs. purchase price.
+
+#### Input Data Required
+- Spot price (what grid pays for electricity)
+- Purchase price enriched (what you pay including fees)
+- Export price (spot price minus fees/reductions)
+- Battery state and degradation cost
+- Solar production forecast
+
+#### Decision Logic
+
+```python
+def should_export_energy(
+    current_spot_price: float,
+    current_purchase_price: float,
+    export_price_per_kwh: float,
+    battery_soc: float,
+    battery_capacity_kwh: float,
+    battery_degradation_cost_per_cycle: float,
+    upcoming_high_cost_hours: int,
+) -> Dict[str, Any]:
+    """
+    Determine if exporting is worthwhile.
+    
+    Key principles:
+    1. Default: DON'T EXPORT (selling price usually too low)
+    2. Export only if:
+       - Spot price is exceptionally high (e.g., >5 SEK/kWh)
+       - Battery is full and solar still producing
+       - No high-cost periods expected soon (no need to store)
+       - Export price - battery degradation > threshold
+    
+    Returns:
+        {
+            "should_export": bool,
+            "export_power_w": int,
+            "estimated_revenue_per_kwh": float,
+            "opportunity_cost": float,  # value of storing vs selling
+            "reason": str
+        }
+    """
+    
+    # Calculate thresholds
+    min_profitable_export_price = export_price_per_kwh - battery_degradation_cost_per_cycle
+    
+    # Default to not exporting
+    if export_price_per_kwh < 2.0:  # Very conservative threshold
+        return {
+            "should_export": False,
+            "reason": "Export price too low (< 2 SEK/kWh), better to store or use locally"
+        }
+    
+    # Check if battery is full and solar producing
+    if battery_soc >= 95 and solar_excess_w > 1000:
+        # Battery full, excess solar, check if export is better than curtailing
+        return {
+            "should_export": True,
+            "export_power_w": solar_excess_w,
+            "reason": "Battery full, excess solar would be wasted otherwise"
+        }
+    
+    # Check for exceptional spot price
+    if export_price_per_kwh > 5.0 and battery_soc > 80:
+        return {
+            "should_export": True,
+            "export_power_w": 5000,  # Max export rate
+            "estimated_revenue": export_price_per_kwh * 1.0,  # per kWh
+            "reason": f"Exceptionally high spot price ({export_price_per_kwh:.2f} SEK/kWh)"
+        }
+    
+    # Default: don't export, store for later use
+    return {
+        "should_export": False,
+        "reason": "Better to store energy for later use during expensive periods"
+    }
+```
+
+#### Export Settings Configuration
+
+Users should configure:
+- **Minimum export price threshold** (SEK/kWh) - Default: 3.0
+- **Battery degradation cost per cycle** (SEK) - Default: 0.50
+- **Maximum export power** (W) - Default: 5000
+- **Export mode**: 
+  - `never` - Never export (default)
+  - `excess_solar_only` - Export only when battery full and solar producing
+  - `peak_price_opportunistic` - Export during exceptional price spikes
+  - `always_optimize` - Actively sell when profitable
+
+#### Dashboard Example
+```yaml
+sensor:
+  - platform: energy_dispatcher
+    name: "Export Opportunity"
+    entity_id: binary_sensor.energy_dispatcher_export_opportunity
+    state: "{{ states('binary_sensor.energy_dispatcher_export_opportunity') }}"
+    attributes:
+      estimated_revenue_per_hour: "3.50 SEK"
+      current_export_price: "4.20 SEK/kWh"
+      recommendation: "Export at max power for next 2 hours"
+```
+
+---
+
+### 4. Load Shifting Intelligence
+
+**Goal**: Identify and recommend shifting flexible loads to cheaper time periods.
+
+#### Input Data Required
+- Historical consumption patterns by hour
+- Baseline load (always-on devices)
+- Flexible load identification (can be delayed)
+- Price forecast (24-48h)
+- User preferences for flexibility
+
+#### Optimization Strategy
+
+```python
+def recommend_load_shifts(
+    current_time: datetime,
+    baseline_load_w: float,
+    current_consumption_w: float,
+    prices: List[PricePoint],
+    flexible_load_categories: List[str],  # e.g., ['ev_charging', 'water_heater', 'pool_pump']
+    user_flexibility_hours: int = 6,
+) -> List[Dict[str, Any]]:
+    """
+    Recommend load shifting opportunities.
+    
+    Strategy:
+    1. Identify current non-essential loads
+    2. Find cheaper time windows within flexibility window
+    3. Calculate savings potential
+    4. Prioritize by savings amount and user impact
+    
+    Returns list of recommendations sorted by savings potential.
+    """
+    recommendations = []
+    
+    # Identify flexible loads currently running
+    flexible_load_w = current_consumption_w - baseline_load_w
+    
+    if flexible_load_w < 500:  # Not enough load to shift
+        return []
+    
+    # Find cheaper periods
+    current_price = get_current_price(prices, current_time)
+    future_prices = get_prices_in_window(prices, current_time, user_flexibility_hours)
+    
+    # Calculate savings
+    for future_price in future_prices:
+        if future_price.enriched_sek_per_kwh < current_price.enriched_sek_per_kwh - 0.5:
+            savings_per_hour = (current_price.enriched_sek_per_kwh - future_price.enriched_sek_per_kwh) * (flexible_load_w / 1000)
+            
+            recommendations.append({
+                "shift_to": future_price.time,
+                "savings_per_hour_sek": savings_per_hour,
+                "price_now": current_price.enriched_sek_per_kwh,
+                "price_then": future_price.enriched_sek_per_kwh,
+                "affected_loads": identify_flexible_loads(flexible_load_w),
+                "user_impact": "low" if future_price.time.hour in range(0, 7) else "medium"
+            })
+    
+    return sorted(recommendations, key=lambda x: x["savings_per_hour_sek"], reverse=True)
+```
+
+#### User Interface Recommendations
+
+**Dashboard Card: Load Shifting Opportunities**
+```yaml
+type: entities
+title: Load Shifting Recommendations
+entities:
+  - entity: sensor.energy_dispatcher_load_shift_opportunity
+    name: "Best Opportunity"
+    secondary_info: last-changed
+  - entity: sensor.energy_dispatcher_load_shift_savings
+    name: "Potential Savings"
+    icon: mdi:currency-eur
+  - entity: sensor.energy_dispatcher_load_shift_time
+    name: "Recommended Time"
+    icon: mdi:clock-outline
+```
+
+**Notification Example**:
+"💡 Shift EV charging to 02:00-06:00 to save 12 SEK (price will drop from 3.20 to 1.40 SEK/kWh)"
+
+---
+
+### 5. Peak Shaving Strategies
+
+**Goal**: Minimize peak power consumption to reduce demand charges and grid strain.
+
+#### Input Data Required
+- Real-time power consumption (W)
+- Historical peak consumption
+- Battery state and power limits
+- Time-of-use or demand charge structure
+- Solar production
+
+#### Peak Shaving Logic
+
+```python
+def calculate_peak_shaving_action(
+    current_grid_import_w: float,
+    peak_threshold_w: float,
+    battery_soc: float,
+    battery_max_discharge_w: int,
+    battery_reserve_soc: float,
+    solar_production_w: float,
+) -> Dict[str, Any]:
+    """
+    Determine battery discharge needed to shave peaks.
+    
+    Strategy:
+    1. Monitor grid import power
+    2. If approaching or exceeding peak threshold, discharge battery
+    3. Maintain reserve SOC for essential needs
+    4. Prioritize solar usage first
+    
+    Returns discharge power recommendation.
+    """
+    # Net demand after solar
+    net_demand_w = current_grid_import_w - solar_production_w
+    
+    # Check if peak threshold exceeded
+    if net_demand_w <= peak_threshold_w:
+        return {
+            "discharge_battery": False,
+            "reason": "Within peak threshold"
+        }
+    
+    # Calculate excess above threshold
+    excess_w = net_demand_w - peak_threshold_w
+    
+    # Check battery availability
+    if battery_soc <= battery_reserve_soc:
+        return {
+            "discharge_battery": False,
+            "reason": "Battery at reserve level, cannot shave peak"
+        }
+    
+    # Calculate discharge power (limit to battery capability)
+    discharge_w = min(excess_w, battery_max_discharge_w)
+    
+    # Ensure we don't drop below reserve
+    available_battery_kwh = ((battery_soc - battery_reserve_soc) / 100) * battery_capacity_kwh
+    max_discharge_duration_h = available_battery_kwh / (discharge_w / 1000)
+    
+    if max_discharge_duration_h < 0.5:  # Less than 30 min available
+        return {
+            "discharge_battery": False,
+            "reason": "Insufficient battery capacity for meaningful peak shaving"
+        }
+    
+    return {
+        "discharge_battery": True,
+        "discharge_power_w": discharge_w,
+        "duration_estimate_h": max_discharge_duration_h,
+        "peak_reduction_w": discharge_w,
+        "reason": f"Shaving {discharge_w}W peak, can maintain for {max_discharge_duration_h:.1f}h"
+    }
+```
+
+#### Configuration Options
+- **Peak threshold** (W) - Trigger level for peak shaving
+- **Peak shaving mode**:
+  - `disabled` - No peak shaving
+  - `demand_charge_aware` - Shave peaks during demand charge periods
+  - `continuous` - Always minimize peaks
+- **Reserve protection** - Minimum SOC to maintain during peak shaving
+
+---
+
+### 6. Comfort-Aware Optimization
+
+**Goal**: Balance cost savings with user comfort and convenience.
+
+#### User Preference Inputs
+- **Comfort priority level**: `cost_first`, `balanced`, `comfort_first`
+- **Acceptable temperature range** (for heating/cooling optimization)
+- **Minimum battery reserve for peace of mind** (%)
+- **Quiet hours** (when not to run appliances)
+- **Override permissions** (allow system to override user-set schedules)
+
+#### Balanced Optimization Example
+
+```python
+def optimize_with_comfort_balance(
+    optimization_recommendations: List[Dict],
+    user_comfort_priority: str,
+    current_temperature: float,
+    target_temperature: float,
+    battery_soc: float,
+) -> List[Dict]:
+    """
+    Filter and adjust recommendations based on comfort priority.
+    
+    Cost-first: Maximize savings, accept some inconvenience
+    Balanced: Seek savings without significant comfort impact
+    Comfort-first: Maintain comfort, optimize within those constraints
+    """
+    if user_comfort_priority == "comfort_first":
+        # Filter out aggressive recommendations
+        recommendations = [r for r in recommendations 
+                          if r.get("user_impact", "medium") == "low"]
+        
+        # Maintain higher battery reserve
+        if battery_soc < 70:
+            recommendations = [r for r in recommendations 
+                             if r.get("action") != "discharge"]
+        
+        # Don't shift loads to inconvenient times
+        recommendations = [r for r in recommendations
+                          if r.get("recommended_time", {}).get("hour", 12) in range(7, 23)]
+    
+    elif user_comfort_priority == "balanced":
+        # Accept moderate inconvenience for significant savings
+        recommendations = [r for r in recommendations
+                          if r.get("savings_sek", 0) / r.get("inconvenience_score", 1) > 2.0]
+    
+    else:  # cost_first
+        # Accept all recommendations
+        pass
+    
+    return recommendations
+```
+
+---
+
+### 7. Comprehensive Dashboard Integration
+
+#### Main Optimization Dashboard Card
+
+```yaml
+type: vertical-stack
+title: "🤖 AI Energy Optimization"
+cards:
+  - type: entities
+    title: Current Optimization Status
+    entities:
+      - entity: sensor.energy_dispatcher_cost_level
+        name: "Current Price Level"
+        icon: mdi:currency-eur
+      - entity: sensor.energy_dispatcher_battery_reserve
+        name: "Battery Reserve Target"
+        icon: mdi:battery-50
+      - entity: binary_sensor.energy_dispatcher_should_charge_battery
+        name: "Battery Charging Recommended"
+        icon: mdi:battery-charging
+      - entity: binary_sensor.energy_dispatcher_should_discharge_battery
+        name: "Battery Discharging Recommended"
+        icon: mdi:battery-arrow-down
+  
+  - type: entities
+    title: 💡 Smart Recommendations
+    entities:
+      - entity: sensor.energy_dispatcher_dishwasher_recommendation
+        name: "Best Time - Dishwasher"
+        icon: mdi:dishwasher
+        secondary_info: last-changed
+      - entity: sensor.energy_dispatcher_washing_machine_recommendation
+        name: "Best Time - Washing Machine"
+        icon: mdi:washing-machine
+      - entity: sensor.energy_dispatcher_ev_charging_recommendation
+        name: "Best Time - EV Charging"
+        icon: mdi:car-electric
+      - entity: sensor.energy_dispatcher_water_heater_recommendation
+        name: "Best Time - Water Heater"
+        icon: mdi:water-boiler
+  
+  - type: entities
+    title: 📊 Cost Optimization
+    entities:
+      - entity: sensor.energy_dispatcher_estimated_savings_today
+        name: "Estimated Savings Today"
+        icon: mdi:piggy-bank
+      - entity: sensor.energy_dispatcher_estimated_savings_month
+        name: "Estimated Savings This Month"
+        icon: mdi:chart-line
+      - entity: sensor.energy_dispatcher_next_cheap_period
+        name: "Next Cheap Period"
+        icon: mdi:clock-outline
+      - entity: sensor.energy_dispatcher_next_high_cost_period
+        name: "Next High Cost Period"
+        icon: mdi:alert-circle
+  
+  - type: entities
+    title: 🔋 Export Opportunities
+    entities:
+      - entity: binary_sensor.energy_dispatcher_export_opportunity
+        name: "Export Recommended"
+        icon: mdi:transmission-tower-export
+      - entity: sensor.energy_dispatcher_export_estimated_revenue
+        name: "Potential Revenue"
+        icon: mdi:cash-plus
+  
+  - type: custom:apexcharts-card
+    title: 24h Price & Optimization Plan
+    graph_span: 24h
+    span:
+      start: day
+    header:
+      show: true
+      title: Price Levels & Recommended Actions
+    series:
+      - entity: sensor.nordpool_kwh_se3_sek_3_10_025
+        name: Electricity Price
+        type: column
+        color: var(--primary-color)
+        data_generator: |
+          return entity.attributes.raw_today.concat(entity.attributes.raw_tomorrow || []).map((item) => {
+            return [new Date(item.start), item.value];
+          });
+      - entity: sensor.energy_dispatcher_optimization_plan
+        name: Battery Action
+        type: line
+        color: green
+        data_generator: |
+          return entity.attributes.actions.map((item) => {
+            return [new Date(item.time), item.battery_action === 'charge' ? 1 : item.battery_action === 'discharge' ? -1 : 0];
+          });
+```
+
+#### Quick Action Buttons
+
+```yaml
+type: horizontal-stack
+cards:
+  - type: button
+    name: "Force Charge Now"
+    icon: mdi:battery-charging
+    tap_action:
+      action: call-service
+      service: energy_dispatcher.override_battery_mode
+      data:
+        mode: charge
+        duration_minutes: 60
+  
+  - type: button
+    name: "Start EV Charging"
+    icon: mdi:ev-station
+    tap_action:
+      action: call-service
+      service: energy_dispatcher.start_ev_charging
+      data:
+        mode: optimal
+  
+  - type: button
+    name: "Reset Optimizations"
+    icon: mdi:restart
+    tap_action:
+      action: call-service
+      service: energy_dispatcher.reset_optimizations
+```
+
+---
+
+### 8. Implementation Roadmap
+
+#### Phase 1: Core Appliance Scheduling (1-2 weeks)
+- [ ] Implement appliance scheduling optimization algorithm
+- [ ] Create sensors for top 3-4 appliances (dishwasher, washing machine, water heater, EV)
+- [ ] Add configuration for appliance power profiles
+- [ ] Create basic dashboard cards
+- [ ] Add English and Swedish translations
+
+#### Phase 2: Weather Integration (1 week)
+- [ ] Integrate weather forecast data (cloud cover, temperature)
+- [ ] Implement solar forecast adjustment algorithm
+- [ ] Add weather-adjusted solar forecast sensor
+- [ ] Update battery reserve calculations to account for weather
+
+#### Phase 3: Export Optimization (1 week)
+- [ ] Implement export profitability analysis
+- [ ] Add export opportunity detection sensor
+- [ ] Create export revenue estimation
+- [ ] Add user configuration for export preferences
+- [ ] Create export monitoring dashboard card
+
+#### Phase 4: Load Shifting & Peak Shaving (1-2 weeks)
+- [ ] Implement load shifting recommendation algorithm
+- [ ] Add peak shaving logic to battery control
+- [ ] Create load shift opportunity sensors
+- [ ] Add peak monitoring and alerts
+- [ ] Create dashboard visualizations
+
+#### Phase 5: Comfort Integration (1 week)
+- [ ] Add user comfort preference configuration
+- [ ] Implement comfort-aware filtering of recommendations
+- [ ] Create override and manual control options
+- [ ] Add feedback mechanism for user preferences
+- [ ] Update dashboard with comfort controls
+
+#### Phase 6: Testing & Refinement (1-2 weeks)
+- [ ] Comprehensive testing with real data
+- [ ] User feedback collection
+- [ ] Algorithm tuning and optimization
+- [ ] Documentation updates
+- [ ] Performance optimization
+
+**Total Estimated Timeline**: 6-9 weeks for complete implementation
+
+---
+
+### 9. Success Metrics
+
+#### Cost Savings Targets
+- **Primary Goal**: 20-35% reduction in electricity costs
+- **EV Charging**: 15-25% savings by optimal scheduling
+- **Appliance Shifting**: 5-10% additional savings
+- **Peak Shaving**: Eliminate or reduce demand charges (if applicable)
+- **Export Revenue**: Small additional revenue when conditions are favorable (opportunistic)
+
+#### User Experience Metrics
+- **Dashboard engagement**: Daily active users viewing optimization status
+- **Automation adoption**: Percentage of users implementing automatic appliance control
+- **Override frequency**: Balance between automation and manual control
+- **User satisfaction**: Feedback on recommendation quality and usability
+
+#### Technical Metrics
+- **Recommendation accuracy**: How often recommendations prove optimal in hindsight
+- **Battery cycle optimization**: Maximize useful cycles, minimize degradation
+- **Solar utilization**: Percentage of solar production used locally vs. wasted
+- **Grid export minimization**: Keep export to grid at minimum unless profitable
+
+---
+
+### 10. User Adoption Strategy
+
+#### Onboarding Experience
+1. **Simple Setup Wizard**: Guide users through basic configuration
+2. **Learning Mode**: System observes patterns for 1-2 weeks before making aggressive recommendations
+3. **Progressive Enhancement**: Start with simple optimizations, gradually introduce advanced features
+4. **Clear Explanations**: Every recommendation includes reasoning and estimated savings
+
+#### Education & Documentation
+- **Quick Start Guide**: 5-minute setup to basic optimization
+- **Video Tutorials**: Visual guides for dashboard setup and understanding recommendations
+- **Use Case Library**: Real examples from other users (anonymized)
+- **FAQ Section**: Common questions and troubleshooting
+
+#### Community Feedback Loop
+- **User Feedback Form**: Built into dashboard for reporting recommendation quality
+- **Community Forum**: Share experiences and optimization strategies
+- **Regular Updates**: Incorporate user feedback into algorithm improvements
+- **Success Stories**: Highlight users achieving significant savings
+
+---
+
 ## Proposed Pull Request
 
 ### PR Title
