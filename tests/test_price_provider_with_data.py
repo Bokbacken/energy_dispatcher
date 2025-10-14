@@ -30,24 +30,65 @@ def load_price_csv(filename: str) -> List[Tuple[datetime, float]]:
     csv_path = FIXTURES_DIR / filename
     
     with open(csv_path, 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            ts = parse_timestamp(row['timestamp'])
-            val = float(row['value'])
-            if ts:
-                prices.append((ts, val))
+        # Peek at first line to detect format
+        first_line = f.readline().strip()
+        f.seek(0)
+        
+        # Check if first line has headers
+        has_headers = 'entity_id' in first_line or 'timestamp' in first_line
+        
+        if has_headers:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # CSV format with headers: entity_id, state (value), last_changed (timestamp)
+                ts = parse_timestamp(row.get('last_changed', row.get('timestamp', '')))
+                val_str = row.get('state', row.get('value', '0'))
+                
+                # Skip invalid values (unavailable, unknown, etc.)
+                if val_str in ('unavailable', 'unknown', '', None):
+                    continue
+                
+                try:
+                    val = float(val_str)
+                except (ValueError, TypeError):
+                    continue
+                
+                if ts:
+                    prices.append((ts, val))
+        else:
+            # CSV format without headers: entity_id, value, timestamp
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) >= 3:
+                    val_str = row[1]
+                    ts = parse_timestamp(row[2])
+                    
+                    # Skip invalid values
+                    if val_str in ('unavailable', 'unknown', '', None):
+                        continue
+                    
+                    try:
+                        val = float(val_str)
+                    except (ValueError, TypeError):
+                        continue
+                    
+                    if ts:
+                        prices.append((ts, val))
     
     return sorted(prices, key=lambda x: x[0])
 
 
 def load_nordpool_yaml() -> dict:
     """Load Nordpool YAML sample data."""
-    yaml_path = FIXTURES_DIR / "nordpool_spot_price_today_tomorrow.yaml"
+    # Try files with suffixes first, then without
+    for suffix in ["-01", "-02", ""]:
+        yaml_path = FIXTURES_DIR / f"nordpool_spot_price_today_tomorrow{suffix}.yaml"
+        if yaml_path.exists():
+            with open(yaml_path, 'r') as f:
+                data = yaml.safe_load(f)
+            return data
     
-    with open(yaml_path, 'r') as f:
-        data = yaml.safe_load(f)
-    
-    return data
+    raise FileNotFoundError("No nordpool_spot_price_today_tomorrow YAML file found in fixtures")
 
 
 @pytest.fixture
