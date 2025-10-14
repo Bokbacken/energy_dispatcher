@@ -218,6 +218,41 @@ After completing these steps, you'll have:
 
 **Result**: Maximized free energy use ☀️
 
+#### Scenario 5: Export Profitability (Advanced)
+**Situation**: Exceptionally high electricity prices, want to export energy
+
+**Prerequisites**:
+- Export mode configured in integration settings
+- Battery with sufficient charge
+- High spot prices (>5 SEK/kWh)
+
+**Steps**:
+1. Configure export mode via Settings → Devices & Services → Energy Dispatcher → Configure
+2. Choose export mode:
+   - **Never Export** (Default): Conservative, never sells to grid
+   - **Excess Solar Only**: Export when battery full and solar producing excess
+   - **Peak Price Opportunistic**: Also export during exceptional prices (>5 SEK/kWh)
+3. Set minimum export price (default: 3.0 SEK/kWh)
+4. System automatically analyzes export opportunities
+
+**Result**: Additional revenue during peak prices 💰
+
+**Dashboard Monitoring**:
+- **Export Opportunity** sensor shows when export is recommended
+- **Export Revenue Estimate** shows potential earnings
+- Monitor reason in sensor attributes
+
+**Conservative Philosophy**:
+Export is intentionally conservative - defaults to "never export" because:
+- Export prices are usually lower than import prices
+- Battery degradation has a cost
+- Stored energy is valuable for future high-cost periods
+
+Only exports when:
+- Battery is full and solar would be wasted
+- Prices are exceptionally high (>5 SEK/kWh)
+- Net revenue is clearly positive after all costs
+
 ## 🔧 Configuration Tips
 
 ### Price Settings
