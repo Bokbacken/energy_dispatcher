@@ -48,6 +48,19 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         OptimizationPlanSensor(coordinator, entry.entry_id),
     ]
     
+    # Add appliance optimization sensors if enabled
+    if config.get("enable_appliance_optimization", False):
+        from .sensor_optimization import (
+            DishwasherOptimalTimeSensor,
+            WashingMachineOptimalTimeSensor,
+            WaterHeaterOptimalTimeSensor,
+        )
+        entities.extend([
+            DishwasherOptimalTimeSensor(coordinator, entry.entry_id),
+            WashingMachineOptimalTimeSensor(coordinator, entry.entry_id),
+            WaterHeaterOptimalTimeSensor(coordinator, entry.entry_id),
+        ])
+    
     # Add forecast sensors (raw and cloud compensated)
     forecast_provider = ForecastSolarProvider(
         hass=hass,

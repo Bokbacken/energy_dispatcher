@@ -390,6 +390,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self._update_grid_vs_batt_delta()
             self._update_solar_delta_15m()
             await self._update_optimization_plan()
+            await self._update_appliance_recommendations()
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Uppdatering misslyckades")
         return self.data
@@ -502,6 +503,82 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         except Exception as e:
             _LOGGER.debug("Failed to generate cost summary: %s", e)
             self.data["cost_summary"] = {}
+
+    # ---------- appliance optimization ----------
+    async def _update_appliance_recommendations(self):
+        """Generate appliance scheduling recommendations."""
+        from .appliance_optimizer import ApplianceOptimizer
+        from .const import (
+            CONF_ENABLE_APPLIANCE_OPTIMIZATION,
+            CONF_DISHWASHER_POWER_W,
+            CONF_WASHING_MACHINE_POWER_W,
+            CONF_WATER_HEATER_POWER_W,
+        )
+        
+        # Check if appliance optimization is enabled
+        if not bool(self._get_cfg(CONF_ENABLE_APPLIANCE_OPTIMIZATION, False)):
+            self.data["appliance_recommendations"] = {}
+            return
+        
+        # Check if we have necessary data
+        hourly_prices = self.data.get("hourly_prices", [])
+        if not hourly_prices:
+            self.data["appliance_recommendations"] = {}
+            return
+        
+        try:
+            optimizer = ApplianceOptimizer()
+            
+            # Get solar forecast if available
+            solar_forecast = self.data.get("solar_points", None)
+            
+            # Get battery state if available
+            batt_soc_entity = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
+            battery_soc = self._read_float(batt_soc_entity) if batt_soc_entity else None
+            battery_capacity_kwh = _safe_float(self._get_cfg(CONF_BATT_CAP_KWH))
+            
+            # Optimize for each configured appliance
+            recommendations = {}
+            
+            appliances = {
+                "dishwasher": {
+                    "power_w": int(self._get_cfg(CONF_DISHWASHER_POWER_W, 1800)),
+                    "duration_hours": 2.0,
+                },
+                "washing_machine": {
+                    "power_w": int(self._get_cfg(CONF_WASHING_MACHINE_POWER_W, 2000)),
+                    "duration_hours": 1.5,
+                },
+                "water_heater": {
+                    "power_w": int(self._get_cfg(CONF_WATER_HEATER_POWER_W, 3000)),
+                    "duration_hours": 3.0,
+                },
+            }
+            
+            for appliance_name, config in appliances.items():
+                try:
+                    recommendation = optimizer.optimize_schedule(
+                        appliance_name=appliance_name,
+                        power_w=config["power_w"],
+                        duration_hours=config["duration_hours"],
+                        prices=hourly_prices,
+                        solar_forecast=solar_forecast,
+                        battery_soc=battery_soc,
+                        battery_capacity_kwh=battery_capacity_kwh,
+                    )
+                    recommendations[appliance_name] = recommendation
+                except Exception as e:
+                    _LOGGER.debug("Failed to optimize %s: %s", appliance_name, e)
+            
+            self.data["appliance_recommendations"] = recommendations
+            _LOGGER.debug(
+                "Generated appliance recommendations for %d appliances",
+                len(recommendations)
+            )
+            
+        except Exception as e:
+            _LOGGER.warning("Failed to generate appliance recommendations: %s", e)
+            self.data["appliance_recommendations"] = {}
 
     # ---------- optimization plan ----------
     async def _update_optimization_plan(self):
