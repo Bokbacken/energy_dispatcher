@@ -1,7 +1,7 @@
 {
   "domain": "energy_dispatcher",
   "name": "Energy Dispatcher",
-  "version": "0.8.36",
+  "version": "0.9.0",
   "documentation": "https://github.com/Bokbacken/energy_dispatcher",
   "issue_tracker": "https://github.com/Bokbacken/energy_dispatcher/issues",
   "codeowners": ["@Bokbacken"],
@@ -9,5 +9,5 @@
   "config_flow": true,
   "integration_type": "hub",
   "iot_class": "calculated",
-  "description": "Updated copilot instructions with planner principles, testing approach, and documentation sync guidance. Fixed data quality report script to handle CSV format."
+  "description": "Intelligent energy management with cost optimization, solar forecasting, EV charging automation, battery management, appliance scheduling, and export profitability analysis."
 }

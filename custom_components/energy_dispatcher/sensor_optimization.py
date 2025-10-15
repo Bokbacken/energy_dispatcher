@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -42,6 +43,14 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
         sensors.append(
             WeatherAdjustedSolarForecastSensor(hass, entry, coordinator)
         )
+    
+    # Add export opportunity sensors if export mode is enabled
+    export_mode = config.get("export_mode", "never")
+    if export_mode != "never":
+        sensors.extend([
+            ExportOpportunityBinarySensor(coordinator, entry.entry_id),
+            ExportRevenueEstimateSensor(coordinator, entry.entry_id),
+        ])
 
     if sensors:
         async_add_entities(sensors, False)
@@ -239,3 +248,77 @@ class WeatherAdjustedSolarForecastSensor(BaseEDSensor):
         
         # Set state to the adjusted forecast in kWh
         self._state = weather_data.get("weather_adjusted_kwh", 0.0)
+
+
+class ExportOpportunityBinarySensor(BinarySensorEntity, BaseEDSensor):
+    """Binary sensor indicating export opportunity."""
+    
+    _attr_name = "Export Opportunity"
+    _attr_icon = "mdi:transmission-tower-export"
+    _attr_device_class = BinarySensorDeviceClass.POWER
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_export_opportunity_{self._entry_id}"
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if export is recommended."""
+        export_data = self.coordinator.data.get("export_opportunity", {})
+        return export_data.get("should_export", False)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return export opportunity details."""
+        export_data = self.coordinator.data.get("export_opportunity", {})
+        
+        return {
+            "export_power_w": export_data.get("export_power_w", 0),
+            "estimated_revenue_per_kwh": export_data.get("estimated_revenue_per_kwh", 0),
+            "export_price_sek_per_kwh": export_data.get("export_price_sek_per_kwh", 0),
+            "opportunity_cost": export_data.get("opportunity_cost", 0),
+            "reason": export_data.get("reason", ""),
+            "battery_soc": export_data.get("battery_soc", 0),
+            "solar_excess_w": export_data.get("solar_excess_w", 0),
+            "duration_estimate_h": export_data.get("duration_estimate_h", 0),
+        }
+
+
+class ExportRevenueEstimateSensor(BaseEDSensor):
+    """Sensor showing estimated export revenue."""
+    
+    _attr_name = "Export Revenue Estimate"
+    _attr_icon = "mdi:cash-plus"
+    _attr_native_unit_of_measurement = "SEK"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_export_revenue_estimate_{self._entry_id}"
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Return estimated revenue for next export window."""
+        export_data = self.coordinator.data.get("export_opportunity", {})
+        if not export_data.get("should_export", False):
+            return 0.0
+        
+        power_w = export_data.get("export_power_w", 0)
+        price_per_kwh = export_data.get("estimated_revenue_per_kwh", 0)
+        duration_h = export_data.get("duration_estimate_h", 0)
+        
+        revenue = (power_w / 1000) * price_per_kwh * duration_h
+        return round(revenue, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return revenue calculation details."""
+        export_data = self.coordinator.data.get("export_opportunity", {})
+        
+        return {
+            "export_power_kw": export_data.get("export_power_w", 0) / 1000,
+            "price_per_kwh": export_data.get("estimated_revenue_per_kwh", 0),
+            "duration_hours": export_data.get("duration_estimate_h", 0),
+            "battery_degradation_cost": export_data.get("battery_degradation_cost", 0),
+            "net_revenue": export_data.get("net_revenue", 0),
+        }

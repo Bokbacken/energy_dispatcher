@@ -60,12 +60,17 @@ from .const import (
     # Cost strategy
     CONF_COST_CHEAP_THRESHOLD,
     CONF_COST_HIGH_THRESHOLD,
+    # Export profitability
+    CONF_EXPORT_MODE,
+    CONF_MIN_EXPORT_PRICE_SEK_PER_KWH,
+    CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK,
 )
 from .models import PricePoint, ChargingMode
 from .price_provider import PriceProvider, PriceFees
 from .forecast_provider import ForecastSolarProvider
 from .cost_strategy import CostStrategy
 from .planner import simple_plan
+from .export_analyzer import ExportAnalyzer
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -310,10 +315,15 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             "cost_summary": {},  # Summary of cost classification
             # Optimization plan
             "optimization_plan": [],  # List of PlanAction objects with hourly recommendations
+            # Export opportunity
+            "export_opportunity": {},  # Export profitability analysis
         }
 
         # Cost strategy instance
         self._cost_strategy = CostStrategy()
+        
+        # Export analyzer instance
+        self.export_analyzer: Optional[ExportAnalyzer] = None
         
         # Historik för baseline (counter_kwh)
         self._baseline_prev_counter: Optional[Tuple[float, Any]] = None  # (kWh, ts)
@@ -391,6 +401,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self._update_solar_delta_15m()
             await self._update_optimization_plan()
             await self._update_appliance_recommendations()
+            await self._update_export_analysis()
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Uppdatering misslyckades")
         return self.data
@@ -579,6 +590,128 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         except Exception as e:
             _LOGGER.warning("Failed to generate appliance recommendations: %s", e)
             self.data["appliance_recommendations"] = {}
+
+    async def _update_export_analysis(self):
+        """Analyze export profitability opportunities."""
+        # Initialize export analyzer if not already done
+        if self.export_analyzer is None:
+            export_mode = self._get_cfg(CONF_EXPORT_MODE, "never")
+            min_export_price = _safe_float(self._get_cfg(CONF_MIN_EXPORT_PRICE_SEK_PER_KWH, 3.0), 3.0)
+            degradation_cost = _safe_float(self._get_cfg(CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK, 0.50), 0.50)
+            
+            self.export_analyzer = ExportAnalyzer(
+                export_mode=export_mode,
+                min_export_price_sek_per_kwh=min_export_price,
+                battery_degradation_cost_per_cycle_sek=degradation_cost,
+            )
+            _LOGGER.info("Export analyzer initialized: mode=%s, min_price=%.2f, degradation=%.2f",
+                        export_mode, min_export_price, degradation_cost)
+        
+        # Get export mode from config - if "never", skip analysis
+        export_mode = self._get_cfg(CONF_EXPORT_MODE, "never")
+        if export_mode == "never":
+            self.data["export_opportunity"] = {
+                "should_export": False,
+                "reason": "Export disabled (mode: never)",
+                "export_power_w": 0,
+                "estimated_revenue_per_kwh": 0.0,
+                "export_price_sek_per_kwh": 0.0,
+                "opportunity_cost": 0.0,
+                "battery_soc": 0.0,
+                "solar_excess_w": 0.0,
+                "duration_estimate_h": 0.0,
+                "battery_degradation_cost": 0.0,
+                "net_revenue": 0.0,
+            }
+            return
+        
+        # Get current price data
+        current_price = self.data.get("current_enriched")
+        if not current_price:
+            self.data["export_opportunity"] = {
+                "should_export": False,
+                "reason": "No price data available",
+                "export_power_w": 0,
+                "estimated_revenue_per_kwh": 0.0,
+                "export_price_sek_per_kwh": 0.0,
+                "opportunity_cost": 0.0,
+                "battery_soc": 0.0,
+                "solar_excess_w": 0.0,
+                "duration_estimate_h": 0.0,
+                "battery_degradation_cost": 0.0,
+                "net_revenue": 0.0,
+            }
+            return
+        
+        # Get battery state
+        batt_soc_entity = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
+        battery_soc = self._read_float(batt_soc_entity) if batt_soc_entity else 0.0
+        if battery_soc is None:
+            battery_soc = 0.0
+        
+        battery_capacity_kwh = _safe_float(self._get_cfg(CONF_BATT_CAP_KWH), 15.0)
+        
+        # Get solar excess (if battery full and solar producing)
+        pv_now_w = self.data.get("pv_now_w", 0.0) or 0.0
+        house_baseline_w = self.data.get("house_baseline_w", 0.0) or 0.0
+        
+        # Estimate solar excess (simplified - actual excess would need battery power flow)
+        solar_excess_w = max(0.0, pv_now_w - house_baseline_w)
+        
+        # Count upcoming high-cost hours (next 6 hours)
+        high_cost_windows = self.data.get("high_cost_windows", [])
+        now = dt_util.now()
+        upcoming_high_cost_hours = 0
+        for start, end in high_cost_windows:
+            # Check if window is in the next 6 hours
+            if start <= now + timedelta(hours=6):
+                duration_hours = (end - start).total_seconds() / 3600
+                upcoming_high_cost_hours += int(duration_hours)
+        
+        # Use current price as both spot and purchase price
+        # In a real system, export price might be different (usually lower)
+        # For now, assume export price = spot price (conservative)
+        spot_price = current_price
+        purchase_price = current_price
+        export_price = spot_price  # Conservative: assume same as spot
+        
+        # Analyze export opportunity
+        try:
+            result = self.export_analyzer.should_export_energy(
+                spot_price=spot_price,
+                purchase_price=purchase_price,
+                export_price=export_price,
+                battery_soc=battery_soc,
+                battery_capacity_kwh=battery_capacity_kwh,
+                upcoming_high_cost_hours=upcoming_high_cost_hours,
+                solar_excess_w=solar_excess_w,
+            )
+            
+            self.data["export_opportunity"] = result
+            
+            if result["should_export"]:
+                _LOGGER.debug(
+                    "Export opportunity detected: power=%dW, revenue=%.2f SEK/kWh, reason=%s",
+                    result["export_power_w"],
+                    result["estimated_revenue_per_kwh"],
+                    result["reason"]
+                )
+        
+        except Exception as e:
+            _LOGGER.warning("Failed to analyze export opportunity: %s", e)
+            self.data["export_opportunity"] = {
+                "should_export": False,
+                "reason": f"Analysis error: {str(e)}",
+                "export_power_w": 0,
+                "estimated_revenue_per_kwh": 0.0,
+                "export_price_sek_per_kwh": 0.0,
+                "opportunity_cost": 0.0,
+                "battery_soc": battery_soc,
+                "solar_excess_w": solar_excess_w,
+                "duration_estimate_h": 0.0,
+                "battery_degradation_cost": 0.0,
+                "net_revenue": 0.0,
+            }
 
     # ---------- optimization plan ----------
     async def _update_optimization_plan(self):

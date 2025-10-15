@@ -73,6 +73,9 @@ from .const import (
     CONF_WASHING_MACHINE_POWER_W,
     CONF_WATER_HEATER_POWER_W,
     CONF_ENABLE_WEATHER_OPTIMIZATION,
+    CONF_EXPORT_MODE,
+    CONF_MIN_EXPORT_PRICE_SEK_PER_KWH,
+    CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK,
 )
 
 # Forecast source and weather/cloud compensation
@@ -173,6 +176,9 @@ DEFAULTS = {
     CONF_COST_CHEAP_THRESHOLD: 1.5,  # SEK/kWh
     CONF_COST_HIGH_THRESHOLD: 3.0,   # SEK/kWh
     CONF_ENABLE_WEATHER_OPTIMIZATION: True,  # Enable weather-aware solar optimization
+    CONF_EXPORT_MODE: "never",  # Default to never export
+    CONF_MIN_EXPORT_PRICE_SEK_PER_KWH: 3.0,  # SEK/kWh
+    CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK: 0.50,  # SEK
 }
 
 def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
@@ -371,6 +377,24 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         ),
         vol.Optional(CONF_WATER_HEATER_POWER_W, default=d.get(CONF_WATER_HEATER_POWER_W, 3000)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=100, max=10000, step=50, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
+        ),
+        
+        # Export profitability settings
+        vol.Optional(CONF_EXPORT_MODE, default=d.get(CONF_EXPORT_MODE, "never")): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    {"label": "Never Export", "value": "never"},
+                    {"label": "Excess Solar Only", "value": "excess_solar_only"},
+                    {"label": "Peak Price Opportunistic", "value": "peak_price_opportunistic"},
+                ],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        vol.Optional(CONF_MIN_EXPORT_PRICE_SEK_PER_KWH, default=d.get(CONF_MIN_EXPORT_PRICE_SEK_PER_KWH, 3.0)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=10, step=0.1, unit_of_measurement="SEK/kWh", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK, default=d.get(CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK, 0.50)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=10, step=0.01, unit_of_measurement="SEK", mode=selector.NumberSelectorMode.BOX)
         ),
         
         vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): selector.BooleanSelector(),

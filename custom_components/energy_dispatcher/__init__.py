@@ -20,6 +20,9 @@ from .const import (
     CONF_BATT_CAP_KWH,
     CONF_BATT_CAPACITY_ENTITY,
     CONF_AUTO_CREATE_DASHBOARD,
+    CONF_EXPORT_MODE,
+    CONF_MIN_EXPORT_PRICE_SEK_PER_KWH,
+    CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK,
     M_EV_CURRENT_SOC,
     M_EV_TARGET_SOC,
     M_EV_BATT_KWH,
@@ -322,6 +325,61 @@ async def _async_register_services(hass: HomeAssistant):
         _LOGGER.info("Manually creating dashboard notification for entry %s", entry.entry_id)
         await create_default_dashboard(hass, entry)
 
+    async def handle_set_export_mode(call):
+        """Handle set export mode service call."""
+        mode = call.data.get("mode")
+        min_export_price = call.data.get("min_export_price")
+        
+        if not mode:
+            _LOGGER.error("Export mode is required")
+            return
+        
+        # Get the first config entry for this integration
+        entries = hass.config_entries.async_entries(DOMAIN)
+        if not entries:
+            _LOGGER.error("No Energy Dispatcher integration configured")
+            return
+        
+        entry = entries[0]
+        
+        # Update the config entry options
+        new_options = dict(entry.options or {})
+        new_options[CONF_EXPORT_MODE] = mode
+        
+        if min_export_price is not None:
+            new_options[CONF_MIN_EXPORT_PRICE_SEK_PER_KWH] = float(min_export_price)
+        
+        hass.config_entries.async_update_entry(entry, options=new_options)
+        
+        # Get coordinator and update export analyzer if it exists
+        if entry.entry_id in hass.data[DOMAIN]:
+            coordinator = hass.data[DOMAIN][entry.entry_id].get("coordinator")
+            if coordinator and hasattr(coordinator, "export_analyzer"):
+                analyzer = coordinator.export_analyzer
+                analyzer.update_settings(
+                    export_mode=mode,
+                    min_export_price_sek_per_kwh=min_export_price if min_export_price is not None else None,
+                )
+                # Trigger coordinator refresh to update sensors
+                await coordinator.async_request_refresh()
+        
+        _LOGGER.info("Export mode updated to: %s (min_price: %s)", mode, min_export_price)
+        
+        # Send notification
+        await hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "title": "Export Mode Updated",
+                "message": (
+                    f"Export mode set to: {mode}\n"
+                    + (f"Minimum export price: {min_export_price:.2f} SEK/kWh" if min_export_price is not None else "")
+                ),
+                "notification_id": f"{DOMAIN}_export_mode_update",
+            },
+            blocking=False,
+        )
+
     hass.services.async_register(
         DOMAIN,
         "schedule_appliance",
@@ -344,6 +402,12 @@ async def _async_register_services(hass: HomeAssistant):
         DOMAIN,
         "create_dashboard_notification",
         handle_create_dashboard_notification
+    )
+    
+    hass.services.async_register(
+        DOMAIN,
+        "set_export_mode",
+        handle_set_export_mode
     )
 
 

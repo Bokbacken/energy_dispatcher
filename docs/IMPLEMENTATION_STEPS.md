@@ -201,13 +201,13 @@ Add conservative export logic that defaults to "never export" but detects truly 
    - Document conservative philosophy
 
 **Deliverables Checklist**:
-- [ ] export_analyzer.py with ExportAnalyzer class
-- [ ] Export sensors (binary + revenue estimate)
-- [ ] set_export_mode service
-- [ ] Export configuration options
-- [ ] Translations (EN + SV)
-- [ ] test_export_analyzer.py
-- [ ] Dashboard documentation
+- [x] export_analyzer.py with ExportAnalyzer class
+- [x] Export sensors (binary + revenue estimate)
+- [x] set_export_mode service
+- [x] Export configuration options
+- [x] Translations (EN + SV)
+- [x] test_export_analyzer.py
+- [x] Dashboard documentation
 
 **Estimated Effort**: 20-30 hours over 1 week
 
