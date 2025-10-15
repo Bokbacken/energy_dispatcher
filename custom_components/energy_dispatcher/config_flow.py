@@ -61,7 +61,6 @@ from .const import (
     CONF_RUNTIME_SOC_FLOOR,
     CONF_RUNTIME_SOC_CEILING,
     CONF_RUNTIME_LOOKBACK_HOURS,
-    CONF_RUNTIME_USE_DAYPARTS,
     CONF_GRID_IMPORT_TODAY_ENTITY,
     CONF_LOAD_POWER_ENTITY,
     CONF_BATT_POWER_ENTITY,
@@ -170,7 +169,6 @@ DEFAULTS = {
     CONF_RUNTIME_SOC_FLOOR: 10,
     CONF_RUNTIME_SOC_CEILING: 95,
     CONF_RUNTIME_LOOKBACK_HOURS: 48,
-    CONF_RUNTIME_USE_DAYPARTS: True,
     CONF_GRID_IMPORT_TODAY_ENTITY: "",
     CONF_FORECAST_SOURCE: "forecast_solar",
     CONF_WEATHER_ENTITY: "",
@@ -362,7 +360,6 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         vol.Optional(CONF_RUNTIME_LOOKBACK_HOURS, default=d.get(CONF_RUNTIME_LOOKBACK_HOURS, 48)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=12, max=168, step=1, unit_of_measurement="hours", mode=selector.NumberSelectorMode.BOX)
         ),
-        vol.Optional(CONF_RUNTIME_USE_DAYPARTS, default=d.get(CONF_RUNTIME_USE_DAYPARTS, True)): selector.BooleanSelector(),
         vol.Optional(CONF_RUNTIME_EXCLUDE_EV, default=d.get(CONF_RUNTIME_EXCLUDE_EV, True)): selector.BooleanSelector(),
         vol.Optional(CONF_RUNTIME_EXCLUDE_BATT_GRID, default=d.get(CONF_RUNTIME_EXCLUDE_BATT_GRID, True)): selector.BooleanSelector(),
         vol.Optional(CONF_RUNTIME_SOC_FLOOR, default=d.get(CONF_RUNTIME_SOC_FLOOR, 10)): selector.NumberSelector(
