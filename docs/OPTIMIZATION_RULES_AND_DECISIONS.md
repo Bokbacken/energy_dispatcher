@@ -56,8 +56,8 @@ The optimization plan currently does **NOT** consider:
 2. ~~**Export Opportunities**~~ - ✅ **NOW INTEGRATED** - Discharge-to-export decisions included (PR #1)
 3. **Purchase Price vs Export Price** - Limited arbitrage analysis (basic profitability check in PR #1)
 4. ~~**Battery Degradation Costs**~~ - ✅ **NOW INTEGRATED** - Factored into export decisions (PR #1)
-5. **Solar Forecast** - Solar values are read but not actively used for optimization
-6. **Weather Adjustments** - Weather-aware battery reserve exists but not used in planning
+5. ~~**Solar Forecast**~~ - ✅ **NOW INTEGRATED** - Used for reserve reduction and charging decisions (PR #2)
+6. **Weather Adjustments** - Weather-aware battery reserve exists but not fully integrated in planning
 
 ### ✅ Export Integration (NEW - PR #1)
 
@@ -67,6 +67,25 @@ Export decisions are now **integrated into the optimization plan**:
 1. **never** (default) - No export, ever
 2. **excess_solar_only** - Export only when battery full (≥95%) and solar excess >1000W
 3. **peak_price_opportunistic** - Export during profitable prices when SOC > reserve + 10%
+
+### ✅ Solar Forecast Integration (NEW - PR #2)
+
+Solar forecast is now **actively used in optimization planning**:
+
+**Battery Reserve Reduction**:
+- Reserve requirement reduced by 80% of expected solar during high-cost hours
+- Conservative factor (0.8) accounts for forecast uncertainty
+- Ensures adequate battery capacity remains available
+
+**Solar-Aware Charging Logic**:
+- Grid charging skipped if significant solar (>2000W) expected within 2 hours
+- Only applies when battery SOC is above reserve (not critical)
+- Prevents unnecessary grid charging when solar will soon be available
+
+**Benefits**:
+- Lower battery reserve requirements when solar available during expensive hours
+- Less grid charging needed (wait for free solar instead)
+- More efficient battery utilization
 
 **Export Price Calculation** (E.ON SE4 contract):
 - **2025 formula**: spot + 0.067 (grid utility) + 0.02 (surcharge) + 0.60 (tax return)
@@ -200,7 +219,7 @@ cheap_threshold = 1.5 SEK/kWh  # configurable
 high_threshold = 3.0 SEK/kWh   # configurable
 ```
 
-### Rule 2: Battery Reserve Calculation
+### Rule 2: Battery Reserve Calculation (Updated with Solar Integration - PR #2)
 
 **When**: At start of optimization planning  
 **What**: Calculate minimum SOC to maintain for high-cost hours
@@ -217,21 +236,36 @@ total_hours = sum(window_durations)
 estimated_load = 1.0 kW  # conservative average
 required_energy = total_hours × estimated_load
 
-# Step 4: Convert to SOC percentage
+# Step 4: Reduce by expected solar (NEW - PR #2)
+if solar_forecast:
+    solar_during_high_cost = calculate_solar_during_windows(solar_forecast, high_cost_windows)
+    required_energy -= solar_during_high_cost × 0.8  # Conservative 80% factor
+    required_energy = max(0, required_energy)  # Can't be negative
+
+# Step 5: Convert to SOC percentage
 required_soc = (required_energy / battery_capacity) × 100
 
-# Step 5: Apply cap
+# Step 6: Apply cap
 reserve_soc = min(60%, required_soc)
 ```
 
-**Example** (4 hours high-cost, 10 kWh battery):
+**Example 1** (4 hours high-cost, 10 kWh battery, no solar):
 ```
 required_energy = 4 hours × 1 kW = 4 kWh
 required_soc = (4 / 10) × 100 = 40%
 reserve_soc = min(60%, 40%) = 40%
 ```
 
-### Rule 3: Battery Charging Decision
+**Example 2** (4 hours high-cost, 10 kWh battery, 3 kWh solar expected):
+```
+required_energy = 4 hours × 1 kW = 4 kWh
+solar_contribution = 3 kWh × 0.8 = 2.4 kWh
+required_energy = 4 - 2.4 = 1.6 kWh
+required_soc = (1.6 / 10) × 100 = 16%
+reserve_soc = min(60%, 16%) = 16%  # Much lower reserve needed!
+```
+
+### Rule 3: Battery Charging Decision (Updated with Solar Awareness - PR #2)
 
 **When**: Every hour in planning horizon  
 **What**: Decide if battery should charge
@@ -249,10 +283,23 @@ should_charge = (
     (price_level == CHEAP AND current_soc < 95%)
 )
 
+# NEW - Solar-aware logic (PR #2)
+# Skip grid charging if significant solar expected within 2 hours
+# BUT only if battery is above reserve (not critical)
+solar_coming_soon = check_if_solar_coming_within_2h(threshold_w=2000)
+if should_charge AND solar_coming_soon AND current_soc > reserve_soc:
+    should_charge = False
+    notes = "Skip charge (solar expected soon)"
+
 # Additional constraint
 if should_charge AND current_soc < 95%:
     action = CHARGE
 ```
+
+**Solar Coming Soon Check**:
+- Looks ahead 2 hours for solar production >2000W
+- Prevents unnecessary grid charging before solar arrives
+- Only applies when battery is above reserve (safety first)
 
 **Charge Power**: Uses configured `batt_max_charge_w` (typically 10,000W)
 
@@ -704,7 +751,7 @@ If export mode = "peak_price_opportunistic":
 
 ## 📝 Summary
 
-**Current Optimization Plan** (Updated with PR #1):
+**Current Optimization Plan** (Updated with PR #1 and PR #2):
 - ✅ Uses dynamic cost thresholds (improved accuracy)
 - ✅ Charges during cheap hours
 - ✅ Discharges during high hours (import avoidance AND export)
@@ -713,8 +760,9 @@ If export mode = "peak_price_opportunistic":
 - ✅ **NEW: Export mode integrated** - Export decisions in 24h plan (PR #1)
 - ✅ **NEW: Export price calculation** - Automatic 2025/2026 handling (PR #1)
 - ✅ **NEW: Battery degradation factored** - In export profitability (PR #1)
-- ⚠️ Does NOT use solar forecast for planning (coming in PR #2)
-- ⚠️ Does NOT have weather-aware reserve (coming in PR #4)
+- ✅ **NEW: Solar forecast integration** - Reserve reduction and charging logic (PR #2)
+- ✅ **NEW: Solar-aware charging** - Skips grid charging when solar coming soon (PR #2)
+- ⚠️ Does NOT have full weather-aware reserve integration (coming in PR #4)
 
 **Your E.ON SE4 Contract**:
 - Purchase: spot × 1.25 + 0.986 SEK/kWh
@@ -728,7 +776,8 @@ If export mode = "peak_price_opportunistic":
 3. Use "excess_solar_only" export mode if you prefer conservative approach
 4. Monitor optimization plan attributes to see export actions
 5. Plan for 2026 when export becomes less attractive (tax return expires)
-6. Check plan `notes` field for "Export (price: X SEK/kWh)" messages
+6. Check plan `notes` field for "Export (price: X SEK/kWh)" or "Skip charge (solar expected soon)" messages
+7. **NEW: Solar integration benefits** - Lower reserve requirements and less grid charging when solar forecast shows production during expensive hours
 
 **Questions or Issues?**:
 - Check `docs/troubleshooting_optimization_plan.md`
@@ -737,5 +786,5 @@ If export mode = "peak_price_opportunistic":
 
 ---
 
-**Document Status**: Updated with PR #1 export integration - 2025-10-15  
-**Next Update**: After PR #2 (solar forecast integration)
+**Document Status**: Updated with PR #1 (export) and PR #2 (solar forecast) - 2025-10-15  
+**Next Update**: After PR #3 (cost-benefit analysis) or PR #4 (weather integration)

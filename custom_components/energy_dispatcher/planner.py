@@ -92,6 +92,11 @@ def simple_plan(
             price_level = cost_strategy.classify_price(price.enriched_sek_per_kwh)
             solar_w = sol.watts if sol else 0
             
+            # Check if significant solar is coming soon
+            solar_coming_soon = _is_solar_coming_soon(
+                t, solar_map, threshold_w=2000, window_hours=2
+            )
+            
             # Check if we should charge battery
             should_charge = cost_strategy.should_charge_battery(
                 price.enriched_sek_per_kwh,
@@ -99,6 +104,12 @@ def simple_plan(
                 reserve_soc,
                 solar_w
             )
+            
+            # Solar-aware logic: Skip grid charging if significant solar expected soon
+            # and battery is above reserve (not critical to charge now)
+            if should_charge and solar_coming_soon and current_batt_soc > reserve_soc:
+                should_charge = False
+                action.notes = f"Skip charge (solar expected soon, SOC: {current_batt_soc:.0f}%)"
             
             # Check if we should discharge battery
             should_discharge = cost_strategy.should_discharge_battery(
@@ -148,6 +159,32 @@ def simple_plan(
         t += timedelta(hours=1)
 
     return plan
+
+
+def _is_solar_coming_soon(
+    current_time: datetime,
+    solar_map: dict,
+    threshold_w: float = 2000,
+    window_hours: int = 2
+) -> bool:
+    """
+    Check if significant solar production is expected within window.
+    
+    Args:
+        current_time: Current hour timestamp
+        solar_map: Dictionary mapping hour timestamps to ForecastPoint objects
+        threshold_w: Minimum solar production to consider significant (default 2000W)
+        window_hours: Number of hours ahead to check (default 2)
+    
+    Returns:
+        True if significant solar (>threshold_w) expected within window_hours
+    """
+    for hour in range(1, window_hours + 1):
+        future_time = current_time + timedelta(hours=hour)
+        solar_point = solar_map.get(future_time)
+        if solar_point and solar_point.watts > threshold_w:
+            return True
+    return False
 
 
 def _should_export_to_grid(

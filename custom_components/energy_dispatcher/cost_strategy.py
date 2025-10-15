@@ -109,6 +109,7 @@ class CostStrategy:
         current_soc: float,
         horizon_hours: int = 24,
         weather_adjustment: Optional[Dict] = None,
+        solar_forecast: Optional[List] = None,
     ) -> float:
         """
         Calculate recommended battery reserve level (SOC %).
@@ -118,6 +119,13 @@ class CostStrategy:
         - Price differential
         - Current battery state
         - Weather-adjusted solar forecast (if available)
+        - Solar production forecast during high-cost hours (if available)
+        
+        Solar Forecast Integration:
+        When solar forecast is available, the reserve requirement is reduced by
+        80% of expected solar production during high-cost hours. This conservative
+        factor (0.8) accounts for forecast uncertainty and ensures adequate battery
+        capacity remains available.
         
         Weather-Aware Adjustment:
         When weather optimization is enabled and solar forecast is adjusted downward
@@ -142,6 +150,22 @@ class CostStrategy:
         # Reduced from 2 kW to be less conservative and allow better optimization
         estimated_load_kw = 1.0
         required_energy_kwh = total_high_cost_hours * estimated_load_kw
+        
+        # Solar forecast integration: reduce requirement by expected solar during high-cost hours
+        if solar_forecast:
+            solar_during_high_cost = self._calculate_solar_during_windows(
+                solar_forecast, high_cost_windows
+            )
+            # Reduce requirement by 80% of expected solar (conservative factor)
+            required_energy_kwh -= solar_during_high_cost * 0.8
+            required_energy_kwh = max(0, required_energy_kwh)  # Can't be negative
+            
+            _LOGGER.debug(
+                "Solar forecast integration: %.2f kWh expected during high-cost hours, "
+                "reducing reserve requirement by %.2f kWh (80%% factor)",
+                solar_during_high_cost,
+                solar_during_high_cost * 0.8,
+            )
         
         # Calculate required SOC to cover this
         required_soc = (required_energy_kwh / battery_capacity_kwh) * 100
@@ -184,6 +208,31 @@ class CostStrategy:
         )
         
         return reserve_soc
+    
+    def _calculate_solar_during_windows(
+        self,
+        solar_forecast: List,
+        windows: List[tuple[datetime, datetime]]
+    ) -> float:
+        """
+        Calculate expected solar production during time windows.
+        
+        Args:
+            solar_forecast: List of ForecastPoint objects with time and watts
+            windows: List of (start, end) datetime tuples
+        
+        Returns:
+            Total expected solar energy in kWh during the windows
+        """
+        total_solar_kwh = 0.0
+        
+        for start, end in windows:
+            for point in solar_forecast:
+                if start <= point.time < end:
+                    # Convert watts to kWh (assuming 1 hour duration per point)
+                    total_solar_kwh += point.watts / 1000.0
+        
+        return total_solar_kwh
     
     def should_charge_battery(
         self,
