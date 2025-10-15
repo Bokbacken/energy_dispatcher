@@ -79,7 +79,11 @@
           "load_shift_flexibility_hours": "Lastförskjutning Flexibilitetsfönster (timmar)",
           "baseline_load_w": "Baslast (W)",
           "enable_peak_shaving": "Aktivera Toppkapning",
-          "peak_threshold_w": "Toppeffektgräns (W)"
+          "peak_threshold_w": "Toppeffektgräns (W)",
+          "comfort_priority": "Komfortprioritet",
+          "quiet_hours_start": "Tyst Tid Start",
+          "quiet_hours_end": "Tyst Tid Slut",
+          "min_battery_peace_of_mind": "Minsta Batteri för Sinnesro (%)"
         },
         "data_description": {
           "nordpool_entity": "Välj din Nordpool spotpris-sensor (t.ex., sensor.nordpool_kwh_se3_sek_3_10_025)",
@@ -155,7 +159,11 @@
           "load_shift_flexibility_hours": "Hur många timmar framåt systemet kan föreslå lastförskjutning (typiskt: 6 timmar)",
           "baseline_load_w": "Baslast som alltid är påslagen i watt. Laster över detta anses vara flexibla och förskjutbara (typiskt: 300W)",
           "enable_peak_shaving": "Aktivera toppkapning för att använda batteriurladdning när nätimporten överskrider tröskelvärdet, vilket hjälper till att minska efterfrågeavgifter",
-          "peak_threshold_w": "Toppeffektgräns i watt. Batteriet kommer att laddas ur för att hålla nätimporten under denna nivå (typiskt: 10000W)"
+          "peak_threshold_w": "Toppeffektgräns i watt. Batteriet kommer att laddas ur för att hålla nätimporten under denna nivå (typiskt: 10000W)",
+          "comfort_priority": "Kostnad Först: Maximera besparingar; Balanserad: Balansera kostnad och komfort; Komfort Först: Prioritera bekvämlighet",
+          "quiet_hours_start": "Starttid när inga besvärliga operationer ska köras (som lastförskjutning eller batteriurladdning)",
+          "quiet_hours_end": "Sluttid för tyst tid-perioden",
+          "min_battery_peace_of_mind": "Minsta batterinivå att bibehålla för sinnesro. Batteriet kommer inte att laddas ur under denna nivå förutom i kostnad_först-läge"
         }
       }
     },
@@ -229,6 +237,24 @@
         "min_export_price": {
           "name": "Minsta Exportpris (SEK/kWh)",
           "description": "Minsta pris för att överväga export (valfritt)"
+        }
+      }
+    },
+    "override_battery_mode": {
+      "name": "Åsidosätt Batteriläge",
+      "description": "Tillfälligt åsidosätt automatisk batterioptimering",
+      "fields": {
+        "mode": {
+          "name": "Läge",
+          "description": "Batteridriftläge att genomdriva"
+        },
+        "duration_minutes": {
+          "name": "Varaktighet (minuter)",
+          "description": "Hur länge åsidosättningen ska bibehållas"
+        },
+        "power_w": {
+          "name": "Effekt (W)",
+          "description": "Effektnivå för laddning/urladdning (valfritt)"
         }
       }
     }

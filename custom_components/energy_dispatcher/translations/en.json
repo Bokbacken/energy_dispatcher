@@ -87,6 +87,10 @@
           "baseline_load_w": "Baseline Load (W)",
           "enable_peak_shaving": "Enable Peak Shaving",
           "peak_threshold_w": "Peak Threshold (W)",
+          "comfort_priority": "Comfort Priority",
+          "quiet_hours_start": "Quiet Hours Start",
+          "quiet_hours_end": "Quiet Hours End",
+          "min_battery_peace_of_mind": "Minimum Battery Peace of Mind (%)",
           "auto_create_dashboard": "Auto-create Dashboard"
         },
         "data_description": {
@@ -172,6 +176,10 @@
           "baseline_load_w": "Baseline always-on load in watts. Loads above this are considered flexible and shiftable (typical: 300W)",
           "enable_peak_shaving": "Enable peak shaving to use battery discharge when grid import exceeds the threshold, helping to reduce demand charges",
           "peak_threshold_w": "Peak power threshold in watts. Battery will discharge to keep grid import below this level (typical: 10000W)",
+          "comfort_priority": "Cost First: Maximize savings; Balanced: Balance cost and comfort; Comfort First: Prioritize convenience",
+          "quiet_hours_start": "Start time when not to run inconvenient operations (like load shifting or battery discharge)",
+          "quiet_hours_end": "End time of quiet hours period",
+          "min_battery_peace_of_mind": "Minimum battery level to maintain for peace of mind. Battery will not be discharged below this level except in cost_first mode",
           "auto_create_dashboard": "Automatically create a dashboard with energy dispatcher sensors and controls"
         }
       }
@@ -342,6 +350,24 @@
         "min_export_price": {
           "name": "Minimum Export Price (SEK/kWh)",
           "description": "Minimum price to consider export (optional)"
+        }
+      }
+    },
+    "override_battery_mode": {
+      "name": "Override Battery Mode",
+      "description": "Temporarily override automatic battery optimization",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "Battery operation mode to enforce"
+        },
+        "duration_minutes": {
+          "name": "Duration (minutes)",
+          "description": "How long to maintain override"
+        },
+        "power_w": {
+          "name": "Power (W)",
+          "description": "Power level for charge/discharge (optional)"
         }
       }
     }

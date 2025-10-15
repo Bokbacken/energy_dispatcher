@@ -186,3 +186,44 @@ set_export_mode:
           max: 10
           step: 0.1
           unit_of_measurement: "SEK/kWh"
+
+override_battery_mode:
+  name: Override Battery Mode
+  description: Temporarily override automatic battery optimization
+  fields:
+    mode:
+      name: Mode
+      description: Battery operation mode to enforce
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Charge"
+              value: "charge"
+            - label: "Discharge"
+              value: "discharge"
+            - label: "Hold"
+              value: "hold"
+            - label: "Auto"
+              value: "auto"
+    duration_minutes:
+      name: Duration (minutes)
+      description: How long to maintain override
+      required: false
+      default: 60
+      selector:
+        number:
+          min: 5
+          max: 1440
+          step: 5
+          unit_of_measurement: "min"
+    power_w:
+      name: Power (W)
+      description: Power level for charge/discharge (optional)
+      required: false
+      selector:
+        number:
+          min: 500
+          max: 20000
+          step: 100
+          unit_of_measurement: "W"

@@ -81,6 +81,10 @@ from .const import (
     CONF_BASELINE_LOAD_W,
     CONF_ENABLE_PEAK_SHAVING,
     CONF_PEAK_THRESHOLD_W,
+    CONF_COMFORT_PRIORITY,
+    CONF_QUIET_HOURS_START,
+    CONF_QUIET_HOURS_END,
+    CONF_MIN_BATTERY_PEACE_OF_MIND,
 )
 
 # Forecast source and weather/cloud compensation
@@ -184,6 +188,10 @@ DEFAULTS = {
     CONF_EXPORT_MODE: "never",  # Default to never export
     CONF_MIN_EXPORT_PRICE_SEK_PER_KWH: 3.0,  # SEK/kWh
     CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK: 0.50,  # SEK
+    CONF_COMFORT_PRIORITY: "balanced",  # cost_first, balanced, comfort_first
+    CONF_QUIET_HOURS_START: "22:00",  # time
+    CONF_QUIET_HOURS_END: "07:00",  # time
+    CONF_MIN_BATTERY_PEACE_OF_MIND: 20,  # %
 }
 
 def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
@@ -415,6 +423,19 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         vol.Optional(CONF_ENABLE_PEAK_SHAVING, default=d.get(CONF_ENABLE_PEAK_SHAVING, False)): selector.BooleanSelector(),
         vol.Optional(CONF_PEAK_THRESHOLD_W, default=d.get(CONF_PEAK_THRESHOLD_W, 10000)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=1000, max=50000, step=500, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
+        ),
+        
+        # Comfort-aware optimization
+        vol.Optional(CONF_COMFORT_PRIORITY, default=d.get(CONF_COMFORT_PRIORITY, "balanced")): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=["cost_first", "balanced", "comfort_first"],
+                mode=selector.SelectSelectorMode.DROPDOWN
+            )
+        ),
+        vol.Optional(CONF_QUIET_HOURS_START, default=d.get(CONF_QUIET_HOURS_START, "22:00")): selector.TimeSelector(),
+        vol.Optional(CONF_QUIET_HOURS_END, default=d.get(CONF_QUIET_HOURS_END, "07:00")): selector.TimeSelector(),
+        vol.Optional(CONF_MIN_BATTERY_PEACE_OF_MIND, default=d.get(CONF_MIN_BATTERY_PEACE_OF_MIND, 20)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=100, step=5, unit_of_measurement="%", mode=selector.NumberSelectorMode.BOX)
         ),
         
         vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): selector.BooleanSelector(),

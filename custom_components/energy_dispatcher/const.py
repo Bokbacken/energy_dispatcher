@@ -124,6 +124,12 @@ CONF_BASELINE_LOAD_W = "baseline_load_w"  # Watts (default: 300)
 CONF_ENABLE_PEAK_SHAVING = "enable_peak_shaving"  # Boolean
 CONF_PEAK_THRESHOLD_W = "peak_threshold_w"  # Watts (default: 10000)
 
+# Comfort-aware optimization
+CONF_COMFORT_PRIORITY = "comfort_priority"  # cost_first, balanced, comfort_first
+CONF_QUIET_HOURS_START = "quiet_hours_start"  # time (default: 22:00)
+CONF_QUIET_HOURS_END = "quiet_hours_end"  # time (default: 07:00)
+CONF_MIN_BATTERY_PEACE_OF_MIND = "min_battery_peace_of_mind"  # % (default: 20)
+
 # 48-hour historical baseline with time-of-day weighting
 CONF_RUNTIME_LOOKBACK_HOURS = "runtime_lookback_hours"  # Default 48
 CONF_RUNTIME_USE_DAYPARTS = "runtime_use_dayparts"  # Enable time-of-day weighting
