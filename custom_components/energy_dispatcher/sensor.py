@@ -728,9 +728,38 @@ class OptimizationPlanSensor(BaseEDSensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return detailed plan as attributes."""
         plan = self.coordinator.data.get("optimization_plan", [])
+        status = self.coordinator.data.get("optimization_plan_status")
+        
+        # Always include status for diagnostics
+        attrs = {
+            "status": status or "unknown",
+        }
         
         if not plan:
-            return {"plan_count": 0, "actions": []}
+            attrs["plan_count"] = 0
+            attrs["actions"] = []
+            
+            # Add helpful diagnostic information based on status
+            if status == "missing_price_data":
+                attrs["help"] = "No price data available. Check Nordpool integration and entity configuration."
+                attrs["check"] = "Settings → Devices & Services → Energy Dispatcher → Configure → Nordpool Entity"
+            elif status == "missing_battery_soc_entity":
+                attrs["help"] = "Battery SOC entity not configured."
+                attrs["check"] = "Settings → Devices & Services → Energy Dispatcher → Configure → Battery SOC Sensor"
+            elif status == "battery_soc_unavailable":
+                attrs["help"] = "Battery SOC sensor is not reporting a valid value."
+                attrs["check"] = "Developer Tools → States → Check your battery SOC sensor"
+            elif status == "invalid_battery_capacity":
+                attrs["help"] = "Battery capacity not configured or invalid."
+                attrs["check"] = "Settings → Devices & Services → Energy Dispatcher → Configure → Battery Capacity (kWh)"
+            elif status and status.startswith("error:"):
+                attrs["help"] = "An error occurred generating the plan. Check Home Assistant logs."
+                attrs["check"] = "Settings → System → Logs → Filter for 'energy_dispatcher'"
+            else:
+                attrs["help"] = "No optimization plan available. Check configuration and sensor states."
+                attrs["check"] = "See sensor attributes for status details"
+            
+            return attrs
         
         # Convert plan to serializable format
         actions = []
@@ -764,11 +793,13 @@ class OptimizationPlanSensor(BaseEDSensor):
             
             actions.append(action_dict)
         
-        return {
+        attrs.update({
             "plan_count": len(plan),
             "charge_hours": charge_hours,
             "discharge_hours": discharge_hours,
             "ev_charge_hours": ev_charge_hours,
             "actions": actions,
             "description": "Hourly optimization plan for battery and EV charging based on price forecasts"
-        }
+        })
+        
+        return attrs
