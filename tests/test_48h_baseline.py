@@ -212,26 +212,37 @@ class TestEnergyCounterBaseline:
     
     @pytest.mark.asyncio
     async def test_baseline_with_battery_exclusion(self, coordinator, mock_hass):
-        """Test that battery grid charging is excluded."""
+        """Test that battery grid charging is excluded (time-based analysis)."""
         now = datetime.now()
         
-        # House: 100 -> 170 kWh (70 kWh)
-        house_states = [
-            MagicMock(state="100.0", last_changed=now - timedelta(hours=48)),
-            MagicMock(state="170.0", last_changed=now)
-        ]
+        # Create hourly data to simulate battery charging at night (no solar)
+        house_states = []
+        batt_states = []
+        pv_states = []
         
-        # Battery charged: 20 -> 40 kWh (20 kWh charged)
-        batt_states = [
-            MagicMock(state="20.0", last_changed=now - timedelta(hours=48)),
-            MagicMock(state="40.0", last_changed=now)
-        ]
+        house_energy = 100.0
+        batt_energy = 20.0
+        pv_energy = 0.0
         
-        # PV generated: 0 -> 10 kWh (10 kWh from solar)
-        pv_states = [
-            MagicMock(state="0.0", last_changed=now - timedelta(hours=48)),
-            MagicMock(state="10.0", last_changed=now)
-        ]
+        for hour in range(49):  # 48 hours + 1 for end point
+            ts = now - timedelta(hours=48-hour)
+            
+            # House consumes steadily: 1.5 kWh/h
+            house_energy += 1.5
+            
+            # Battery charges at night (hours 0-5, 22-23): 0.5 kWh/h
+            # No charging during day
+            hour_of_day = ts.hour
+            if hour_of_day < 6 or hour_of_day >= 22:
+                batt_energy += 0.5
+            
+            # PV generates during day (hours 8-16): 1.0 kWh/h
+            if 8 <= hour_of_day <= 16:
+                pv_energy += 1.0
+            
+            house_states.append(MagicMock(state=f"{house_energy:.1f}", last_changed=ts))
+            batt_states.append(MagicMock(state=f"{batt_energy:.1f}", last_changed=ts))
+            pv_states.append(MagicMock(state=f"{pv_energy:.1f}", last_changed=ts))
         
         history_data = {
             "sensor.house_energy": house_states,
@@ -244,10 +255,12 @@ class TestEnergyCounterBaseline:
             
             result = await coordinator._calculate_48h_baseline()
             
-            # Should exclude battery grid charging: (70 - (20 - 10)) / 48 = 60 / 48 = 1.25 kWh/h
+            # Total house: 72 kWh over 48h = 1.5 kWh/h
+            # Battery charged at night (no solar): 8 kWh (16 hours total across 2 days at 0.5 kWh/h)
+            # Expected baseline: (72 - 8) / 48 = 1.333 kWh/h
             assert result is not None
             if result["overall"]:
-                assert 1.2 <= result["overall"] <= 1.3
+                assert 1.3 <= result["overall"] <= 1.35
 
 
 if __name__ == "__main__":

@@ -1107,7 +1107,72 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         grid_charge_w = max(0.0, batt_charge_w - pv_surplus_w)
         return grid_charge_w > 100.0
 
-
+    def _calculate_battery_grid_charging(self, batt_states, pv_states) -> float:
+        """
+        Calculate battery grid charging by identifying periods where battery charged
+        but no solar generation was present (forced grid charging).
+        
+        Args:
+            batt_states: List of battery charged energy counter states
+            pv_states: List of PV generation energy counter states
+            
+        Returns:
+            Total kWh of battery grid charging (charging without solar)
+        """
+        from collections import defaultdict
+        
+        # Build hourly aggregates
+        hourly_batt_charge = defaultdict(float)
+        hourly_pv_gen = defaultdict(float)
+        
+        # Aggregate battery charging by hour
+        for i in range(len(batt_states) - 1):
+            val_start = _safe_float(batt_states[i].state)
+            val_end = _safe_float(batt_states[i + 1].state)
+            
+            if val_start is None or val_end is None:
+                continue
+            
+            ts_start = batt_states[i].last_changed
+            hour_start = ts_start.replace(minute=0, second=0, microsecond=0)
+            
+            charge_delta = val_end - val_start
+            if charge_delta > 0:  # Only count charging (ignore counter resets)
+                hourly_batt_charge[hour_start] += charge_delta
+        
+        # Aggregate PV generation by hour
+        for i in range(len(pv_states) - 1):
+            val_start = _safe_float(pv_states[i].state)
+            val_end = _safe_float(pv_states[i + 1].state)
+            
+            if val_start is None or val_end is None:
+                continue
+            
+            ts_start = pv_states[i].last_changed
+            hour_start = ts_start.replace(minute=0, second=0, microsecond=0)
+            
+            pv_delta = val_end - val_start
+            if pv_delta > 0:  # Only count generation (ignore counter resets)
+                hourly_pv_gen[hour_start] += pv_delta
+        
+        # Calculate grid charging: battery charging when no solar is present
+        # Use a small threshold (0.01 kWh) to account for negligible nighttime solar readings
+        grid_charge_total = 0.0
+        PV_THRESHOLD = 0.01  # kWh - ignore very small PV values (sensor noise at night)
+        
+        for hour_ts, batt_charge in hourly_batt_charge.items():
+            pv_gen = hourly_pv_gen.get(hour_ts, 0.0)
+            
+            # If battery is charging but PV is negligible, it's grid charging
+            if batt_charge > 0.0 and pv_gen < PV_THRESHOLD:
+                grid_charge_total += batt_charge
+        
+        _LOGGER.debug(
+            "Battery grid charging analysis: %.3f kWh charged during periods with no solar",
+            grid_charge_total
+        )
+        
+        return grid_charge_total
 
 
 
@@ -1246,12 +1311,15 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 net_house_kwh -= ev_delta
                 _LOGGER.debug("Excluding EV energy: %.3f kWh", ev_delta)
             
-            if exclude_batt_grid and batt_delta > 0:
-                # Estimate battery grid charging (battery charged - PV generation)
-                batt_grid_kwh = max(0.0, batt_delta - pv_delta)
+            if exclude_batt_grid and batt_states and pv_states:
+                # Calculate battery grid charging by identifying periods where battery charged
+                # but no solar was available (i.e., forced grid charging at night)
+                batt_grid_kwh = self._calculate_battery_grid_charging(
+                    batt_states, pv_states
+                )
                 net_house_kwh -= batt_grid_kwh
-                _LOGGER.debug("Excluding battery grid charging: %.3f kWh (batt: %.3f, pv: %.3f)", 
-                             batt_grid_kwh, batt_delta, pv_delta)
+                _LOGGER.debug("Excluding battery grid charging: %.3f kWh (from time-based analysis)", 
+                             batt_grid_kwh)
             
             # Ensure we don't have negative consumption
             net_house_kwh = max(0.0, net_house_kwh)
@@ -1267,12 +1335,17 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 "overall": avg_kwh_per_h,
             }
             
+            # Calculate batt_grid_kwh for logging
+            batt_grid_kwh_log = 0.0
+            if exclude_batt_grid and batt_states and pv_states:
+                batt_grid_kwh_log = self._calculate_battery_grid_charging(batt_states, pv_states)
+            
             _LOGGER.debug(
                 "48h baseline calculated: overall=%.3f kWh/h "
-                "(house: %.3f kWh, ev: %.3f kWh, batt_grid: ~%.3f kWh over %d hours)",
+                "(house: %.3f kWh, ev: %.3f kWh, batt_grid: %.3f kWh over %d hours)",
                 avg_kwh_per_h,
                 house_delta, ev_delta, 
-                max(0.0, batt_delta - pv_delta) if exclude_batt_grid else 0.0,
+                batt_grid_kwh_log,
                 lookback_hours
             )
             
