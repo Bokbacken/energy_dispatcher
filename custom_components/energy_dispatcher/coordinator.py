@@ -458,6 +458,28 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             _LOGGER.exception("Uppdatering misslyckades")
         return self.data
 
+    def _calculate_export_price(self, spot_price: float, current_year: int) -> float:
+        """Calculate export price based on year and contract parameters.
+        
+        E.ON SE4 contract export price:
+        - Grid utility (nätnytta): 0.067 SEK/kWh
+        - Energy surcharge (påslag): 0.02 SEK/kWh
+        - Tax return: 0.60 SEK/kWh (2025 only, expires 2026)
+        
+        Args:
+            spot_price: Nordpool spot price in SEK/kWh
+            current_year: Current year for tax return calculation
+            
+        Returns:
+            Export price in SEK/kWh
+        """
+        grid_utility = 0.067  # nätnytta
+        energy_surcharge = 0.02  # påslag
+        tax_return = 0.60 if current_year <= 2025 else 0.0  # expires 2026
+        
+        export_price = spot_price + grid_utility + energy_surcharge + tax_return
+        return export_price
+
     # ---------- prices ----------
     async def _update_prices(self):
         nordpool_entity = self._get_cfg(CONF_NORDPOOL_ENTITY, "")
@@ -479,11 +501,21 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
 
         provider = PriceProvider(self.hass, nordpool_entity=nordpool_entity, fees=fees)
         hourly: List[PricePoint] = provider.get_hourly_prices()
+        
+        # Calculate export prices for each hour
+        now = dt_util.now()
+        for price_point in hourly:
+            export_price = self._calculate_export_price(
+                price_point.spot_sek_per_kwh,
+                current_year=price_point.time.year
+            )
+            price_point.export_sek_per_kwh = export_price
+        
         self.data["hourly_prices"] = hourly
         self.data["current_enriched"] = provider.get_current_enriched(hourly)
 
         # P25-tröskel 24h framåt
-        now = dt_util.now().replace(minute=0, second=0, microsecond=0)
+        now = now.replace(minute=0, second=0, microsecond=0)
         next24 = [p for p in hourly if 0 <= (p.time - now).total_seconds() < 24 * 3600]
         if next24:
             enriched = sorted([p.enriched_sek_per_kwh for p in next24])
@@ -1093,6 +1125,13 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             # Get cost thresholds
             cheap_threshold = _safe_float(self._get_cfg(CONF_COST_CHEAP_THRESHOLD, 1.5), 1.5)
             
+            # Get export mode and degradation cost
+            export_mode = self._get_cfg(CONF_EXPORT_MODE, "never")
+            degradation_cost = _safe_float(
+                self._get_cfg(CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK, 0.50), 
+                0.50
+            )
+            
             # Generate plan
             now = dt_util.now()
             plan = simple_plan(
@@ -1108,6 +1147,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 ev_deadline=None,
                 ev_mode=ChargingMode.ECO,
                 cost_strategy=self._cost_strategy,
+                export_mode=export_mode,
+                battery_degradation_per_cycle=degradation_cost,
             )
             
             self.data["optimization_plan"] = plan

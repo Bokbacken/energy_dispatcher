@@ -19,6 +19,7 @@ class PricePoint:
     time: datetime
     spot_sek_per_kwh: float
     enriched_sek_per_kwh: float
+    export_sek_per_kwh: float = 0.0  # Export price for this hour
 
 @dataclass
 class PlanAction:

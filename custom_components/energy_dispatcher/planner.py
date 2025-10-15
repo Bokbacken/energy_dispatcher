@@ -25,6 +25,8 @@ def simple_plan(
     ev_deadline: Optional[datetime] = None,
     ev_mode: ChargingMode = ChargingMode.ECO,
     cost_strategy: Optional[CostStrategy] = None,
+    export_mode: str = "never",
+    battery_degradation_per_cycle: float = 0.50,
 ) -> List[PlanAction]:
     """
     Enhanced heuristic with cost strategy:
@@ -106,6 +108,19 @@ def simple_plan(
                 -solar_w if solar_w < 0 else 0
             )
             
+            # Check if we should export to grid
+            should_export = False
+            if export_mode != "never":
+                should_export = _should_export_to_grid(
+                    price=price,
+                    current_soc=current_batt_soc,
+                    reserve_soc=reserve_soc,
+                    solar_w=solar_w,
+                    export_mode=export_mode,
+                    degradation_cost=battery_degradation_per_cycle,
+                    battery_capacity_kwh=batt_capacity_kwh,
+                )
+            
             if should_charge and current_batt_soc < 95.0:
                 action.charge_batt_w = batt_max_charge_w
                 # Estimate SOC increase
@@ -113,6 +128,14 @@ def simple_plan(
                 soc_increase = (charge_kwh / batt_capacity_kwh) * 100
                 current_batt_soc = min(100.0, current_batt_soc + soc_increase)
                 action.notes = f"Charge (price: {price_level.value}, SOC: {current_batt_soc:.0f}%)"
+            elif should_export:
+                # Export takes priority over regular discharge
+                action.discharge_batt_w = batt_max_charge_w
+                # Estimate SOC decrease
+                discharge_kwh = batt_max_charge_w / 1000.0
+                soc_decrease = (discharge_kwh / batt_capacity_kwh) * 100
+                current_batt_soc = max(0.0, current_batt_soc - soc_decrease)
+                action.notes = f"Export (price: {price.export_sek_per_kwh:.2f} SEK/kWh)"
             elif should_discharge and current_batt_soc > reserve_soc:
                 action.discharge_batt_w = batt_max_charge_w
                 # Estimate SOC decrease
@@ -125,3 +148,61 @@ def simple_plan(
         t += timedelta(hours=1)
 
     return plan
+
+
+def _should_export_to_grid(
+    price: PricePoint,
+    current_soc: float,
+    reserve_soc: float,
+    solar_w: float,
+    export_mode: str,
+    degradation_cost: float,
+    battery_capacity_kwh: float,
+) -> bool:
+    """Determine if exporting to grid is profitable.
+    
+    Args:
+        price: Current price point with export price
+        current_soc: Current battery state of charge (%)
+        reserve_soc: Required reserve SOC (%)
+        solar_w: Current solar production (W)
+        export_mode: Export mode setting
+        degradation_cost: Battery degradation cost per full cycle (SEK)
+        battery_capacity_kwh: Battery capacity for degradation calculation
+        
+    Returns:
+        True if should export to grid, False otherwise
+    """
+    # Mode: never
+    if export_mode == "never":
+        return False
+    
+    # Mode: excess_solar_only
+    if export_mode == "excess_solar_only":
+        # Export only when battery full and solar excess available
+        if current_soc >= 95 and solar_w > 1000:
+            return True
+        return False
+    
+    # Mode: peak_price_opportunistic
+    if export_mode == "peak_price_opportunistic":
+        # Calculate degradation cost per kWh (assuming 10 kWh typical discharge)
+        degradation_per_kwh = degradation_cost / battery_capacity_kwh if battery_capacity_kwh > 0 else 0.05
+        
+        # Check if export is profitable after degradation
+        profit_per_kwh = price.export_sek_per_kwh - degradation_per_kwh
+        
+        # Export if:
+        # 1. Profitable after degradation
+        # 2. Battery above reserve + buffer (10%)
+        # 3. Export price significantly above purchase price (>70% threshold)
+        if (profit_per_kwh > 0 and 
+            current_soc > reserve_soc + 10 and
+            price.export_sek_per_kwh > price.enriched_sek_per_kwh * 0.7):
+            return True
+        
+        # Also export if battery full and solar excess (avoid wasting energy)
+        if current_soc >= 95 and solar_w > 1000:
+            return True
+    
+    return False
