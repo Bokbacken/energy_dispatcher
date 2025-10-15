@@ -116,6 +116,10 @@ The [Dashboard Guide](./docs/dashboard_guide.md) explains:
 - [Manual PV Forecast (Physics-Based)](./docs/manual_forecast.md) - Free solar forecasting
 - [Solar Forecast Improvement (Cloud Compensation)](./docs/solar_forecast_improvement.md) - Cloud-based adjustments
 
+### Troubleshooting
+- [Troubleshooting: Optimization Plan](./docs/troubleshooting_optimization_plan.md) - Fix "No plan available" issues
+- [Diagnostic Guide: House Load Baseline](./docs/technical/DIAGNOSTIC_GUIDE.md) - Baseline sensor troubleshooting
+
 ### Features & Optimization
 - [Load Shifting & Peak Shaving](./docs/load_shifting_and_peak_shaving.md) - Reduce consumption costs
 - [AI Optimization Dashboard Guide](./docs/ai_optimization_dashboard_guide.md) - Advanced dashboard

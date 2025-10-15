@@ -306,6 +306,14 @@ Adjust values based on your electricity contract and local regulations.
 ### Q: The dashboard shows "Unavailable" for some sensors
 **A**: Wait 5-10 minutes for the first update cycle to complete. If still unavailable, check that all required integrations (Nordpool, battery, etc.) are working.
 
+### Q: Optimization Plan shows "No plan available"
+**A**: The Optimization Plan sensor now includes diagnostic information to help you troubleshoot. Check the sensor attributes in Developer Tools → States for:
+- `status`: Tells you exactly what's wrong
+- `help`: Explains how to fix it
+- `check`: Where to go in Home Assistant to fix the issue
+
+See the [Troubleshooting: Optimization Plan](./troubleshooting_optimization_plan.md) guide for detailed solutions.
+
 ### Q: EV isn't charging even though price is low
 **A**: Check that:
 - Auto EV switch is ON
