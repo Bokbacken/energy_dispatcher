@@ -25,17 +25,28 @@ except ImportError:
 
 
 def load_forecast_solar_csv():
-    """Load Forecast.Solar data from CSV file."""
+    """Load Forecast.Solar data from JSON file."""
     fixture_path = Path(__file__).parent / "fixtures" / "forecast.solar.csv"
     if not fixture_path.exists():
         return None
     
-    data = []
+    # Read JSON format (key: timestamp, value: watts)
     with open(fixture_path, 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            data.append(row)
-    return data
+        content = f.read().strip()
+        if content.startswith('{'):
+            # JSON format
+            import json
+            data_dict = json.loads(content)
+            # Convert to list of dicts
+            data = []
+            for timestamp, watts in data_dict.items():
+                data.append({'datetime': timestamp, 'watts': watts})
+            return data
+        else:
+            # CSV format
+            f.seek(0)
+            reader = csv.DictReader(f)
+            return list(reader)
 
 
 def load_weather_fixture():
