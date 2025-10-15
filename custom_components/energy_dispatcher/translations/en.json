@@ -82,6 +82,11 @@
           "export_mode": "Export Mode",
           "min_export_price_sek_per_kwh": "Minimum Export Price (SEK/kWh)",
           "battery_degradation_cost_per_cycle_sek": "Battery Degradation Cost per Cycle (SEK)",
+          "enable_load_shifting": "Enable Load Shifting Recommendations",
+          "load_shift_flexibility_hours": "Load Shift Flexibility Window (hours)",
+          "baseline_load_w": "Baseline Load (W)",
+          "enable_peak_shaving": "Enable Peak Shaving",
+          "peak_threshold_w": "Peak Threshold (W)",
           "auto_create_dashboard": "Auto-create Dashboard"
         },
         "data_description": {
@@ -162,6 +167,11 @@
           "export_mode": "Configure when to export energy to the grid. 'Never Export': Default conservative mode, never sells to grid. 'Excess Solar Only': Export only when battery is full and solar is producing excess. 'Peak Price Opportunistic': Also export during exceptionally high prices (>5 SEK/kWh)",
           "min_export_price_sek_per_kwh": "Minimum export price (SEK/kWh) to consider exporting. Conservative threshold to ensure profitability",
           "battery_degradation_cost_per_cycle_sek": "Estimated cost of battery degradation per full charge-discharge cycle. Used to calculate net revenue from export",
+          "enable_load_shifting": "Enable sensors that identify opportunities to shift flexible loads (above baseline) to cheaper time periods, helping to minimize electricity costs",
+          "load_shift_flexibility_hours": "How many hours ahead the system can suggest shifting loads (typical: 6 hours)",
+          "baseline_load_w": "Baseline always-on load in watts. Loads above this are considered flexible and shiftable (typical: 300W)",
+          "enable_peak_shaving": "Enable peak shaving to use battery discharge when grid import exceeds the threshold, helping to reduce demand charges",
+          "peak_threshold_w": "Peak power threshold in watts. Battery will discharge to keep grid import below this level (typical: 10000W)",
           "auto_create_dashboard": "Automatically create a dashboard with energy dispatcher sensors and controls"
         }
       }
@@ -272,6 +282,12 @@
       },
       "water_heater_optimal_time": {
         "name": "Water Heater Optimal Time"
+      },
+      "load_shift_opportunity": {
+        "name": "Load Shift Opportunity"
+      },
+      "load_shift_savings": {
+        "name": "Load Shift Savings Potential"
       }
     },
     "switch": {

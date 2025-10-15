@@ -51,6 +51,13 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
             ExportOpportunityBinarySensor(coordinator, entry.entry_id),
             ExportRevenueEstimateSensor(coordinator, entry.entry_id),
         ])
+    
+    # Add load shift sensors if enabled
+    if config.get("enable_load_shifting", False):
+        sensors.extend([
+            LoadShiftOpportunitySensor(coordinator, entry.entry_id),
+            LoadShiftSavingsSensor(coordinator, entry.entry_id),
+        ])
 
     if sensors:
         async_add_entities(sensors, False)
@@ -321,4 +328,91 @@ class ExportRevenueEstimateSensor(BaseEDSensor):
             "duration_hours": export_data.get("duration_estimate_h", 0),
             "battery_degradation_cost": export_data.get("battery_degradation_cost", 0),
             "net_revenue": export_data.get("net_revenue", 0),
+        }
+
+
+class LoadShiftOpportunitySensor(BaseEDSensor):
+    """Sensor showing best load shifting opportunity."""
+    
+    _attr_name = "Load Shift Opportunity"
+    _attr_icon = "mdi:clock-time-four"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_load_shift_opportunity_{self._entry_id}"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return description of best shift opportunity."""
+        opportunities = self.coordinator.data.get("load_shift_opportunities", [])
+        if not opportunities:
+            return "No opportunities"
+        
+        best = opportunities[0]
+        shift_time = best.get("shift_to")
+        if shift_time:
+            return f"Shift to {shift_time.strftime('%H:%M')}"
+        return "No opportunities"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return shift opportunity details."""
+        opportunities = self.coordinator.data.get("load_shift_opportunities", [])
+        if not opportunities:
+            return {}
+        
+        best = opportunities[0]
+        shift_to = best.get("shift_to")
+        
+        return {
+            "shift_to_time": shift_to.isoformat() if shift_to else None,
+            "savings_per_hour_sek": best.get("savings_per_hour_sek", 0),
+            "price_now": best.get("price_now", 0),
+            "price_then": best.get("price_then", 0),
+            "flexible_load_w": best.get("flexible_load_w", 0),
+            "user_impact": best.get("user_impact", "medium"),
+            "all_opportunities_count": len(opportunities),
+        }
+
+
+class LoadShiftSavingsSensor(BaseEDSensor):
+    """Sensor showing potential savings from load shifting."""
+    
+    _attr_name = "Load Shift Savings Potential"
+    _attr_icon = "mdi:piggy-bank"
+    _attr_native_unit_of_measurement = "SEK"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_load_shift_savings_{self._entry_id}"
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Return potential savings from best opportunity."""
+        opportunities = self.coordinator.data.get("load_shift_opportunities", [])
+        if not opportunities:
+            return 0.0
+        
+        # Return savings from best opportunity (highest savings)
+        best = opportunities[0]
+        return best.get("savings_per_hour_sek", 0.0)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return savings calculation details."""
+        opportunities = self.coordinator.data.get("load_shift_opportunities", [])
+        if not opportunities:
+            return {}
+        
+        best = opportunities[0]
+        
+        # Calculate total potential savings if all opportunities are used
+        total_savings = sum(opp.get("savings_per_hour_sek", 0) for opp in opportunities)
+        
+        return {
+            "best_opportunity_savings": best.get("savings_per_hour_sek", 0),
+            "total_potential_savings": round(total_savings, 2),
+            "opportunities_count": len(opportunities),
+            "price_difference": best.get("price_now", 0) - best.get("price_then", 0),
         }
