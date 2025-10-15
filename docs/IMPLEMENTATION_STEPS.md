@@ -276,14 +276,14 @@ Add intelligent load shifting recommendations and peak shaving to minimize costs
    - Document in dashboard guide
 
 **Deliverables Checklist**:
-- [ ] load_shift_optimizer.py with LoadShiftOptimizer class
-- [ ] Load shift sensors (opportunity + savings)
-- [ ] peak_shaving.py with PeakShaving class
-- [ ] Peak shaving configuration
-- [ ] Battery control integration
-- [ ] Translations (EN + SV)
-- [ ] test_load_shift_optimizer.py and test_peak_shaving.py
-- [ ] Dashboard documentation
+- [x] load_shift_optimizer.py with LoadShiftOptimizer class
+- [x] Load shift sensors (opportunity + savings)
+- [x] peak_shaving.py with PeakShaving class
+- [x] Peak shaving configuration
+- [x] Battery control integration
+- [x] Translations (EN + SV)
+- [x] test_load_shift_optimizer.py and test_peak_shaving.py
+- [ ] Dashboard documentation (to be added by user as needed)
 
 **Estimated Effort**: 40-50 hours over 2 weeks
 

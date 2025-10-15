@@ -115,6 +115,15 @@ CONF_EXPORT_MODE = "export_mode"  # never, excess_solar_only, peak_price_opportu
 CONF_MIN_EXPORT_PRICE_SEK_PER_KWH = "min_export_price_sek_per_kwh"  # SEK/kWh
 CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK = "battery_degradation_cost_per_cycle_sek"  # SEK
 
+# Load shifting optimization
+CONF_ENABLE_LOAD_SHIFTING = "enable_load_shifting"  # Boolean
+CONF_LOAD_SHIFT_FLEXIBILITY_HOURS = "load_shift_flexibility_hours"  # Hours (default: 6)
+CONF_BASELINE_LOAD_W = "baseline_load_w"  # Watts (default: 300)
+
+# Peak shaving
+CONF_ENABLE_PEAK_SHAVING = "enable_peak_shaving"  # Boolean
+CONF_PEAK_THRESHOLD_W = "peak_threshold_w"  # Watts (default: 10000)
+
 # 48-hour historical baseline with time-of-day weighting
 CONF_RUNTIME_LOOKBACK_HOURS = "runtime_lookback_hours"  # Default 48
 CONF_RUNTIME_USE_DAYPARTS = "runtime_use_dayparts"  # Enable time-of-day weighting

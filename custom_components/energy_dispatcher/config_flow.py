@@ -76,6 +76,11 @@ from .const import (
     CONF_EXPORT_MODE,
     CONF_MIN_EXPORT_PRICE_SEK_PER_KWH,
     CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK,
+    CONF_ENABLE_LOAD_SHIFTING,
+    CONF_LOAD_SHIFT_FLEXIBILITY_HOURS,
+    CONF_BASELINE_LOAD_W,
+    CONF_ENABLE_PEAK_SHAVING,
+    CONF_PEAK_THRESHOLD_W,
 )
 
 # Forecast source and weather/cloud compensation
@@ -395,6 +400,21 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         ),
         vol.Optional(CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK, default=d.get(CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK, 0.50)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=0, max=10, step=0.01, unit_of_measurement="SEK", mode=selector.NumberSelectorMode.BOX)
+        ),
+        
+        # Load shifting optimization
+        vol.Optional(CONF_ENABLE_LOAD_SHIFTING, default=d.get(CONF_ENABLE_LOAD_SHIFTING, False)): selector.BooleanSelector(),
+        vol.Optional(CONF_LOAD_SHIFT_FLEXIBILITY_HOURS, default=d.get(CONF_LOAD_SHIFT_FLEXIBILITY_HOURS, 6)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=1, max=24, step=1, unit_of_measurement="h", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_BASELINE_LOAD_W, default=d.get(CONF_BASELINE_LOAD_W, 300)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=5000, step=50, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
+        ),
+        
+        # Peak shaving
+        vol.Optional(CONF_ENABLE_PEAK_SHAVING, default=d.get(CONF_ENABLE_PEAK_SHAVING, False)): selector.BooleanSelector(),
+        vol.Optional(CONF_PEAK_THRESHOLD_W, default=d.get(CONF_PEAK_THRESHOLD_W, 10000)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=1000, max=50000, step=500, unit_of_measurement="W", mode=selector.NumberSelectorMode.BOX)
         ),
         
         vol.Optional(CONF_AUTO_CREATE_DASHBOARD, default=d.get(CONF_AUTO_CREATE_DASHBOARD, True)): selector.BooleanSelector(),

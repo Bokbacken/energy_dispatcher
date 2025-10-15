@@ -74,7 +74,12 @@
           "enable_weather_optimization": "Aktivera Väderbaserad Soloptimering",
           "export_mode": "Exportläge",
           "min_export_price_sek_per_kwh": "Minsta Exportpris (SEK/kWh)",
-          "battery_degradation_cost_per_cycle_sek": "Batterinedbrytningskostnad per Cykel (SEK)"
+          "battery_degradation_cost_per_cycle_sek": "Batterinedbrytningskostnad per Cykel (SEK)",
+          "enable_load_shifting": "Aktivera Lastförskjutningsrekommendationer",
+          "load_shift_flexibility_hours": "Lastförskjutning Flexibilitetsfönster (timmar)",
+          "baseline_load_w": "Baslast (W)",
+          "enable_peak_shaving": "Aktivera Toppkapning",
+          "peak_threshold_w": "Toppeffektgräns (W)"
         },
         "data_description": {
           "nordpool_entity": "Välj din Nordpool spotpris-sensor (t.ex., sensor.nordpool_kwh_se3_sek_3_10_025)",
@@ -145,7 +150,12 @@
           "enable_weather_optimization": "Justera solprognoser baserat på väderförhållanden (molntäcke, temperatur) för att förbättra batteriereservberäkningar och planeringsnoggranhet. Ökar batterireserven med 10-20% när molnigt väder förväntas",
           "export_mode": "Konfigurera när energi ska exporteras till nätet. 'Exportera Aldrig': Standardläge, säljer aldrig till nätet. 'Endast Överskott av Sol': Exportera endast när batteriet är fullt och solen producerar överskott. 'Opportunistisk Toppris': Exportera även vid exceptionellt höga priser (>5 SEK/kWh)",
           "min_export_price_sek_per_kwh": "Minsta exportpris (SEK/kWh) för att överväga export. Konservativt tröskelvärde för att säkerställa lönsamhet",
-          "battery_degradation_cost_per_cycle_sek": "Uppskattad kostnad för batterinedbrytning per fullständig ladd-urladdningscykel. Används för att beräkna nettovinst från export"
+          "battery_degradation_cost_per_cycle_sek": "Uppskattad kostnad för batterinedbrytning per fullständig ladd-urladdningscykel. Används för att beräkna nettovinst från export",
+          "enable_load_shifting": "Aktivera sensorer som identifierar möjligheter att flytta flexibla laster (över baslinjen) till billigare tidsperioder för att minimera elkostnader",
+          "load_shift_flexibility_hours": "Hur många timmar framåt systemet kan föreslå lastförskjutning (typiskt: 6 timmar)",
+          "baseline_load_w": "Baslast som alltid är påslagen i watt. Laster över detta anses vara flexibla och förskjutbara (typiskt: 300W)",
+          "enable_peak_shaving": "Aktivera toppkapning för att använda batteriurladdning när nätimporten överskrider tröskelvärdet, vilket hjälper till att minska efterfrågeavgifter",
+          "peak_threshold_w": "Toppeffektgräns i watt. Batteriet kommer att laddas ur för att hålla nätimporten under denna nivå (typiskt: 10000W)"
         }
       }
     },
@@ -172,6 +182,12 @@
       },
       "water_heater_optimal_time": {
         "name": "Varmvattenberedare Optimal Tid"
+      },
+      "load_shift_opportunity": {
+        "name": "Lastförskjutningsmöjlighet"
+      },
+      "load_shift_savings": {
+        "name": "Lastförskjutning Besparingspotential"
       }
     }
   },

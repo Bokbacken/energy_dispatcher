@@ -402,6 +402,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             await self._update_optimization_plan()
             await self._update_appliance_recommendations()
             await self._update_export_analysis()
+            await self._update_load_shift_recommendations()
+            await self._update_peak_shaving_status()
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Uppdatering misslyckades")
         return self.data
@@ -711,6 +713,138 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 "duration_estimate_h": 0.0,
                 "battery_degradation_cost": 0.0,
                 "net_revenue": 0.0,
+            }
+
+    async def _update_load_shift_recommendations(self):
+        """Generate load shifting recommendations."""
+        from .load_shift_optimizer import LoadShiftOptimizer
+        from .const import (
+            CONF_ENABLE_LOAD_SHIFTING,
+            CONF_LOAD_SHIFT_FLEXIBILITY_HOURS,
+            CONF_BASELINE_LOAD_W,
+        )
+        
+        # Check if load shifting is enabled
+        if not bool(self._get_cfg(CONF_ENABLE_LOAD_SHIFTING, False)):
+            self.data["load_shift_opportunities"] = []
+            return
+        
+        # Check if we have necessary data
+        hourly_prices = self.data.get("hourly_prices", [])
+        if not hourly_prices:
+            self.data["load_shift_opportunities"] = []
+            return
+        
+        # Get current load from sensors
+        load_power_entity = self._get_cfg(CONF_LOAD_POWER_ENTITY, "")
+        current_consumption_w = self._read_float(load_power_entity) if load_power_entity else None
+        
+        if current_consumption_w is None or current_consumption_w <= 0:
+            self.data["load_shift_opportunities"] = []
+            return
+        
+        try:
+            optimizer = LoadShiftOptimizer()
+            
+            baseline_load_w = float(self._get_cfg(CONF_BASELINE_LOAD_W, 300))
+            flexibility_hours = int(self._get_cfg(CONF_LOAD_SHIFT_FLEXIBILITY_HOURS, 6))
+            
+            recommendations = optimizer.recommend_load_shifts(
+                current_time=dt_util.now(),
+                baseline_load_w=baseline_load_w,
+                current_consumption_w=current_consumption_w,
+                prices=hourly_prices,
+                user_flexibility_hours=flexibility_hours,
+            )
+            
+            self.data["load_shift_opportunities"] = recommendations
+            
+            if recommendations:
+                _LOGGER.debug(
+                    "Found %d load shift opportunities, best savings: %.2f SEK/h",
+                    len(recommendations),
+                    recommendations[0].get("savings_per_hour_sek", 0),
+                )
+        except Exception as e:
+            _LOGGER.warning("Failed to generate load shift recommendations: %s", e)
+            self.data["load_shift_opportunities"] = []
+
+    async def _update_peak_shaving_status(self):
+        """Update peak shaving status and recommendations."""
+        from .peak_shaving import PeakShaving
+        from .const import (
+            CONF_ENABLE_PEAK_SHAVING,
+            CONF_PEAK_THRESHOLD_W,
+        )
+        
+        # Check if peak shaving is enabled
+        if not bool(self._get_cfg(CONF_ENABLE_PEAK_SHAVING, False)):
+            self.data["peak_shaving_action"] = {
+                "discharge_battery": False,
+                "discharge_power_w": 0,
+                "duration_estimate_h": 0.0,
+                "peak_reduction_w": 0,
+                "reason": "Peak shaving disabled",
+            }
+            return
+        
+        # Get grid import power
+        load_power_entity = self._get_cfg(CONF_LOAD_POWER_ENTITY, "")
+        grid_import_w = self._read_float(load_power_entity) if load_power_entity else None
+        
+        if grid_import_w is None:
+            self.data["peak_shaving_action"] = {
+                "discharge_battery": False,
+                "discharge_power_w": 0,
+                "duration_estimate_h": 0.0,
+                "peak_reduction_w": 0,
+                "reason": "No grid import data available",
+            }
+            return
+        
+        # Get battery state
+        batt_soc_entity = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
+        battery_soc = self._read_float(batt_soc_entity) if batt_soc_entity else 0.0
+        if battery_soc is None:
+            battery_soc = 0.0
+        
+        battery_capacity_kwh = _safe_float(self._get_cfg(CONF_BATT_CAP_KWH), 15.0)
+        battery_max_discharge_w = int(self._get_cfg(CONF_BATT_MAX_DISCH_W, 4000))
+        
+        # Get reserve SOC from cost strategy or use default
+        battery_reserve_soc = 20.0  # Default reserve
+        
+        # Get peak threshold
+        peak_threshold_w = float(self._get_cfg(CONF_PEAK_THRESHOLD_W, 10000))
+        
+        try:
+            peak_shaver = PeakShaving()
+            
+            action = peak_shaver.calculate_peak_shaving_action(
+                current_grid_import_w=grid_import_w,
+                peak_threshold_w=peak_threshold_w,
+                battery_soc=battery_soc,
+                battery_max_discharge_w=battery_max_discharge_w,
+                battery_reserve_soc=battery_reserve_soc,
+                battery_capacity_kwh=battery_capacity_kwh,
+                solar_production_w=0.0,  # Solar is already factored into grid_import_w
+            )
+            
+            self.data["peak_shaving_action"] = action
+            
+            if action.get("discharge_battery", False):
+                _LOGGER.info(
+                    "Peak shaving active: %s",
+                    action.get("reason", ""),
+                )
+        except Exception as e:
+            _LOGGER.warning("Failed to calculate peak shaving action: %s", e)
+            self.data["peak_shaving_action"] = {
+                "discharge_battery": False,
+                "discharge_power_w": 0,
+                "duration_estimate_h": 0.0,
+                "peak_reduction_w": 0,
+                "reason": f"Error: {e}",
             }
 
     # ---------- optimization plan ----------
