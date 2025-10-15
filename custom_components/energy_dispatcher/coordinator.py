@@ -20,6 +20,7 @@ from .const import (
     CONF_PRICE_INCLUDE_FIXED,
     CONF_BATT_CAP_KWH,
     CONF_BATT_SOC_ENTITY,
+    CONF_BATT_MAX_CHARGE_W,
     CONF_BATT_ENERGY_CHARGED_TODAY_ENTITY,
     CONF_BATT_ENERGY_DISCHARGED_TODAY_ENTITY,
     CONF_BATT_CAPACITY_ENTITY,
@@ -310,6 +311,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             "cost_summary": {},  # Summary of cost classification
             # Optimization plan
             "optimization_plan": [],  # List of PlanAction objects with hourly recommendations
+            "optimization_plan_status": None,  # Diagnostic info: why plan is empty or status
             # Export opportunity
             "export_opportunity": {},  # Export profitability analysis
         }
@@ -1017,17 +1019,47 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         hourly_prices = self.data.get("hourly_prices", [])
         if not hourly_prices:
             self.data["optimization_plan"] = []
+            self.data["optimization_plan_status"] = "missing_price_data"
+            _LOGGER.warning(
+                "Optimization plan unavailable: No price data. "
+                "Check that nordpool_entity is configured and providing hourly prices."
+            )
             return
         
         try:
             # Get current battery state
             batt_soc_entity = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
-            batt_soc_pct = self._read_float(batt_soc_entity) if batt_soc_entity else 50.0
+            if not batt_soc_entity:
+                self.data["optimization_plan"] = []
+                self.data["optimization_plan_status"] = "missing_battery_soc_entity"
+                _LOGGER.warning(
+                    "Optimization plan unavailable: Battery SOC entity not configured. "
+                    "Configure 'Battery SOC Sensor' in integration settings."
+                )
+                return
+            
+            batt_soc_pct = self._read_float(batt_soc_entity)
             if batt_soc_pct is None:
-                batt_soc_pct = 50.0
+                self.data["optimization_plan"] = []
+                self.data["optimization_plan_status"] = "battery_soc_unavailable"
+                _LOGGER.warning(
+                    "Optimization plan unavailable: Battery SOC sensor '%s' is not available or not reporting a valid value. "
+                    "Check sensor state in Developer Tools → States.",
+                    batt_soc_entity
+                )
+                return
             
             # Get battery capacity
             batt_capacity_kwh = _safe_float(self._get_cfg(CONF_BATT_CAP_KWH), 15.0)
+            if batt_capacity_kwh is None or batt_capacity_kwh <= 0:
+                self.data["optimization_plan"] = []
+                self.data["optimization_plan_status"] = "invalid_battery_capacity"
+                _LOGGER.warning(
+                    "Optimization plan unavailable: Invalid battery capacity (%s kWh). "
+                    "Configure 'Battery Capacity (kWh)' in integration settings.",
+                    batt_capacity_kwh
+                )
+                return
             
             # Get battery power limits
             batt_max_charge_w = int(self._get_cfg(CONF_BATT_MAX_CHARGE_W, 4000))
@@ -1060,11 +1092,13 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             )
             
             self.data["optimization_plan"] = plan
+            self.data["optimization_plan_status"] = "ok"
             _LOGGER.debug("Generated optimization plan with %d actions", len(plan))
             
         except Exception as e:
-            _LOGGER.warning("Failed to generate optimization plan: %s", e)
+            _LOGGER.warning("Failed to generate optimization plan: %s", e, exc_info=True)
             self.data["optimization_plan"] = []
+            self.data["optimization_plan_status"] = f"error: {str(e)}"
 
     # ---------- baseline + runtime ----------
     def _is_ev_charging(self) -> bool:
