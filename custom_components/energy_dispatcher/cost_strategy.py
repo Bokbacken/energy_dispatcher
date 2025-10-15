@@ -138,8 +138,9 @@ class CostStrategy:
             for start, end in high_cost_windows
         )
         
-        # Estimate energy need during high-cost periods (assume 2 kW average load)
-        estimated_load_kw = 2.0
+        # Estimate energy need during high-cost periods (assume 1 kW average load)
+        # Reduced from 2 kW to be less conservative and allow better optimization
+        estimated_load_kw = 1.0
         required_energy_kwh = total_high_cost_hours * estimated_load_kw
         
         # Calculate required SOC to cover this
@@ -171,8 +172,9 @@ class CostStrategy:
                     (increase_factor - 1.0) * 100,
                 )
         
-        # Cap at 80% reserve (leave room for charging)
-        reserve_soc = min(80.0, required_soc)
+        # Cap at 60% reserve (leave room for charging and better optimization)
+        # Reduced from 80% to allow more aggressive charging during cheap hours
+        reserve_soc = min(60.0, required_soc)
         
         _LOGGER.debug(
             "Battery reserve calculation: %.1f hours high-cost, %.1f kWh needed, %.1f%% SOC reserve",
