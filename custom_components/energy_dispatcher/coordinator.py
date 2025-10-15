@@ -444,6 +444,18 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             await self._update_export_analysis()
             await self._update_load_shift_recommendations()
             await self._update_peak_shaving_status()
+            
+            # Update battery override status
+            override = self.get_battery_override()
+            if override:
+                self.data["battery_override"] = {
+                    "active": True,
+                    "mode": override["mode"],
+                    "power_w": override["power_w"],
+                    "expires_at": override["expires_at"].isoformat(),
+                }
+            else:
+                self.data["battery_override"] = {"active": False}
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Uppdatering misslyckades")
         return self.data
@@ -850,7 +862,41 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 user_flexibility_hours=flexibility_hours,
             )
             
-            self.data["load_shift_opportunities"] = recommendations
+            # Add required fields for comfort filtering
+            for rec in recommendations:
+                rec["action"] = "load_shift"
+                # Load shifting is typically medium impact
+                rec["user_impact"] = rec.get("user_impact", "medium")
+                rec["inconvenience_score"] = rec.get("inconvenience_score", 2.0)
+                rec["savings_sek"] = rec.get("savings_per_hour_sek", 0)
+            
+            # Apply comfort filtering
+            from .comfort_manager import ComfortManager
+            from .const import (
+                CONF_COMFORT_PRIORITY,
+                CONF_QUIET_HOURS_START,
+                CONF_QUIET_HOURS_END,
+                CONF_MIN_BATTERY_PEACE_OF_MIND,
+            )
+            
+            comfort_manager = ComfortManager(
+                comfort_priority=self._get_cfg(CONF_COMFORT_PRIORITY, "balanced"),
+                quiet_hours_start=self._get_cfg(CONF_QUIET_HOURS_START, "22:00"),
+                quiet_hours_end=self._get_cfg(CONF_QUIET_HOURS_END, "07:00"),
+                min_battery_peace_of_mind=float(self._get_cfg(CONF_MIN_BATTERY_PEACE_OF_MIND, 20)),
+            )
+            
+            batt_soc_entity = self._get_cfg(CONF_BATT_SOC_ENTITY, "")
+            battery_soc = self._read_float(batt_soc_entity) if batt_soc_entity else None
+            
+            filtered_recs, filtered_out = comfort_manager.optimize_with_comfort_balance(
+                recommendations,
+                battery_soc=battery_soc,
+            )
+            
+            self.data["load_shift_opportunities"] = filtered_recs
+            if filtered_out:
+                self.data["load_shift_opportunities_filtered_by_comfort"] = filtered_out
             
             if recommendations:
                 _LOGGER.debug(
@@ -922,6 +968,35 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 battery_capacity_kwh=battery_capacity_kwh,
                 solar_production_w=0.0,  # Solar is already factored into grid_import_w
             )
+            
+            # Check if comfort settings allow peak shaving discharge
+            if action.get("discharge_battery", False):
+                from .comfort_manager import ComfortManager
+                from .const import (
+                    CONF_COMFORT_PRIORITY,
+                    CONF_QUIET_HOURS_START,
+                    CONF_QUIET_HOURS_END,
+                    CONF_MIN_BATTERY_PEACE_OF_MIND,
+                )
+                
+                comfort_manager = ComfortManager(
+                    comfort_priority=self._get_cfg(CONF_COMFORT_PRIORITY, "balanced"),
+                    quiet_hours_start=self._get_cfg(CONF_QUIET_HOURS_START, "22:00"),
+                    quiet_hours_end=self._get_cfg(CONF_QUIET_HOURS_END, "07:00"),
+                    min_battery_peace_of_mind=float(self._get_cfg(CONF_MIN_BATTERY_PEACE_OF_MIND, 20)),
+                )
+                
+                allowed, reason = comfort_manager.should_allow_operation(
+                    "discharge",
+                    battery_soc=battery_soc,
+                    scheduled_time=dt_util.now(),
+                )
+                
+                if not allowed:
+                    action["discharge_battery"] = False
+                    action["discharge_power_w"] = 0
+                    action["reason"] = f"Peak shaving blocked by comfort settings: {reason}"
+                    action["filtered_by_comfort"] = reason
             
             self.data["peak_shaving_action"] = action
             
