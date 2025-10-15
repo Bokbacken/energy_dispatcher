@@ -586,11 +586,15 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         
         if batt_cap_kwh and current_soc is not None:
             try:
+                # Get solar forecast for reserve calculation
+                solar_points = self.data.get("solar_points", [])
+                
                 battery_reserve = self._cost_strategy.calculate_battery_reserve(
                     prices=hourly_prices,
                     now=now,
                     battery_capacity_kwh=batt_cap_kwh,
-                    current_soc=current_soc
+                    current_soc=current_soc,
+                    solar_forecast=solar_points
                 )
             except Exception as e:
                 _LOGGER.debug("Failed to calculate battery reserve: %s", e)
