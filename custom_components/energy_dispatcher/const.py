@@ -23,6 +23,11 @@ CONF_PRICE_VAT = "price_vat"
 CONF_PRICE_FIXED_MONTHLY = "price_fixed_monthly"
 CONF_PRICE_INCLUDE_FIXED = "price_include_fixed"
 
+# Export price parameters
+CONF_EXPORT_GRID_UTILITY = "export_grid_utility"  # SEK/kWh (nätnytta)
+CONF_EXPORT_ENERGY_SURCHARGE = "export_energy_surcharge"  # SEK/kWh (påslag)
+CONF_EXPORT_TAX_RETURN = "export_tax_return"  # SEK/kWh (skattereduktion)
+
 # Batteri
 CONF_BATT_CAP_KWH = "batt_cap_kwh"
 CONF_BATT_SOC_ENTITY = "batt_soc_entity"

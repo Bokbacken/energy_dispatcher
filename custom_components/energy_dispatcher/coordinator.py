@@ -18,6 +18,9 @@ from .const import (
     CONF_PRICE_VAT,
     CONF_PRICE_FIXED_MONTHLY,
     CONF_PRICE_INCLUDE_FIXED,
+    CONF_EXPORT_GRID_UTILITY,
+    CONF_EXPORT_ENERGY_SURCHARGE,
+    CONF_EXPORT_TAX_RETURN,
     CONF_BATT_CAP_KWH,
     CONF_BATT_SOC_ENTITY,
     CONF_BATT_MAX_CHARGE_W,
@@ -458,6 +461,30 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             _LOGGER.exception("Uppdatering misslyckades")
         return self.data
 
+    def _calculate_export_price(self, spot_price: float, current_year: int) -> float:
+        """Calculate export price based on year and configured contract parameters.
+        
+        Export price formula:
+        - Grid utility (nätnytta): Configured value (default 0.067 SEK/kWh)
+        - Energy surcharge (påslag): Configured value (default 0.02 SEK/kWh)
+        - Tax return (skattereduktion): Configured value (default 0.60 SEK/kWh for 2025)
+        
+        Note: Tax return typically expires after 2025 in Sweden. User should set to 0 for 2026+.
+        
+        Args:
+            spot_price: Nordpool spot price in SEK/kWh
+            current_year: Current year (can be used by user to determine tax return)
+            
+        Returns:
+            Export price in SEK/kWh
+        """
+        grid_utility = _safe_float(self._get_cfg(CONF_EXPORT_GRID_UTILITY, 0.067), 0.067)
+        energy_surcharge = _safe_float(self._get_cfg(CONF_EXPORT_ENERGY_SURCHARGE, 0.02), 0.02)
+        tax_return = _safe_float(self._get_cfg(CONF_EXPORT_TAX_RETURN, 0.60), 0.60)
+        
+        export_price = spot_price + grid_utility + energy_surcharge + tax_return
+        return export_price
+
     # ---------- prices ----------
     async def _update_prices(self):
         nordpool_entity = self._get_cfg(CONF_NORDPOOL_ENTITY, "")
@@ -479,11 +506,21 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
 
         provider = PriceProvider(self.hass, nordpool_entity=nordpool_entity, fees=fees)
         hourly: List[PricePoint] = provider.get_hourly_prices()
+        
+        # Calculate export prices for each hour
+        now = dt_util.now()
+        for price_point in hourly:
+            export_price = self._calculate_export_price(
+                price_point.spot_sek_per_kwh,
+                current_year=price_point.time.year
+            )
+            price_point.export_sek_per_kwh = export_price
+        
         self.data["hourly_prices"] = hourly
         self.data["current_enriched"] = provider.get_current_enriched(hourly)
 
         # P25-tröskel 24h framåt
-        now = dt_util.now().replace(minute=0, second=0, microsecond=0)
+        now = now.replace(minute=0, second=0, microsecond=0)
         next24 = [p for p in hourly if 0 <= (p.time - now).total_seconds() < 24 * 3600]
         if next24:
             enriched = sorted([p.enriched_sek_per_kwh for p in next24])
@@ -1093,6 +1130,13 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             # Get cost thresholds
             cheap_threshold = _safe_float(self._get_cfg(CONF_COST_CHEAP_THRESHOLD, 1.5), 1.5)
             
+            # Get export mode and degradation cost
+            export_mode = self._get_cfg(CONF_EXPORT_MODE, "never")
+            degradation_cost = _safe_float(
+                self._get_cfg(CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK, 0.50), 
+                0.50
+            )
+            
             # Generate plan
             now = dt_util.now()
             plan = simple_plan(
@@ -1108,6 +1152,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 ev_deadline=None,
                 ev_mode=ChargingMode.ECO,
                 cost_strategy=self._cost_strategy,
+                export_mode=export_mode,
+                battery_degradation_per_cycle=degradation_cost,
             )
             
             self.data["optimization_plan"] = plan
