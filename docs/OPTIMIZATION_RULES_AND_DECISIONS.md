@@ -52,29 +52,37 @@ The optimization plan (`simple_plan` in `planner.py`) currently considers:
 
 The optimization plan currently does **NOT** consider:
 
-1. **Export Mode** - Export settings are NOT used in planning
-2. **Export Opportunities** - No discharge-to-export decisions
-3. **Purchase Price vs Export Price** - No arbitrage calculations in planning
-4. **Battery Degradation Costs** - Not factored into charge/discharge decisions
+1. ~~**Export Mode**~~ - ✅ **NOW INTEGRATED** - Export settings are used in planning (PR #1)
+2. ~~**Export Opportunities**~~ - ✅ **NOW INTEGRATED** - Discharge-to-export decisions included (PR #1)
+3. **Purchase Price vs Export Price** - Limited arbitrage analysis (basic profitability check in PR #1)
+4. ~~**Battery Degradation Costs**~~ - ✅ **NOW INTEGRATED** - Factored into export decisions (PR #1)
 5. **Solar Forecast** - Solar values are read but not actively used for optimization
 6. **Weather Adjustments** - Weather-aware battery reserve exists but not used in planning
 
-### 🔍 Export Analysis (Separate Module)
+### ✅ Export Integration (NEW - PR #1)
 
-Export decisions are handled separately by `ExportAnalyzer` (not integrated into optimization plan):
+Export decisions are now **integrated into the optimization plan**:
 
 **Export Modes**:
 1. **never** (default) - No export, ever
 2. **excess_solar_only** - Export only when battery full (≥95%) and solar excess >1000W
-3. **peak_price_opportunistic** - Export during exceptional prices (>5 SEK/kWh) with SOC >80%
+3. **peak_price_opportunistic** - Export during profitable prices when SOC > reserve + 10%
 
-**Export Analysis Rules** (when mode is not "never"):
-- Export price must be ≥2.0 SEK/kWh minimum
+**Export Price Calculation** (E.ON SE4 contract):
+- **2025 formula**: spot + 0.067 (grid utility) + 0.02 (surcharge) + 0.60 (tax return)
+- **2026+ formula**: spot + 0.067 + 0.02 (tax return expires)
+
+**Export Decision Rules** (integrated into `simple_plan()`):
 - Battery degradation cost (default: 0.50 SEK/cycle) is considered
-- Opportunity cost calculated if high-cost hours are upcoming
-- Net revenue must be positive to export
-
-**Current Gap**: Export analyzer exists but is **not called by the optimization planner**. It's used separately for real-time export decisions but doesn't influence the 24-hour optimization plan.
+- Export takes priority over regular discharge when conditions met
+- Respects battery reserve + 10% buffer
+- In `peak_price_opportunistic` mode:
+  - Export price must be > 70% of purchase price
+  - Profit after degradation must be positive
+  - Battery SOC must be > reserve + 10%
+- In `excess_solar_only` mode:
+  - Battery must be ≥95% SOC
+  - Solar production must be >1000W
 
 ---
 
@@ -127,6 +135,9 @@ export_price_2026 = spot + 0.067 + 0.02
 - 2026 export: 0.4153 + 0.087 = 0.502 SEK/kWh
 
 **No VAT on exported energy** (0% moms)
+
+**Automatic Calculation** (NEW - PR #1):
+The optimization plan now automatically calculates export prices for each hour based on the year. The `_calculate_export_price()` method in the coordinator applies the correct formula (with or without tax return) based on the price point's timestamp.
 
 ### Profitability Analysis
 
@@ -245,15 +256,26 @@ if should_charge AND current_soc < 95%:
 
 **Charge Power**: Uses configured `batt_max_charge_w` (typically 10,000W)
 
-### Rule 4: Battery Discharging Decision
+### Rule 4: Battery Discharging Decision (Updated with Export Integration)
 
 **When**: Every hour in planning horizon  
-**What**: Decide if battery should discharge
+**What**: Decide if battery should discharge (for import avoidance or export)
 
 **Conditions for Discharging**:
 ```python
+# Priority 1: Check if should export (NEW - PR #1)
+if export_mode != "never":
+    should_export = _should_export_to_grid(
+        price, current_soc, reserve_soc, solar_w,
+        export_mode, degradation_cost, battery_capacity
+    )
+    if should_export:
+        action = DISCHARGE (for export)
+        notes = f"Export (price: {export_price} SEK/kWh)"
+
+# Priority 2: Regular discharge for import avoidance
 # Never discharge if below reserve
-if current_soc <= reserve_soc:
+elif current_soc <= reserve_soc:
     should_discharge = False
 
 # Discharge if price is HIGH and buffer above reserve
@@ -266,6 +288,41 @@ elif solar_deficit_w < -1000 AND current_soc > reserve_soc + 10%:
 
 else:
     should_discharge = False
+```
+
+**Export Decision Logic** (NEW):
+```python
+def _should_export_to_grid():
+    # Mode: never
+    if export_mode == "never":
+        return False
+    
+    # Mode: excess_solar_only
+    if export_mode == "excess_solar_only":
+        if current_soc >= 95 and solar_w > 1000:
+            return True
+        return False
+    
+    # Mode: peak_price_opportunistic
+    if export_mode == "peak_price_opportunistic":
+        # Calculate profitability
+        degradation_per_kwh = degradation_cost / battery_capacity_kwh
+        profit_per_kwh = export_price - degradation_per_kwh
+        
+        # Export if:
+        # 1. Profitable after degradation
+        # 2. Battery above reserve + 10%
+        # 3. Export price > 70% of purchase price
+        if (profit_per_kwh > 0 and
+            current_soc > reserve_soc + 10 and
+            export_price > purchase_price * 0.7):
+            return True
+        
+        # Also export if battery full and solar excess
+        if current_soc >= 95 and solar_w > 1000:
+            return True
+    
+    return False
 ```
 
 **Discharge Power**: Uses configured `batt_max_disch_w` (typically 10,000W)
@@ -647,29 +704,31 @@ If export mode = "peak_price_opportunistic":
 
 ## 📝 Summary
 
-**Current Optimization Plan**:
+**Current Optimization Plan** (Updated with PR #1):
 - ✅ Uses dynamic cost thresholds (improved accuracy)
 - ✅ Charges during cheap hours
-- ✅ Discharges during high hours (import avoidance only)
+- ✅ Discharges during high hours (import avoidance AND export)
 - ✅ Maintains battery reserve for expensive periods
 - ✅ Optimizes EV charging timing
-- ⚠️ Does NOT consider export mode
-- ⚠️ Does NOT compare purchase vs export prices
-- ⚠️ Does NOT use solar forecast for planning
-- ⚠️ Does NOT factor in battery degradation costs
+- ✅ **NEW: Export mode integrated** - Export decisions in 24h plan (PR #1)
+- ✅ **NEW: Export price calculation** - Automatic 2025/2026 handling (PR #1)
+- ✅ **NEW: Battery degradation factored** - In export profitability (PR #1)
+- ⚠️ Does NOT use solar forecast for planning (coming in PR #2)
+- ⚠️ Does NOT have weather-aware reserve (coming in PR #4)
 
 **Your E.ON SE4 Contract**:
 - Purchase: spot × 1.25 + 0.986 SEK/kWh
-- Export 2025: spot + 0.687 SEK/kWh
-- Export 2026+: spot + 0.087 SEK/kWh
+- Export 2025: spot + 0.687 SEK/kWh (includes 0.60 tax return)
+- Export 2026+: spot + 0.087 SEK/kWh (tax return expires)
 - Export marginally profitable at spot >0.25 SEK/kWh (2025)
 
 **Recommendations**:
 1. Keep dynamic thresholds enabled (default)
-2. Use "excess_solar_only" export mode for your setup
-3. Monitor optimization plan attributes to understand decisions
-4. Consider export integration improvements (Priority 1-2 above)
-5. Plan for 2026 when export becomes less attractive
+2. **NEW: Try "peak_price_opportunistic" export mode** for opportunistic export during high prices
+3. Use "excess_solar_only" export mode if you prefer conservative approach
+4. Monitor optimization plan attributes to see export actions
+5. Plan for 2026 when export becomes less attractive (tax return expires)
+6. Check plan `notes` field for "Export (price: X SEK/kWh)" messages
 
 **Questions or Issues?**:
 - Check `docs/troubleshooting_optimization_plan.md`
@@ -678,5 +737,5 @@ If export mode = "peak_price_opportunistic":
 
 ---
 
-**Document Status**: Complete and accurate as of 2025-10-15  
-**Next Update**: After export integration implementation
+**Document Status**: Updated with PR #1 export integration - 2025-10-15  
+**Next Update**: After PR #2 (solar forecast integration)
