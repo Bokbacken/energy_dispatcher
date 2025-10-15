@@ -18,6 +18,9 @@ from .const import (
     CONF_PRICE_VAT,
     CONF_PRICE_FIXED_MONTHLY,
     CONF_PRICE_INCLUDE_FIXED,
+    CONF_EXPORT_GRID_UTILITY,
+    CONF_EXPORT_ENERGY_SURCHARGE,
+    CONF_EXPORT_TAX_RETURN,
     CONF_BATT_CAP_KWH,
     CONF_BATT_SOC_ENTITY,
     CONF_BATT_MAX_CHARGE_W,
@@ -459,23 +462,25 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         return self.data
 
     def _calculate_export_price(self, spot_price: float, current_year: int) -> float:
-        """Calculate export price based on year and contract parameters.
+        """Calculate export price based on year and configured contract parameters.
         
-        E.ON SE4 contract export price:
-        - Grid utility (nätnytta): 0.067 SEK/kWh
-        - Energy surcharge (påslag): 0.02 SEK/kWh
-        - Tax return: 0.60 SEK/kWh (2025 only, expires 2026)
+        Export price formula:
+        - Grid utility (nätnytta): Configured value (default 0.067 SEK/kWh)
+        - Energy surcharge (påslag): Configured value (default 0.02 SEK/kWh)
+        - Tax return (skattereduktion): Configured value (default 0.60 SEK/kWh for 2025)
+        
+        Note: Tax return typically expires after 2025 in Sweden. User should set to 0 for 2026+.
         
         Args:
             spot_price: Nordpool spot price in SEK/kWh
-            current_year: Current year for tax return calculation
+            current_year: Current year (can be used by user to determine tax return)
             
         Returns:
             Export price in SEK/kWh
         """
-        grid_utility = 0.067  # nätnytta
-        energy_surcharge = 0.02  # påslag
-        tax_return = 0.60 if current_year <= 2025 else 0.0  # expires 2026
+        grid_utility = _safe_float(self._get_cfg(CONF_EXPORT_GRID_UTILITY, 0.067), 0.067)
+        energy_surcharge = _safe_float(self._get_cfg(CONF_EXPORT_ENERGY_SURCHARGE, 0.02), 0.02)
+        tax_return = _safe_float(self._get_cfg(CONF_EXPORT_TAX_RETURN, 0.60), 0.60)
         
         export_price = spot_price + grid_utility + energy_surcharge + tax_return
         return export_price

@@ -18,6 +18,9 @@ from .const import (
     CONF_PRICE_VAT,
     CONF_PRICE_FIXED_MONTHLY,
     CONF_PRICE_INCLUDE_FIXED,
+    CONF_EXPORT_GRID_UTILITY,
+    CONF_EXPORT_ENERGY_SURCHARGE,
+    CONF_EXPORT_TAX_RETURN,
     CONF_BATT_CAP_KWH,
     CONF_BATT_SOC_ENTITY,
     CONF_BATT_MAX_CHARGE_W,
@@ -129,6 +132,9 @@ DEFAULTS = {
     CONF_PRICE_SURCHARGE: 0.0,
     CONF_PRICE_FIXED_MONTHLY: 0.0,
     CONF_PRICE_INCLUDE_FIXED: False,
+    CONF_EXPORT_GRID_UTILITY: 0.067,
+    CONF_EXPORT_ENERGY_SURCHARGE: 0.02,
+    CONF_EXPORT_TAX_RETURN: 0.60,
     CONF_BATT_CAP_KWH: 15.0,
     CONF_BATT_SOC_ENTITY: "",
     CONF_BATT_CAPACITY_ENTITY: "",
@@ -220,6 +226,15 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
             selector.NumberSelectorConfig(min=0, max=1000, step=1, mode=selector.NumberSelectorMode.BOX)
         ),
         vol.Optional(CONF_PRICE_INCLUDE_FIXED, default=d.get(CONF_PRICE_INCLUDE_FIXED, False)): selector.BooleanSelector(),
+        vol.Optional(CONF_EXPORT_GRID_UTILITY, default=d.get(CONF_EXPORT_GRID_UTILITY, 0.067)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=1, step=0.001, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_EXPORT_ENERGY_SURCHARGE, default=d.get(CONF_EXPORT_ENERGY_SURCHARGE, 0.02)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=1, step=0.001, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_EXPORT_TAX_RETURN, default=d.get(CONF_EXPORT_TAX_RETURN, 0.60)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=1, step=0.01, mode=selector.NumberSelectorMode.BOX)
+        ),
 
         vol.Required(CONF_BATT_CAP_KWH, default=d.get(CONF_BATT_CAP_KWH, 15.0)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=1, max=100, step=0.5, unit_of_measurement="kWh", mode=selector.NumberSelectorMode.BOX)
