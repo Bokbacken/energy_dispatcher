@@ -339,6 +339,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         self._prev_pv_energy_today: Optional[float] = None  # kWh PV today (previous value)
         self._prev_house_energy: Optional[float] = None  # kWh house total (previous value)
         self._prev_grid_import_today: Optional[float] = None  # kWh grid import today (previous value)
+        
+        # Battery override tracking
+        self._battery_override: Optional[Dict[str, Any]] = None  # {"mode": str, "power_w": int, "expires_at": datetime}
 
     # ---------- helpers ----------
     def _get_store(self) -> Dict[str, Any]:
@@ -355,6 +358,43 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         store = self._get_store()
         flags = store.get("flags", {})
         return flags.get(key, default)
+
+    def set_battery_override(
+        self,
+        mode: str,
+        duration_minutes: int,
+        power_w: Optional[int] = None
+    ) -> None:
+        """Set battery override mode with expiration."""
+        expires_at = dt_util.now() + timedelta(minutes=duration_minutes)
+        self._battery_override = {
+            "mode": mode,
+            "power_w": power_w,
+            "expires_at": expires_at,
+        }
+        _LOGGER.info(
+            "Battery override set: mode=%s, power_w=%s, expires_at=%s",
+            mode, power_w, expires_at
+        )
+
+    def get_battery_override(self) -> Optional[Dict[str, Any]]:
+        """Get current battery override if still valid."""
+        if self._battery_override is None:
+            return None
+        
+        # Check if expired
+        if dt_util.now() >= self._battery_override["expires_at"]:
+            _LOGGER.info("Battery override expired, clearing")
+            self._battery_override = None
+            return None
+        
+        return self._battery_override
+
+    def clear_battery_override(self) -> None:
+        """Clear battery override."""
+        if self._battery_override is not None:
+            _LOGGER.info("Battery override cleared")
+        self._battery_override = None
 
     def _read_float(self, entity_id: str) -> Optional[float]:
         """Legacy: läs numeriskt värde utan att titta på enhet."""
@@ -579,11 +619,64 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                         battery_soc=battery_soc,
                         battery_capacity_kwh=battery_capacity_kwh,
                     )
+                    
+                    # Add user_impact and inconvenience_score for comfort filtering
+                    # Estimate user_impact based on optimal time
+                    optimal_time = recommendation.get("optimal_start_time")
+                    if optimal_time:
+                        hour = optimal_time.hour
+                        # High impact during evening hours (18-23), low during night/morning
+                        if 18 <= hour <= 23:
+                            recommendation["user_impact"] = "high"
+                            recommendation["inconvenience_score"] = 3.0
+                        elif 7 <= hour <= 17:
+                            recommendation["user_impact"] = "medium"
+                            recommendation["inconvenience_score"] = 2.0
+                        else:
+                            recommendation["user_impact"] = "low"
+                            recommendation["inconvenience_score"] = 1.0
+                    else:
+                        recommendation["user_impact"] = "medium"
+                        recommendation["inconvenience_score"] = 2.0
+                    
+                    recommendation["recommended_time"] = optimal_time
+                    recommendation["savings_sek"] = recommendation.get("cost_savings_vs_now_sek", 0)
+                    recommendation["appliance_name"] = appliance_name
+                    
                     recommendations[appliance_name] = recommendation
                 except Exception as e:
                     _LOGGER.debug("Failed to optimize %s: %s", appliance_name, e)
             
+            # Apply comfort filtering
+            from .comfort_manager import ComfortManager
+            from .const import (
+                CONF_COMFORT_PRIORITY,
+                CONF_QUIET_HOURS_START,
+                CONF_QUIET_HOURS_END,
+                CONF_MIN_BATTERY_PEACE_OF_MIND,
+            )
+            
+            comfort_manager = ComfortManager(
+                comfort_priority=self._get_cfg(CONF_COMFORT_PRIORITY, "balanced"),
+                quiet_hours_start=self._get_cfg(CONF_QUIET_HOURS_START, "22:00"),
+                quiet_hours_end=self._get_cfg(CONF_QUIET_HOURS_END, "07:00"),
+                min_battery_peace_of_mind=float(self._get_cfg(CONF_MIN_BATTERY_PEACE_OF_MIND, 20)),
+            )
+            
+            # Convert recommendations dict to list for filtering
+            rec_list = list(recommendations.values())
+            filtered_recs, filtered_out = comfort_manager.optimize_with_comfort_balance(
+                rec_list,
+                battery_soc=battery_soc,
+            )
+            
+            # Store both filtered and filtered_out recommendations
             self.data["appliance_recommendations"] = recommendations
+            if filtered_out:
+                self.data["appliance_recommendations_filtered_by_comfort"] = {
+                    rec.get("appliance_name", "unknown"): rec 
+                    for rec in filtered_out
+                }
             _LOGGER.debug(
                 "Generated appliance recommendations for %d appliances",
                 len(recommendations)

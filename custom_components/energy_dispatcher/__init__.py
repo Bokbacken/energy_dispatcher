@@ -410,6 +410,65 @@ async def _async_register_services(hass: HomeAssistant):
         handle_set_export_mode
     )
 
+    async def handle_override_battery_mode(call):
+        """Handle override battery mode service call."""
+        mode = call.data.get("mode")
+        duration_minutes = call.data.get("duration_minutes", 60)
+        power_w = call.data.get("power_w")
+        
+        if not mode:
+            _LOGGER.error("Battery mode is required")
+            return
+        
+        # Get the first coordinator entry for this integration
+        entries = [
+            data for data in hass.data.get(DOMAIN, {}).values()
+            if isinstance(data, dict) and "coordinator" in data
+        ]
+        if not entries:
+            _LOGGER.error("No Energy Dispatcher coordinator found")
+            return
+        
+        coordinator = entries[0]["coordinator"]
+        
+        # Set or clear override
+        if mode == "auto":
+            coordinator.clear_battery_override()
+            message = "Battery mode override cleared - returning to automatic control"
+        else:
+            coordinator.set_battery_override(
+                mode=mode,
+                duration_minutes=duration_minutes,
+                power_w=power_w
+            )
+            message = (
+                f"Battery override: {mode} mode for {duration_minutes} minutes"
+                + (f" at {power_w}W" if power_w else "")
+            )
+        
+        # Trigger coordinator update to apply the override
+        await coordinator.async_request_refresh()
+        
+        _LOGGER.info(message)
+        
+        # Send notification
+        await hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "title": "Battery Mode Override",
+                "message": message,
+                "notification_id": f"{DOMAIN}_battery_override",
+            },
+            blocking=False,
+        )
+    
+    hass.services.async_register(
+        DOMAIN,
+        "override_battery_mode",
+        handle_override_battery_mode
+    )
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data.setdefault(DOMAIN, {})
