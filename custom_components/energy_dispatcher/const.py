@@ -130,9 +130,10 @@ CONF_QUIET_HOURS_START = "quiet_hours_start"  # time (default: 22:00)
 CONF_QUIET_HOURS_END = "quiet_hours_end"  # time (default: 07:00)
 CONF_MIN_BATTERY_PEACE_OF_MIND = "min_battery_peace_of_mind"  # % (default: 20)
 
-# 48-hour historical baseline with time-of-day weighting
+# 48-hour historical baseline
 CONF_RUNTIME_LOOKBACK_HOURS = "runtime_lookback_hours"  # Default 48
-CONF_RUNTIME_USE_DAYPARTS = "runtime_use_dayparts"  # Enable time-of-day weighting
+# Legacy config (no longer used, kept for backwards compatibility)
+CONF_RUNTIME_USE_DAYPARTS = "runtime_use_dayparts"  # Deprecated: time-of-day weighting removed
 
 # Kontextsensors för exkludering
 CONF_LOAD_POWER_ENTITY = "load_power_entity"  # W

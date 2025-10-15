@@ -53,7 +53,6 @@ from .const import (
     CONF_BATT_TOTAL_CHARGED_ENERGY_ENTITY,
     CONF_GRID_IMPORT_TODAY_ENTITY,
     CONF_RUNTIME_LOOKBACK_HOURS,
-    CONF_RUNTIME_USE_DAYPARTS,
     CONF_LOAD_POWER_ENTITY,
     CONF_BATT_POWER_ENTITY,
     CONF_BATT_POWER_INVERT_SIGN,
@@ -281,10 +280,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             "baseline_source_value": None,
             "baseline_kwh_per_h": None,
             "baseline_exclusion_reason": "",
-            # Daypart baselines (night/day/evening)
-            "baseline_night_w": None,
-            "baseline_day_w": None,
-            "baseline_evening_w": None,
             # Runtime + batteri
             "battery_runtime_h": None,
             # Sol
@@ -1112,194 +1107,84 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         grid_charge_w = max(0.0, batt_charge_w - pv_surplus_w)
         return grid_charge_w > 100.0
 
-
-
-    def _classify_hour_daypart(self, hour: int) -> str:
-        """Classify hour into daypart: night (0-7), day (8-15), evening (16-23)."""
-        if 0 <= hour < 8:
-            return "night"
-        elif 8 <= hour < 16:
-            return "day"
-        else:
-            return "evening"
-
-    def _calculate_daypart_baselines(
-        self, 
-        house_states, 
-        ev_states, 
-        batt_states, 
-        pv_states,
-        exclude_ev: bool,
-        exclude_batt_grid: bool
-    ) -> Optional[Dict[str, float]]:
+    def _calculate_battery_grid_charging(self, batt_states, pv_states) -> float:
         """
-        Calculate separate baseline values for night, day, and evening periods.
-        
-        Groups hourly consumption data by time of day and calculates average
-        consumption rate for each daypart. Handles missing data by interpolating
-        between known points for gaps up to 8 hours.
+        Calculate battery grid charging by identifying periods where battery charged
+        but no solar generation was present (forced grid charging).
         
         Args:
-            house_states: List of house energy counter states
-            ev_states: List of EV energy counter states
-            batt_states: List of battery charged energy states
-            pv_states: List of PV generation energy states
-            exclude_ev: Whether to exclude EV charging
-            exclude_batt_grid: Whether to exclude battery grid charging
+            batt_states: List of battery charged energy counter states
+            pv_states: List of PV generation energy counter states
             
         Returns:
-            Dict with keys 'night', 'day', 'evening' containing kWh/h values,
-            or None if calculation fails
+            Total kWh of battery grid charging (charging without solar)
         """
-        try:
-            from collections import defaultdict
+        from collections import defaultdict
+        
+        # Build hourly aggregates
+        hourly_batt_charge = defaultdict(float)
+        hourly_pv_gen = defaultdict(float)
+        
+        # Aggregate battery charging by hour
+        for i in range(len(batt_states) - 1):
+            val_start = _safe_float(batt_states[i].state)
+            val_end = _safe_float(batt_states[i + 1].state)
             
-            # Group states by hour
-            # We'll calculate consumption for each hour and then average by daypart
-            daypart_consumptions = defaultdict(list)  # {daypart: [kwh values]}
+            if val_start is None or val_end is None:
+                continue
             
-            # Build a time-indexed dict for each sensor for efficient lookup
-            def build_time_index(states):
-                """Build dict mapping hour timestamp to state value."""
-                index = {}
-                for state in states:
-                    value = _safe_float(state.state)
-                    if value is not None:
-                        # Round to hour for grouping
-                        timestamp = state.last_changed.replace(minute=0, second=0, microsecond=0)
-                        index[timestamp] = value
-                return index
+            ts_start = batt_states[i].last_changed
+            hour_start = ts_start.replace(minute=0, second=0, microsecond=0)
             
-            house_index = build_time_index(house_states)
-            ev_index = build_time_index(ev_states) if ev_states else {}
-            batt_index = build_time_index(batt_states) if batt_states else {}
-            pv_index = build_time_index(pv_states) if pv_states else {}
+            charge_delta = val_end - val_start
+            if charge_delta > 0:  # Only count charging (ignore counter resets)
+                hourly_batt_charge[hour_start] += charge_delta
+        
+        # Aggregate PV generation by hour
+        for i in range(len(pv_states) - 1):
+            val_start = _safe_float(pv_states[i].state)
+            val_end = _safe_float(pv_states[i + 1].state)
             
-            # Maximum acceptable gap for baseline calculation (8 hours)
-            MAX_GAP_HOURS = 8.0
+            if val_start is None or val_end is None:
+                continue
             
-            # Count data points before interpolation
-            original_house_count = len(house_index)
+            ts_start = pv_states[i].last_changed
+            hour_start = ts_start.replace(minute=0, second=0, microsecond=0)
             
-            # Fill in missing hourly data points using interpolation
-            house_index = _fill_missing_hourly_data(house_index, MAX_GAP_HOURS)
-            ev_index = _fill_missing_hourly_data(ev_index, MAX_GAP_HOURS) if ev_index else {}
-            batt_index = _fill_missing_hourly_data(batt_index, MAX_GAP_HOURS) if batt_index else {}
-            pv_index = _fill_missing_hourly_data(pv_index, MAX_GAP_HOURS) if pv_index else {}
+            pv_delta = val_end - val_start
+            if pv_delta > 0:  # Only count generation (ignore counter resets)
+                hourly_pv_gen[hour_start] += pv_delta
+        
+        # Calculate grid charging: battery charging when no solar is present
+        # Use a small threshold (0.01 kWh) to account for negligible nighttime solar readings
+        grid_charge_total = 0.0
+        PV_THRESHOLD = 0.01  # kWh - ignore very small PV values (sensor noise at night)
+        
+        for hour_ts, batt_charge in hourly_batt_charge.items():
+            pv_gen = hourly_pv_gen.get(hour_ts, 0.0)
             
-            # Log if interpolation was used
-            interpolated_count = len(house_index) - original_house_count
-            if interpolated_count > 0:
-                _LOGGER.info(
-                    "Daypart baseline: Interpolated %d missing hourly data points (max gap: %.1f hours)",
-                    interpolated_count, MAX_GAP_HOURS
-                )
-            
-            # Get all hour timestamps, sorted
-            all_hours = sorted(house_index.keys())
-            
-            if len(all_hours) < 2:
-                _LOGGER.debug("Not enough hourly data for daypart calculation")
-                return None
-            
-            # Calculate consumption for each consecutive hour pair
-            for i in range(len(all_hours) - 1):
-                hour_start = all_hours[i]
-                hour_end = all_hours[i + 1]
-                
-                # Calculate time delta in hours
-                time_delta_h = (hour_end - hour_start).total_seconds() / 3600.0
-                if time_delta_h <= 0 or time_delta_h > MAX_GAP_HOURS:
-                    # Skip if time gap is too large (> 8 hours) or invalid
-                    _LOGGER.debug(
-                        "Skipping large gap in baseline data: %.1f hours between %s and %s",
-                        time_delta_h, hour_start, hour_end
-                    )
-                    continue
-                
-                # Get energy values at start and end
-                house_start_val = house_index.get(hour_start)
-                house_end_val = house_index.get(hour_end)
-                
-                if house_start_val is None or house_end_val is None:
-                    continue
-                
-                # Calculate house consumption for this period
-                house_kwh = house_end_val - house_start_val
-                if house_kwh < 0:
-                    # Counter reset or invalid data
-                    continue
-                
-                # Calculate exclusions for this period
-                ev_kwh = 0.0
-                if exclude_ev and ev_index:
-                    ev_start_val = ev_index.get(hour_start)
-                    ev_end_val = ev_index.get(hour_end)
-                    if ev_start_val is not None and ev_end_val is not None:
-                        ev_kwh = max(0.0, ev_end_val - ev_start_val)
-                
-                batt_grid_kwh = 0.0
-                if exclude_batt_grid and batt_index:
-                    batt_start_val = batt_index.get(hour_start)
-                    batt_end_val = batt_index.get(hour_end)
-                    pv_start_val = pv_index.get(hour_start, 0.0)
-                    pv_end_val = pv_index.get(hour_end, 0.0)
-                    
-                    if batt_start_val is not None and batt_end_val is not None:
-                        batt_kwh = max(0.0, batt_end_val - batt_start_val)
-                        pv_kwh = max(0.0, pv_end_val - pv_start_val) if pv_start_val is not None and pv_end_val is not None else 0.0
-                        # Estimate grid charging as battery charged minus PV generated
-                        batt_grid_kwh = max(0.0, batt_kwh - pv_kwh)
-                
-                # Calculate net consumption
-                net_kwh = max(0.0, house_kwh - ev_kwh - batt_grid_kwh)
-                
-                # Convert to rate (kWh/h)
-                net_kwh_per_h = net_kwh / time_delta_h
-                
-                # Classify by daypart using the start hour
-                hour_of_day = hour_start.hour
-                daypart = self._classify_hour_daypart(hour_of_day)
-                
-                daypart_consumptions[daypart].append(net_kwh_per_h)
-            
-            # Calculate average for each daypart
-            results = {}
-            for daypart in ["night", "day", "evening"]:
-                values = daypart_consumptions.get(daypart, [])
-                if values:
-                    avg = sum(values) / len(values)
-                    # Clip to reasonable range
-                    avg = max(0.05, min(5.0, avg))
-                    results[daypart] = avg
-                    _LOGGER.debug(
-                        "Daypart %s: %.3f kWh/h (from %d hourly samples)",
-                        daypart, avg, len(values)
-                    )
-                else:
-                    # No data for this daypart, will use overall average as fallback
-                    results[daypart] = None
-            
-            # Return results if we have at least one valid daypart
-            if any(v is not None for v in results.values()):
-                return results
-            else:
-                return None
-                
-        except Exception as e:
-            _LOGGER.warning("Failed to calculate daypart baselines: %s", e, exc_info=True)
-            return None
+            # If battery is charging but PV is negligible, it's grid charging
+            if batt_charge > 0.0 and pv_gen < PV_THRESHOLD:
+                grid_charge_total += batt_charge
+        
+        _LOGGER.debug(
+            "Battery grid charging analysis: %.3f kWh charged during periods with no solar",
+            grid_charge_total
+        )
+        
+        return grid_charge_total
+
+
 
     async def _calculate_48h_baseline(self) -> Optional[Dict[str, Optional[float]]]:
         """
         Calculate baseline from last 48 hours using energy counter deltas.
-        Returns dict with keys: overall, night, day, evening (all in kWh/h).
+        Returns dict with key 'overall' containing kWh/h value.
         Also includes 'failure_reason' key if calculation fails.
         Uses energy counters (kWh) to calculate consumption, excluding EV charging 
         and battery grid charging based on their respective energy counters.
         """
         lookback_hours = int(self._get_cfg(CONF_RUNTIME_LOOKBACK_HOURS, 48))
-        use_dayparts = bool(self._get_cfg(CONF_RUNTIME_USE_DAYPARTS, True))
         
         # Get the required energy counter entities
         house_energy_ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
@@ -1309,9 +1194,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             )
             return {
                 "overall": None,
-                "night": None,
-                "day": None,
-                "evening": None,
                 "failure_reason": "No house energy counter configured (runtime_counter_entity)"
             }
         
@@ -1365,9 +1247,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 )
                 return {
                     "overall": None,
-                    "night": None,
-                    "day": None,
-                    "evening": None,
                     "failure_reason": f"Insufficient historical data: {len(house_states)} data points (need 2+)"
                 }
             
@@ -1388,9 +1267,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 )
                 return {
                     "overall": None,
-                    "night": None,
-                    "day": None,
-                    "evening": None,
                     "failure_reason": f"Invalid sensor values: start={house_start}, end={house_end}"
                 }
             
@@ -1435,12 +1311,15 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 net_house_kwh -= ev_delta
                 _LOGGER.debug("Excluding EV energy: %.3f kWh", ev_delta)
             
-            if exclude_batt_grid and batt_delta > 0:
-                # Estimate battery grid charging (battery charged - PV generation)
-                batt_grid_kwh = max(0.0, batt_delta - pv_delta)
+            if exclude_batt_grid and batt_states and pv_states:
+                # Calculate battery grid charging by identifying periods where battery charged
+                # but no solar was available (i.e., forced grid charging at night)
+                batt_grid_kwh = self._calculate_battery_grid_charging(
+                    batt_states, pv_states
+                )
                 net_house_kwh -= batt_grid_kwh
-                _LOGGER.debug("Excluding battery grid charging: %.3f kWh (batt: %.3f, pv: %.3f)", 
-                             batt_grid_kwh, batt_delta, pv_delta)
+                _LOGGER.debug("Excluding battery grid charging: %.3f kWh (from time-based analysis)", 
+                             batt_grid_kwh)
             
             # Ensure we don't have negative consumption
             net_house_kwh = max(0.0, net_house_kwh)
@@ -1454,36 +1333,19 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             
             results = {
                 "overall": avg_kwh_per_h,
-                "night": None,
-                "day": None,
-                "evening": None,
             }
             
-            # If dayparts are enabled, calculate time-of-day specific baselines
-            if use_dayparts:
-                daypart_result = self._calculate_daypart_baselines(
-                    house_states, ev_states, batt_states, pv_states,
-                    exclude_ev, exclude_batt_grid
-                )
-                if daypart_result:
-                    results["night"] = daypart_result.get("night", avg_kwh_per_h)
-                    results["day"] = daypart_result.get("day", avg_kwh_per_h)
-                    results["evening"] = daypart_result.get("evening", avg_kwh_per_h)
-                else:
-                    # Fall back to overall average if daypart calculation fails
-                    results["night"] = avg_kwh_per_h
-                    results["day"] = avg_kwh_per_h
-                    results["evening"] = avg_kwh_per_h
+            # Calculate batt_grid_kwh for logging
+            batt_grid_kwh_log = 0.0
+            if exclude_batt_grid and batt_states and pv_states:
+                batt_grid_kwh_log = self._calculate_battery_grid_charging(batt_states, pv_states)
             
             _LOGGER.debug(
-                "48h baseline calculated: overall=%.3f kWh/h, night=%.3f, day=%.3f, evening=%.3f "
-                "(house: %.3f kWh, ev: %.3f kWh, batt_grid: ~%.3f kWh over %d hours)",
+                "48h baseline calculated: overall=%.3f kWh/h "
+                "(house: %.3f kWh, ev: %.3f kWh, batt_grid: %.3f kWh over %d hours)",
                 avg_kwh_per_h,
-                results.get("night", 0.0) or 0.0,
-                results.get("day", 0.0) or 0.0,
-                results.get("evening", 0.0) or 0.0,
                 house_delta, ev_delta, 
-                max(0.0, batt_delta - pv_delta) if exclude_batt_grid else 0.0,
+                batt_grid_kwh_log,
                 lookback_hours
             )
             
@@ -1493,9 +1355,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             _LOGGER.warning("Failed to calculate 48h baseline: %s", e, exc_info=True)
             return {
                 "overall": None,
-                "night": None,
-                "day": None,
-                "evening": None,
                 "failure_reason": f"Exception during calculation: {str(e)}"
             }
 
@@ -1517,21 +1376,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             # Use 48h historical baseline
             visible_kwh_h = baseline_48h.get("overall")
             _LOGGER.debug(
-                "48h baseline calculation succeeded: overall=%s night=%s day=%s evening=%s",
+                "48h baseline calculation succeeded: overall=%s",
                 baseline_48h.get("overall"),
-                baseline_48h.get("night"),
-                baseline_48h.get("day"),
-                baseline_48h.get("evening"),
             )
-            
-            # Store daypart baselines
-            night_w = baseline_48h.get("night")
-            day_w = baseline_48h.get("day")
-            evening_w = baseline_48h.get("evening")
-            
-            self.data["baseline_night_w"] = round(night_w * 1000.0, 1) if night_w is not None else None
-            self.data["baseline_day_w"] = round(day_w * 1000.0, 1) if day_w is not None else None
-            self.data["baseline_evening_w"] = round(evening_w * 1000.0, 1) if evening_w is not None else None
             
             # Get current house energy counter value for display
             house_energy_ent = self._get_cfg(CONF_RUNTIME_COUNTER_ENTITY, "")
@@ -1546,11 +1393,8 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self.data["baseline_exclusion_reason"] = ""  # Already excluded in 48h calc
             
             _LOGGER.debug(
-                "Baseline: method=energy_counter_48h overall=%.3f kWh/h night=%.3f day=%.3f evening=%.3f",
+                "Baseline: method=energy_counter_48h overall=%.3f kWh/h",
                 visible_kwh_h or 0,
-                night_w or 0,
-                day_w or 0,
-                evening_w or 0,
             )
         else:
             # 48h calculation failed - set all to None with diagnostic message
@@ -1571,9 +1415,6 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             self.data["baseline_source_value"] = source_val
             self.data["baseline_kwh_per_h"] = None
             self.data["baseline_exclusion_reason"] = failure_reason
-            self.data["baseline_night_w"] = None
-            self.data["baseline_day_w"] = None
-            self.data["baseline_evening_w"] = None
             visible_kwh_h = None
 
         # Battery runtime (using final visible_kwh_h regardless of method)
