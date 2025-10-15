@@ -98,6 +98,7 @@ CONF_RUNTIME_SOC_FLOOR = "runtime_soc_floor"
 CONF_RUNTIME_SOC_CEILING = "runtime_soc_ceiling"
 
 # Cost strategy
+CONF_USE_DYNAMIC_COST_THRESHOLDS = "use_dynamic_cost_thresholds"  # bool
 CONF_COST_CHEAP_THRESHOLD = "cost_cheap_threshold"  # SEK/kWh
 CONF_COST_HIGH_THRESHOLD = "cost_high_threshold"    # SEK/kWh
 

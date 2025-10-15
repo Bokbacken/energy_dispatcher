@@ -65,6 +65,7 @@ from .const import (
     CONF_LOAD_POWER_ENTITY,
     CONF_BATT_POWER_ENTITY,
     CONF_AUTO_CREATE_DASHBOARD,
+    CONF_USE_DYNAMIC_COST_THRESHOLDS,
     CONF_COST_CHEAP_THRESHOLD,
     CONF_COST_HIGH_THRESHOLD,
     CONF_ENABLE_APPLIANCE_OPTIMIZATION,
@@ -180,8 +181,9 @@ DEFAULTS = {
     CONF_MANUAL_INVERTER_AC_CAP: 10.0,  # Default 10 kW AC capacity
     CONF_MANUAL_CALIBRATION_ENABLED: False,
     CONF_AUTO_CREATE_DASHBOARD: True,
-    CONF_COST_CHEAP_THRESHOLD: 1.5,  # SEK/kWh
-    CONF_COST_HIGH_THRESHOLD: 3.0,   # SEK/kWh
+    CONF_USE_DYNAMIC_COST_THRESHOLDS: True,  # Use dynamic thresholds based on price distribution
+    CONF_COST_CHEAP_THRESHOLD: 1.5,  # SEK/kWh (only used if dynamic thresholds disabled)
+    CONF_COST_HIGH_THRESHOLD: 3.0,   # SEK/kWh (only used if dynamic thresholds disabled)
     CONF_ENABLE_WEATHER_OPTIMIZATION: True,  # Enable weather-aware solar optimization
     CONF_EXPORT_MODE: "never",  # Default to never export
     CONF_MIN_EXPORT_PRICE_SEK_PER_KWH: 3.0,  # SEK/kWh
@@ -370,6 +372,7 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         ),
         
         # Cost strategy thresholds
+        vol.Optional(CONF_USE_DYNAMIC_COST_THRESHOLDS, default=d.get(CONF_USE_DYNAMIC_COST_THRESHOLDS, True)): selector.BooleanSelector(),
         vol.Optional(CONF_COST_CHEAP_THRESHOLD, default=d.get(CONF_COST_CHEAP_THRESHOLD, 1.5)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=0.0, max=10.0, step=0.01, unit_of_measurement="SEK/kWh", mode=selector.NumberSelectorMode.BOX)
         ),

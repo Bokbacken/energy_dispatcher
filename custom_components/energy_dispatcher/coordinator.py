@@ -58,6 +58,7 @@ from .const import (
     CONF_BATT_POWER_ENTITY,
     CONF_BATT_POWER_INVERT_SIGN,
     # Cost strategy
+    CONF_USE_DYNAMIC_COST_THRESHOLDS,
     CONF_COST_CHEAP_THRESHOLD,
     CONF_COST_HIGH_THRESHOLD,
     # Export profitability
@@ -505,8 +506,26 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
             return
         
         # Update cost strategy thresholds from configuration
-        cheap_threshold = _safe_float(self._get_cfg(CONF_COST_CHEAP_THRESHOLD, 1.5), 1.5)
-        high_threshold = _safe_float(self._get_cfg(CONF_COST_HIGH_THRESHOLD, 3.0), 3.0)
+        use_dynamic = self._get_cfg(CONF_USE_DYNAMIC_COST_THRESHOLDS, True)
+        
+        if use_dynamic:
+            # Use dynamic thresholds based on price distribution (25th/75th percentiles)
+            dynamic_thresholds = self._cost_strategy.get_dynamic_thresholds(hourly_prices)
+            cheap_threshold = dynamic_thresholds.cheap_max
+            high_threshold = dynamic_thresholds.high_min
+            _LOGGER.debug(
+                "Using dynamic cost thresholds: cheap <= %.3f, high >= %.3f SEK/kWh",
+                cheap_threshold, high_threshold
+            )
+        else:
+            # Use static thresholds from configuration
+            cheap_threshold = _safe_float(self._get_cfg(CONF_COST_CHEAP_THRESHOLD, 1.5), 1.5)
+            high_threshold = _safe_float(self._get_cfg(CONF_COST_HIGH_THRESHOLD, 3.0), 3.0)
+            _LOGGER.debug(
+                "Using static cost thresholds: cheap <= %.3f, high >= %.3f SEK/kWh",
+                cheap_threshold, high_threshold
+            )
+        
         self._cost_strategy.update_thresholds(cheap_max=cheap_threshold, high_min=high_threshold)
         
         now = dt_util.now()
