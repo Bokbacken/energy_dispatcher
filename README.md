@@ -2,6 +2,10 @@
 
 Smart energy management for Home Assistant users, supporting dynamic price, battery, EV, and solar optimization.
 
+**📍 New to Energy Dispatcher?** Start with [WHERE_WE_ARE_NOW.md](./WHERE_WE_ARE_NOW.md) for a complete overview of v0.10.1 features!
+
+**🚀 Want a quick dashboard setup?** Check out [QUICK_DASHBOARD_REFERENCE.md](./QUICK_DASHBOARD_REFERENCE.md) for copy-paste ready YAML!
+
 ## Features
 
 - **Multi-Vehicle Support**: Manage charging for multiple EVs with different specifications
@@ -99,16 +103,23 @@ The [Dashboard Guide](./docs/dashboard_guide.md) explains:
 
 ## Documentation
 
-### Getting Started
-- [Getting Started Guide](./docs/getting_started.md) 🚀 **START HERE** - 10-minute quick start
-- [Dashboard Setup Guide](./docs/dashboard_guide.md) ⭐ **POPULAR** - Step-by-step dashboard creation
-- [Configuration Guide](./docs/configuration.md) - Complete configuration reference
+### 🎯 Essential Reading
+- [WHERE_WE_ARE_NOW.md](./WHERE_WE_ARE_NOW.md) 📍 **NEW!** - Complete v0.10.1 feature overview
+- [QUICK_DASHBOARD_REFERENCE.md](./QUICK_DASHBOARD_REFERENCE.md) 🚀 **NEW!** - Copy-paste dashboard setup
+- [Getting Started Guide](./docs/getting_started.md) ⭐ **START HERE** - 10-minute quick start
+- [Dashboard Setup Guide](./docs/dashboard_guide.md) 📱 **POPULAR** - Step-by-step dashboard creation
 
-### Features & Setup
+### Configuration & Setup
+- [Configuration Guide](./docs/configuration.md) - Complete configuration reference
 - [Multi-Vehicle and Multi-Charger Setup](./docs/multi_vehicle_setup.md) - Managing multiple EVs
 - [Battery Cost Tracking](./docs/battery_cost_tracking.md) - Understanding battery economics
 - [Manual PV Forecast (Physics-Based)](./docs/manual_forecast.md) - Free solar forecasting
 - [Solar Forecast Improvement (Cloud Compensation)](./docs/solar_forecast_improvement.md) - Cloud-based adjustments
+
+### Features & Optimization
+- [Load Shifting & Peak Shaving](./docs/load_shifting_and_peak_shaving.md) - Reduce consumption costs
+- [AI Optimization Dashboard Guide](./docs/ai_optimization_dashboard_guide.md) - Advanced dashboard
+- [AI Optimization Automation Examples](./docs/ai_optimization_automation_examples.md) - Ready-to-use automations
 
 ### Reference & Planning
 - [Quick Reference](./docs/QUICK_REFERENCE.md) - Command cheat sheet
