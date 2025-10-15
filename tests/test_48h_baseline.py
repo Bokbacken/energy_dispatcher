@@ -283,8 +283,10 @@ class TestDaypartCalculation:
             house_energy += 1.0
             
             # EV charging in evening (16:00-23:59): 3 kWh/h
+            # House counter includes EV consumption
             if 16 <= hour_of_day < 24:
                 ev_energy += 3.0
+                house_energy += 3.0  # EV consumption is part of house total
             
             house_state = MagicMock()
             house_state.state = str(house_energy)

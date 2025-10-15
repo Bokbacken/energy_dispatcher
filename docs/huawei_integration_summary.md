@@ -54,14 +54,13 @@ When EMMA is present (as in your setup):
 **TOU Configuration (1 service):**
 - `set_tou_periods` - Configure up to 14 time-of-use periods
 
-### 3. Your System Specifications
+### 3. Example System Specifications
 
-From `sampledata/current_config.md`:
+Example configuration:
 ```yaml
 Battery Capacity: 30 kWh
 Max Charge Power: 10,000 W (10 kW)
 Max Discharge Power: 10,000 W (10 kW)
-Battery Device ID: 5e572c76e307b4cc612e683a04bdb60a
 SOC Floor: 5% (hardware minimum: 12%)
 SOC Ceiling: 100%
 ```
@@ -470,4 +469,3 @@ All the tools are now in place to build a sophisticated price-responsive energy 
 - **Reference Code:** `docs/huawei_solar_reference/services.py`
 - **Battery Adapter:** `custom_components/energy_dispatcher/adapters/huawei.py`
 - **Cost Tracking:** `docs/battery_cost_tracking.md`
-- **Configuration:** `sampledata/current_config.md`
