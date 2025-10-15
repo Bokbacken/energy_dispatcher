@@ -1,6 +1,11 @@
 # Sample Data Report
 Scanned directory: /home/runner/work/energy_dispatcher/energy_dispatcher/tests/fixtures
 
+## forecast.solar.csv
+- Points: 0
+- Non-monotonic segments: 0
+- Large gaps: 0
+
 ## forecast_weather_met.no-01.yaml
 - YAML detected (prices today/tomorrow). Not analyzed as a series.
 
