@@ -1,6 +1,40 @@
 # Changelog
 
 ## [Unreleased]
+
+## [0.10.0] - 2025-10-15
+### Added
+- **Comprehensive Test Coverage**: Step 6 Testing & Refinement implementation complete
+  - **Integration Test Suite**: 11 new tests for optimization coordinator (`tests/test_optimization_coordinator.py`)
+    - Full optimization cycle end-to-end testing
+    - Multi-optimizer coordination (appliance, export, load shift, peak shaving)
+    - Conflict resolution scenarios
+    - Performance testing with large datasets (168 hours of data)
+    - Error handling and graceful degradation
+  - **Automation Validation**: 16 new tests validating all YAML automation examples
+    - 12 complete automation templates validated
+    - YAML syntax verification
+    - Structure and consistency checks
+    - Feature coverage validation (appliance, EV, battery, export, notifications, cost)
+  - **Translation Validation**: 18 new tests ensuring translation quality
+    - EN/SV consistency checks
+    - Key term translation verification
+    - Unit mention validation
+    - Optimization feature translation coverage
+  - **Total Test Count**: 361 tests (was 316)
+
+### Improved
+- **Test Infrastructure**: Enhanced test suite with comprehensive integration and validation tests
+- **Documentation Quality**: All automation examples validated for YAML syntax and completeness
+- **Translation Quality**: Automated validation of translation files with quality checks
+
+### Notes
+- Translation Coverage: EN (374 lines) complete, SV (262 lines) has 50% sensor coverage
+- Missing SV sensor translations: battery_status, ev_status, plan_summary, price_schedule, solar_forecast
+- 12 ready-to-use automation templates validated and documented
+- Performance target met: <10s for optimization calculations with 168 hours of data
+
+## [0.9.2] - Previous Release
 ### Added
 - **Enhanced Diagnostic Logging**: Added comprehensive logging for 48h baseline calculation to help troubleshoot issues
   - Logs when 48h calculation succeeds with all daypart values
