@@ -20,6 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
 
     entities = [
         EnrichedPriceSensor(coordinator, entry.entry_id),
+        ExportPriceSensor(coordinator, entry.entry_id),
         HouseBaselineSensor(coordinator, entry.entry_id),
         BatteryRuntimeSensor(coordinator, entry.entry_id),
         BatteryCostSensor(coordinator, entry.entry_id),
@@ -119,6 +120,35 @@ class EnrichedPriceSensor(BaseEDSensor):
         return {
             "hourly": out,
             "cheap_threshold": self.coordinator.data.get("cheap_threshold"),
+        }
+
+
+class ExportPriceSensor(BaseEDSensor):
+    _attr_name = "Grid Export Value"
+    _attr_native_unit_of_measurement = "SEK/kWh"
+    _attr_icon = "mdi:transmission-tower-export"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{DOMAIN}_export_price_{self._entry_id}"
+
+    @property
+    def native_value(self) -> Optional[float]:
+        return self.coordinator.data.get("current_export")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        hourly = self.coordinator.data.get("hourly_prices") or []
+        out = [
+            {
+                "time": p.time.isoformat(),
+                "spot": p.spot_sek_per_kwh,
+                "export": p.export_sek_per_kwh,
+            }
+            for p in hourly
+        ]
+        return {
+            "hourly": out,
         }
 
 
