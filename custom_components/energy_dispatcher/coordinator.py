@@ -69,6 +69,9 @@ from .const import (
     CONF_MIN_EXPORT_PRICE_SEK_PER_KWH,
     CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK,
     CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH,
+    # Weather optimization
+    CONF_WEATHER_ENTITY,
+    CONF_ENABLE_WEATHER_OPTIMIZATION,
 )
 from .models import PricePoint, ChargingMode
 from .price_provider import PriceProvider, PriceFees
@@ -76,6 +79,7 @@ from .forecast_provider import ForecastSolarProvider
 from .cost_strategy import CostStrategy
 from .planner import simple_plan
 from .export_analyzer import ExportAnalyzer
+from .weather_optimizer import WeatherOptimizer
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -324,6 +328,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
 
         # Cost strategy instance
         self._cost_strategy = CostStrategy()
+        
+        # Weather optimizer instance
+        self._weather_optimizer = WeatherOptimizer(hass)
         
         # Export analyzer instance
         self.export_analyzer: Optional[ExportAnalyzer] = None
@@ -615,13 +622,68 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 # Get solar forecast for reserve calculation
                 solar_points = self.data.get("solar_points", [])
                 
+                # Calculate weather adjustment if weather optimization is enabled
+                weather_adjustment = None
+                enable_weather_opt = self._get_cfg(CONF_ENABLE_WEATHER_OPTIMIZATION, False)
+                weather_entity = self._get_cfg(CONF_WEATHER_ENTITY, "")
+                
+                if enable_weather_opt and weather_entity and solar_points:
+                    try:
+                        # Get weather forecast
+                        weather_forecast = self._weather_optimizer.extract_weather_forecast_from_entity(
+                            weather_entity_id=weather_entity,
+                            hours=24
+                        )
+                        
+                        if weather_forecast:
+                            # Adjust solar forecast based on weather
+                            adjusted_forecast = self._weather_optimizer.adjust_solar_forecast_for_weather(
+                                base_solar_forecast=solar_points,
+                                weather_forecast=weather_forecast
+                            )
+                            
+                            # Calculate adjustment summary
+                            weather_adjustment = self._weather_optimizer.calculate_forecast_adjustment_summary(
+                                adjusted_forecast
+                            )
+                            
+                            # Store for diagnostics
+                            self.data["weather_adjustment_summary"] = weather_adjustment
+                            
+                            # Log the adjustment
+                            if weather_adjustment.get("reduction_percentage", 0) > 0:
+                                _LOGGER.info(
+                                    "Weather adjustment: Solar forecast reduced by %.1f%% "
+                                    "(%.2f kWh -> %.2f kWh) due to weather conditions",
+                                    weather_adjustment["reduction_percentage"],
+                                    weather_adjustment["total_base_kwh"],
+                                    weather_adjustment["total_adjusted_kwh"]
+                                )
+                            else:
+                                _LOGGER.debug(
+                                    "Weather adjustment calculated: %.2f kWh (no reduction)",
+                                    weather_adjustment["total_adjusted_kwh"]
+                                )
+                    except Exception as e:
+                        _LOGGER.debug("Failed to calculate weather adjustment: %s", e)
+                        weather_adjustment = None
+                
                 battery_reserve = self._cost_strategy.calculate_battery_reserve(
                     prices=hourly_prices,
                     now=now,
                     battery_capacity_kwh=batt_cap_kwh,
                     current_soc=current_soc,
-                    solar_forecast=solar_points
+                    solar_forecast=solar_points,
+                    weather_adjustment=weather_adjustment
                 )
+                
+                # Log the reserve calculation with weather context
+                if weather_adjustment and weather_adjustment.get("reduction_percentage", 0) > 20:
+                    _LOGGER.info(
+                        "Battery reserve calculated: %.1f%% SOC (weather-adjusted due to %.1f%% solar reduction)",
+                        battery_reserve if battery_reserve else 0,
+                        weather_adjustment["reduction_percentage"]
+                    )
             except Exception as e:
                 _LOGGER.debug("Failed to calculate battery reserve: %s", e)
                 battery_reserve = None

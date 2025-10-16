@@ -57,7 +57,7 @@ The optimization plan currently does **NOT** consider:
 3. ~~**Purchase Price vs Export Price**~~ - ✅ **NOW INTEGRATED** - Full arbitrage analysis with profitability threshold (PR #3)
 4. ~~**Battery Degradation Costs**~~ - ✅ **NOW INTEGRATED** - Factored into all charge/discharge decisions (PR #1, PR #3)
 5. ~~**Solar Forecast**~~ - ✅ **NOW INTEGRATED** - Used for reserve reduction and charging decisions (PR #2)
-6. **Weather Adjustments** - Weather-aware battery reserve exists but not fully integrated in planning
+6. ~~**Weather Adjustments**~~ - ✅ **NOW INTEGRATED** - Weather-aware battery reserve fully integrated in planning (PR #4)
 
 ### ✅ Export Integration (NEW - PR #1)
 
@@ -148,6 +148,59 @@ Solar forecast is now **actively used in optimization planning**:
 - Net profit: 9.45 - 10.00 - 0.25 = -0.80 SEK ✗ (loss, skip charge!)
 
 **Note**: This is for **import avoidance**, not grid export. The "discharge value" is the avoided cost of importing expensive power, not revenue from exporting. Grid export decisions use the actual export price from the "Grid Export Value" sensor.
+
+### ✅ Weather-Aware Planning (NEW - PR #4)
+
+Weather adjustments are now **fully integrated into battery reserve calculation**:
+
+**Weather Adjustment Integration**:
+- Weather forecasts (cloud coverage, temperature) adjust solar production forecasts
+- Adjusted forecasts are used to calculate battery reserve requirements
+- Integration path: `WeatherOptimizer` → `CostStrategy.calculate_battery_reserve()` → `coordinator`
+
+**Weather Adjustment Logic**:
+- Cloud cover reduces solar forecast (0-10% clouds = 100%, 51-80% clouds = 40-60%, 81-100% clouds = 20-30%)
+- Temperature above 25°C reduces panel efficiency (-0.45% per °C)
+- Adjustments are combined and applied to base solar forecast
+
+**Battery Reserve Adjustment**:
+- When solar forecast is reduced by >20%, battery reserve is increased
+- 20-40% reduction → 10% reserve increase
+- 40-60% reduction → 15% reserve increase
+- >60% reduction → 20% reserve increase
+- Ensures adequate battery capacity during cloudy/overcast weather
+
+**Configuration**:
+- `enable_weather_optimization`: Enable/disable weather-aware adjustments (default: False)
+- `weather_entity`: Home Assistant weather entity for forecast data
+- Requires weather integration with cloud coverage and temperature data
+
+**Logging**:
+- Info-level logs when solar forecast reduced by weather
+- Info-level logs when battery reserve increased due to weather
+- Debug-level logs for adjustment calculations
+
+**Benefits**:
+- Higher battery reserve during cloudy weather (when solar production is low)
+- Lower battery reserve during clear weather (when solar production is high)
+- More reliable coverage of high-cost periods regardless of weather
+- Prevents running out of battery during unexpected cloudy days
+
+**Example** (Cloudy Day):
+- Base solar forecast: 36 kWh for 24h period
+- Weather forecast: 65% cloud coverage
+- Adjusted forecast: 22.5 kWh (37.5% reduction)
+- High-cost periods: 5 hours (8-10 AM, 5-8 PM)
+- Base reserve requirement: 10% SOC
+- Weather-adjusted reserve: 11% SOC (10% increase due to >20% solar reduction)
+
+**Example** (Clear Day):
+- Base solar forecast: 36 kWh for 24h period
+- Weather forecast: 5% cloud coverage
+- Adjusted forecast: 36 kWh (0% reduction)
+- High-cost periods: 5 hours (8-10 AM, 5-8 PM)
+- Base reserve requirement: 10% SOC
+- Weather-adjusted reserve: 10% SOC (no increase, reduction <20%)
 
 ---
 
