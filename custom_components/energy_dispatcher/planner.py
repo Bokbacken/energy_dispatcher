@@ -126,7 +126,7 @@ def simple_plan(
                     
                     is_profitable = cost_strategy.is_arbitrage_profitable(
                         buy_price=price.enriched_sek_per_kwh,
-                        sell_price=next_discharge_price,
+                        discharge_value=next_discharge_price,
                         energy_kwh=charge_energy_kwh,
                         degradation_cost_per_cycle=battery_degradation_per_cycle,
                         battery_capacity_kwh=batt_capacity_kwh,
@@ -135,7 +135,7 @@ def simple_plan(
                     
                     if not is_profitable:
                         should_charge = False
-                        action.notes = f"Skip charge (insufficient arbitrage profit: buy={price.enriched_sek_per_kwh:.2f}, sell={next_discharge_price:.2f})"
+                        action.notes = f"Skip charge (insufficient arbitrage profit: buy={price.enriched_sek_per_kwh:.2f}, discharge_value={next_discharge_price:.2f})"
             
             # Check if we should discharge battery
             should_discharge = cost_strategy.should_discharge_battery(

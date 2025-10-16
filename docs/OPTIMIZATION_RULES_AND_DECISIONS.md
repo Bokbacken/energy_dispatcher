@@ -105,12 +105,12 @@ Solar forecast is now **actively used in optimization planning**:
 
 ### ✅ Cost-Benefit Analysis (NEW - PR #3)
 
-**Arbitrage profitability analysis** is now **integrated into battery charging decisions**:
+**Import Avoidance Arbitrage** is now **integrated into battery charging decisions**:
 
 **Profitability Calculation**:
 - For each charging opportunity, calculates net profit from future discharge
-- Considers: buy price, estimated sell price, battery efficiency (90%), degradation cost
-- Formula: `net_profit = (sell_price × energy × 0.9) - (buy_price × energy) - (degradation_cost × cycle_fraction)`
+- Considers: buy price, discharge value (avoided import price), battery efficiency (90%), degradation cost
+- Formula: `net_profit = (discharge_value × energy × 0.9) - (buy_price × energy) - (degradation_cost × cycle_fraction)`
 - Cycle fraction prorated by energy: `cycle_fraction = energy_kwh / battery_capacity_kwh`
 
 **Charging Decision Logic** (NEW):
@@ -131,21 +131,23 @@ Solar forecast is now **actively used in optimization planning**:
 - Considers round-trip efficiency (10% loss) and degradation costs
 - Configurable profit threshold for user preference (conservative vs aggressive)
 
-**Example**:
-- Buy price: 2.00 SEK/kWh, Next high price: 3.00 SEK/kWh
+**Example** (Import Avoidance):
+- Buy price: 2.00 SEK/kWh, Discharge value (avoided import): 3.00 SEK/kWh
 - Battery: 10 kWh capacity, Charging: 5 kWh (0.5 cycle)
-- Revenue: 3.00 × 5 × 0.9 = 13.50 SEK
+- Cost avoided: 3.00 × 5 × 0.9 = 13.50 SEK
 - Cost: 2.00 × 5 = 10.00 SEK
 - Degradation: 0.50 × 0.5 = 0.25 SEK
 - Net profit: 13.50 - 10.00 - 0.25 = 3.25 SEK ✓ (profitable, charge!)
 
 **Example** (unprofitable):
-- Buy price: 2.00 SEK/kWh, Next high price: 2.10 SEK/kWh
+- Buy price: 2.00 SEK/kWh, Discharge value (avoided import): 2.10 SEK/kWh
 - Battery: 10 kWh capacity, Charging: 5 kWh (0.5 cycle)
-- Revenue: 2.10 × 5 × 0.9 = 9.45 SEK
+- Cost avoided: 2.10 × 5 × 0.9 = 9.45 SEK
 - Cost: 2.00 × 5 = 10.00 SEK
 - Degradation: 0.50 × 0.5 = 0.25 SEK
 - Net profit: 9.45 - 10.00 - 0.25 = -0.80 SEK ✗ (loss, skip charge!)
+
+**Note**: This is for **import avoidance**, not grid export. The "discharge value" is the avoided cost of importing expensive power, not revenue from exporting. Grid export decisions use the actual export price from the "Grid Export Value" sensor.
 
 ---
 
