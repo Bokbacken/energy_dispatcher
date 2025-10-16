@@ -68,6 +68,7 @@ from .const import (
     CONF_EXPORT_MODE,
     CONF_MIN_EXPORT_PRICE_SEK_PER_KWH,
     CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK,
+    CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH,
 )
 from .models import PricePoint, ChargingMode
 from .price_provider import PriceProvider, PriceFees
@@ -1141,6 +1142,11 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 0.50
             )
             
+            min_arbitrage_profit = _safe_float(
+                self._get_cfg(CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH, 0.10),
+                0.10
+            )
+            
             # Generate plan
             now = dt_util.now()
             plan = simple_plan(
@@ -1158,6 +1164,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 cost_strategy=self._cost_strategy,
                 export_mode=export_mode,
                 battery_degradation_per_cycle=degradation_cost,
+                min_arbitrage_profit=min_arbitrage_profit,
             )
             
             self.data["optimization_plan"] = plan

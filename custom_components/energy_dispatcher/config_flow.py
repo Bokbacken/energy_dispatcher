@@ -79,6 +79,7 @@ from .const import (
     CONF_EXPORT_MODE,
     CONF_MIN_EXPORT_PRICE_SEK_PER_KWH,
     CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK,
+    CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH,
     CONF_ENABLE_LOAD_SHIFTING,
     CONF_LOAD_SHIFT_FLEXIBILITY_HOURS,
     CONF_BASELINE_LOAD_W,
@@ -194,6 +195,7 @@ DEFAULTS = {
     CONF_EXPORT_MODE: "never",  # Default to never export
     CONF_MIN_EXPORT_PRICE_SEK_PER_KWH: 3.0,  # SEK/kWh
     CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK: 0.50,  # SEK
+    CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH: 0.10,  # SEK/kWh - Minimum 10 öre profit
     CONF_COMFORT_PRIORITY: "balanced",  # cost_first, balanced, comfort_first
     CONF_QUIET_HOURS_START: "22:00",  # time
     CONF_QUIET_HOURS_END: "07:00",  # time
@@ -423,6 +425,9 @@ def _schema_user(defaults: dict | None = None, hass=None) -> vol.Schema:
         ),
         vol.Optional(CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK, default=d.get(CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK, 0.50)): selector.NumberSelector(
             selector.NumberSelectorConfig(min=0, max=10, step=0.01, unit_of_measurement="SEK", mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Optional(CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH, default=d.get(CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH, 0.10)): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=0, max=1, step=0.01, unit_of_measurement="SEK/kWh", mode=selector.NumberSelectorMode.BOX)
         ),
         
         # Load shifting optimization

@@ -27,6 +27,7 @@ def simple_plan(
     cost_strategy: Optional[CostStrategy] = None,
     export_mode: str = "never",
     battery_degradation_per_cycle: float = 0.50,
+    min_arbitrage_profit: float = 0.10,
 ) -> List[PlanAction]:
     """
     Enhanced heuristic with cost strategy:
@@ -111,6 +112,31 @@ def simple_plan(
                 should_charge = False
                 action.notes = f"Skip charge (solar expected soon, SOC: {current_batt_soc:.0f}%)"
             
+            # Cost-benefit analysis: Check if charging is profitable
+            # Only applies when battery is above reserve (not critical charging)
+            if should_charge and current_batt_soc > reserve_soc:
+                # Find next likely discharge opportunity
+                next_discharge_price = _find_next_high_price(
+                    t, price_map, cost_strategy, horizon_hours=12
+                )
+                
+                if next_discharge_price:
+                    # Calculate energy for one hour of charging
+                    charge_energy_kwh = batt_max_charge_w / 1000.0
+                    
+                    is_profitable = cost_strategy.is_arbitrage_profitable(
+                        buy_price=price.enriched_sek_per_kwh,
+                        sell_price=next_discharge_price,
+                        energy_kwh=charge_energy_kwh,
+                        degradation_cost_per_cycle=battery_degradation_per_cycle,
+                        battery_capacity_kwh=batt_capacity_kwh,
+                        min_profit_threshold=min_arbitrage_profit
+                    )
+                    
+                    if not is_profitable:
+                        should_charge = False
+                        action.notes = f"Skip charge (insufficient arbitrage profit: buy={price.enriched_sek_per_kwh:.2f}, sell={next_discharge_price:.2f})"
+            
             # Check if we should discharge battery
             should_discharge = cost_strategy.should_discharge_battery(
                 price.enriched_sek_per_kwh,
@@ -185,6 +211,34 @@ def _is_solar_coming_soon(
         if solar_point and solar_point.watts > threshold_w:
             return True
     return False
+
+
+def _find_next_high_price(
+    current_time: datetime,
+    price_map: dict,
+    cost_strategy: CostStrategy,
+    horizon_hours: int = 12
+) -> Optional[float]:
+    """
+    Find the next high price within horizon for arbitrage calculation.
+    
+    Args:
+        current_time: Current hour timestamp
+        price_map: Dictionary mapping hour timestamps to PricePoint objects
+        cost_strategy: Cost strategy for price classification
+        horizon_hours: Number of hours ahead to search (default 12)
+    
+    Returns:
+        Price (SEK/kWh) of next high-cost hour, or None if no high price found
+    """
+    for hour in range(1, horizon_hours + 1):
+        future_time = current_time + timedelta(hours=hour)
+        future_price = price_map.get(future_time)
+        if future_price:
+            level = cost_strategy.classify_price(future_price.enriched_sek_per_kwh)
+            if level == CostLevel.HIGH:
+                return future_price.enriched_sek_per_kwh
+    return None
 
 
 def _should_export_to_grid(
