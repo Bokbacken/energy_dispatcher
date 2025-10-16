@@ -121,6 +121,9 @@ CONF_EXPORT_MODE = "export_mode"  # never, excess_solar_only, peak_price_opportu
 CONF_MIN_EXPORT_PRICE_SEK_PER_KWH = "min_export_price_sek_per_kwh"  # SEK/kWh
 CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK = "battery_degradation_cost_per_cycle_sek"  # SEK
 
+# Cost-benefit analysis settings
+CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH = "min_arbitrage_profit_sek_per_kwh"  # SEK/kWh
+
 # Load shifting optimization
 CONF_ENABLE_LOAD_SHIFTING = "enable_load_shifting"  # Boolean
 CONF_LOAD_SHIFT_FLEXIBILITY_HOURS = "load_shift_flexibility_hours"  # Hours (default: 6)

@@ -352,6 +352,97 @@ class CostStrategy:
         
         return selected_hours
     
+    def calculate_arbitrage_profit(
+        self,
+        buy_price: float,
+        discharge_value: float,
+        energy_kwh: float,
+        degradation_cost_per_cycle: float,
+        battery_capacity_kwh: float,
+        efficiency: float = 0.9
+    ) -> float:
+        """
+        Calculate net profit from import avoidance arbitrage (charge low, discharge to avoid expensive imports).
+        
+        Args:
+            buy_price: Purchase price for charging (SEK/kWh)
+            discharge_value: Value of discharging = avoided import price (SEK/kWh)
+            energy_kwh: Energy amount for the transaction (kWh)
+            degradation_cost_per_cycle: Battery degradation cost per full cycle (SEK)
+            battery_capacity_kwh: Battery capacity for cycle fraction calculation (kWh)
+            efficiency: Round-trip efficiency factor (default 0.9 for 90%)
+        
+        Returns:
+            Net profit in SEK (can be negative if unprofitable)
+        """
+        # Cost avoided by discharging instead of importing (after efficiency loss)
+        cost_avoided = discharge_value * energy_kwh * efficiency
+        
+        # Cost of buying energy to charge
+        cost = buy_price * energy_kwh
+        
+        # Degradation cost (prorated by cycle fraction)
+        cycle_fraction = energy_kwh / battery_capacity_kwh if battery_capacity_kwh > 0 else 0
+        degradation = degradation_cost_per_cycle * cycle_fraction
+        
+        # Net profit (savings from avoided import minus charging cost and degradation)
+        net_profit = cost_avoided - cost - degradation
+        
+        _LOGGER.debug(
+            "Arbitrage profit calculation: buy=%.3f, discharge_value=%.3f, energy=%.2f kWh, "
+            "efficiency=%.0f%%, degradation=%.3f SEK, net_profit=%.3f SEK",
+            buy_price,
+            discharge_value,
+            energy_kwh,
+            efficiency * 100,
+            degradation,
+            net_profit,
+        )
+        
+        return net_profit
+    
+    def is_arbitrage_profitable(
+        self,
+        buy_price: float,
+        discharge_value: float,
+        energy_kwh: float,
+        degradation_cost_per_cycle: float,
+        battery_capacity_kwh: float,
+        min_profit_threshold: float = 0.10,
+    ) -> bool:
+        """
+        Check if import avoidance arbitrage opportunity is profitable.
+        
+        Args:
+            buy_price: Purchase price for charging (SEK/kWh)
+            discharge_value: Value of discharging = avoided import price (SEK/kWh)
+            energy_kwh: Energy amount for the transaction (kWh)
+            degradation_cost_per_cycle: Battery degradation cost per full cycle (SEK)
+            battery_capacity_kwh: Battery capacity (kWh)
+            min_profit_threshold: Minimum profit in SEK to consider worthwhile (default 0.10)
+        
+        Returns:
+            True if arbitrage is profitable above threshold, False otherwise
+        """
+        profit = self.calculate_arbitrage_profit(
+            buy_price,
+            discharge_value,
+            energy_kwh,
+            degradation_cost_per_cycle,
+            battery_capacity_kwh
+        )
+        
+        is_profitable = profit >= min_profit_threshold
+        
+        _LOGGER.debug(
+            "Arbitrage profitability check: profit=%.3f SEK, threshold=%.3f SEK, profitable=%s",
+            profit,
+            min_profit_threshold,
+            is_profitable,
+        )
+        
+        return is_profitable
+    
     def get_cost_summary(self, prices: List[PricePoint], now: datetime, horizon_hours: int = 24) -> Dict:
         """Get summary of cost classification for the horizon."""
         end_time = now + timedelta(hours=horizon_hours)

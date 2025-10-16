@@ -54,8 +54,8 @@ The optimization plan currently does **NOT** consider:
 
 1. ~~**Export Mode**~~ - ✅ **NOW INTEGRATED** - Export settings are used in planning (PR #1)
 2. ~~**Export Opportunities**~~ - ✅ **NOW INTEGRATED** - Discharge-to-export decisions included (PR #1)
-3. **Purchase Price vs Export Price** - Limited arbitrage analysis (basic profitability check in PR #1)
-4. ~~**Battery Degradation Costs**~~ - ✅ **NOW INTEGRATED** - Factored into export decisions (PR #1)
+3. ~~**Purchase Price vs Export Price**~~ - ✅ **NOW INTEGRATED** - Full arbitrage analysis with profitability threshold (PR #3)
+4. ~~**Battery Degradation Costs**~~ - ✅ **NOW INTEGRATED** - Factored into all charge/discharge decisions (PR #1, PR #3)
 5. ~~**Solar Forecast**~~ - ✅ **NOW INTEGRATED** - Used for reserve reduction and charging decisions (PR #2)
 6. **Weather Adjustments** - Weather-aware battery reserve exists but not fully integrated in planning
 
@@ -102,6 +102,52 @@ Solar forecast is now **actively used in optimization planning**:
 - In `excess_solar_only` mode:
   - Battery must be ≥95% SOC
   - Solar production must be >1000W
+
+### ✅ Cost-Benefit Analysis (NEW - PR #3)
+
+**Import Avoidance Arbitrage** is now **integrated into battery charging decisions**:
+
+**Profitability Calculation**:
+- For each charging opportunity, calculates net profit from future discharge
+- Considers: buy price, discharge value (avoided import price), battery efficiency (90%), degradation cost
+- Formula: `net_profit = (discharge_value × energy × 0.9) - (buy_price × energy) - (degradation_cost × cycle_fraction)`
+- Cycle fraction prorated by energy: `cycle_fraction = energy_kwh / battery_capacity_kwh`
+
+**Charging Decision Logic** (NEW):
+- Before charging (when battery above reserve), checks if arbitrage is profitable
+- Looks ahead 12 hours for next high-price discharge opportunity
+- Calculates net profit for the potential charge/discharge cycle
+- Skips charging if profit below threshold (default: 0.10 SEK/kWh, configurable)
+- Critical charging (below reserve) bypasses profitability check
+
+**Configuration**:
+- `min_arbitrage_profit_sek_per_kwh`: Minimum profit threshold (default 0.10 SEK/kWh = 10 öre)
+- Prevents unprofitable charge/discharge cycles from small price differences
+- Extends battery lifespan by avoiding unnecessary cycling
+
+**Benefits**:
+- Fewer unnecessary charge/discharge cycles (reduces battery degradation)
+- Only executes profitable arbitrage opportunities
+- Considers round-trip efficiency (10% loss) and degradation costs
+- Configurable profit threshold for user preference (conservative vs aggressive)
+
+**Example** (Import Avoidance):
+- Buy price: 2.00 SEK/kWh, Discharge value (avoided import): 3.00 SEK/kWh
+- Battery: 10 kWh capacity, Charging: 5 kWh (0.5 cycle)
+- Cost avoided: 3.00 × 5 × 0.9 = 13.50 SEK
+- Cost: 2.00 × 5 = 10.00 SEK
+- Degradation: 0.50 × 0.5 = 0.25 SEK
+- Net profit: 13.50 - 10.00 - 0.25 = 3.25 SEK ✓ (profitable, charge!)
+
+**Example** (unprofitable):
+- Buy price: 2.00 SEK/kWh, Discharge value (avoided import): 2.10 SEK/kWh
+- Battery: 10 kWh capacity, Charging: 5 kWh (0.5 cycle)
+- Cost avoided: 2.10 × 5 × 0.9 = 9.45 SEK
+- Cost: 2.00 × 5 = 10.00 SEK
+- Degradation: 0.50 × 0.5 = 0.25 SEK
+- Net profit: 9.45 - 10.00 - 0.25 = -0.80 SEK ✗ (loss, skip charge!)
+
+**Note**: This is for **import avoidance**, not grid export. The "discharge value" is the avoided cost of importing expensive power, not revenue from exporting. Grid export decisions use the actual export price from the "Grid Export Value" sensor.
 
 ---
 
@@ -751,7 +797,7 @@ If export mode = "peak_price_opportunistic":
 
 ## 📝 Summary
 
-**Current Optimization Plan** (Updated with PR #1 and PR #2):
+**Current Optimization Plan** (Updated with PR #1, PR #2, and PR #3):
 - ✅ Uses dynamic cost thresholds (improved accuracy)
 - ✅ Charges during cheap hours
 - ✅ Discharges during high hours (import avoidance AND export)
@@ -759,9 +805,11 @@ If export mode = "peak_price_opportunistic":
 - ✅ Optimizes EV charging timing
 - ✅ **NEW: Export mode integrated** - Export decisions in 24h plan (PR #1)
 - ✅ **NEW: Export price calculation** - Automatic 2025/2026 handling (PR #1)
-- ✅ **NEW: Battery degradation factored** - In export profitability (PR #1)
+- ✅ **NEW: Battery degradation factored** - In all charge/discharge decisions (PR #1, PR #3)
 - ✅ **NEW: Solar forecast integration** - Reserve reduction and charging logic (PR #2)
 - ✅ **NEW: Solar-aware charging** - Skips grid charging when solar coming soon (PR #2)
+- ✅ **NEW: Cost-benefit analysis** - Arbitrage profitability check before charging (PR #3)
+- ✅ **NEW: Smart charging decisions** - Avoids unprofitable charge/discharge cycles (PR #3)
 - ⚠️ Does NOT have full weather-aware reserve integration (coming in PR #4)
 
 **Your E.ON SE4 Contract**:
@@ -776,8 +824,12 @@ If export mode = "peak_price_opportunistic":
 3. Use "excess_solar_only" export mode if you prefer conservative approach
 4. Monitor optimization plan attributes to see export actions
 5. Plan for 2026 when export becomes less attractive (tax return expires)
-6. Check plan `notes` field for "Export (price: X SEK/kWh)" or "Skip charge (solar expected soon)" messages
+6. Check plan `notes` field for messages like:
+   - "Export (price: X SEK/kWh)"
+   - "Skip charge (solar expected soon)"
+   - "Skip charge (insufficient arbitrage profit: buy=X, sell=Y)" (NEW in PR #3)
 7. **NEW: Solar integration benefits** - Lower reserve requirements and less grid charging when solar forecast shows production during expensive hours
+8. **NEW: Arbitrage profit threshold** - Default 0.10 SEK/kWh (10 öre) prevents wasteful cycling; increase for more conservative, decrease for more aggressive optimization
 
 **Questions or Issues?**:
 - Check `docs/troubleshooting_optimization_plan.md`
@@ -786,5 +838,5 @@ If export mode = "peak_price_opportunistic":
 
 ---
 
-**Document Status**: Updated with PR #1 (export) and PR #2 (solar forecast) - 2025-10-15  
-**Next Update**: After PR #3 (cost-benefit analysis) or PR #4 (weather integration)
+**Document Status**: Updated with PR #1 (export), PR #2 (solar forecast), and PR #3 (cost-benefit analysis) - 2025-10-16  
+**Next Update**: After PR #4 (weather integration)

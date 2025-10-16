@@ -68,6 +68,7 @@ from .const import (
     CONF_EXPORT_MODE,
     CONF_MIN_EXPORT_PRICE_SEK_PER_KWH,
     CONF_BATTERY_DEGRADATION_COST_PER_CYCLE_SEK,
+    CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH,
 )
 from .models import PricePoint, ChargingMode
 from .price_provider import PriceProvider, PriceFees
@@ -279,6 +280,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         self.data: Dict[str, Any] = {
             "hourly_prices": [],
             "current_enriched": None,
+            "current_export": None,
             # Baseline
             "house_baseline_w": None,
             "baseline_method": None,
@@ -484,6 +486,26 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         
         export_price = spot_price + grid_utility + energy_surcharge + tax_return
         return export_price
+    
+    def _get_current_export_price(self, hourly: List[PricePoint]) -> Optional[float]:
+        """Get the current export price from hourly data.
+        
+        Similar to get_current_enriched, returns the export price for the current hour.
+        
+        Args:
+            hourly: List of PricePoint objects with export prices
+            
+        Returns:
+            Current export price in SEK/kWh, or None if no data available
+        """
+        if not hourly:
+            return None
+        now = dt_util.now().replace(minute=0, second=0, microsecond=0)
+        # Get the most recent hour <= now, otherwise the first future hour
+        past = [p for p in hourly if p.time <= now]
+        if past:
+            return past[-1].export_sek_per_kwh
+        return hourly[0].export_sek_per_kwh
 
     # ---------- prices ----------
     async def _update_prices(self):
@@ -491,6 +513,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         if not nordpool_entity:
             self.data["hourly_prices"] = []
             self.data["current_enriched"] = None
+            self.data["current_export"] = None
             self.data["cheap_threshold"] = None
             _LOGGER.debug("Ingen Nordpool-entity konfigurerad")
             return
@@ -518,6 +541,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
         
         self.data["hourly_prices"] = hourly
         self.data["current_enriched"] = provider.get_current_enriched(hourly)
+        
+        # Calculate current export price
+        self.data["current_export"] = self._get_current_export_price(hourly)
 
         # P25-tröskel 24h framåt
         now = now.replace(minute=0, second=0, microsecond=0)
@@ -1141,6 +1167,11 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 0.50
             )
             
+            min_arbitrage_profit = _safe_float(
+                self._get_cfg(CONF_MIN_ARBITRAGE_PROFIT_SEK_PER_KWH, 0.10),
+                0.10
+            )
+            
             # Generate plan
             now = dt_util.now()
             plan = simple_plan(
@@ -1158,6 +1189,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator):
                 cost_strategy=self._cost_strategy,
                 export_mode=export_mode,
                 battery_degradation_per_cycle=degradation_cost,
+                min_arbitrage_profit=min_arbitrage_profit,
             )
             
             self.data["optimization_plan"] = plan
