@@ -20,7 +20,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class SolarForecastRawSensor(SensorEntity):
     _attr_has_entity_name = True
-    _attr_unique_id = "solar_forecast_raw"
+    _attr_translation_key = "solar_forecast_raw"
     _attr_native_unit_of_measurement = "kWh"
     _attr_device_class = "energy"
     _attr_state_class = "measurement"
@@ -57,10 +57,6 @@ class SolarForecastRawSensor(SensorEntity):
             manual_inverter_ac_cap=config.get("manual_inverter_ac_kw_cap"),
             manual_calibration_enabled=config.get("manual_calibration_enabled", False),
         )
-
-    @property
-    def name(self):
-        return "Solar Forecast (Raw)"
 
     @property
     def state(self):
@@ -97,7 +93,7 @@ class SolarForecastRawSensor(SensorEntity):
 
 class SolarForecastCompensatedSensor(SensorEntity):
     _attr_has_entity_name = True
-    _attr_unique_id = "solar_forecast_compensated"
+    _attr_translation_key = "solar_forecast_compensated"
     _attr_native_unit_of_measurement = "kWh"
     _attr_device_class = "energy"
     _attr_state_class = "measurement"
@@ -135,9 +131,7 @@ class SolarForecastCompensatedSensor(SensorEntity):
             manual_calibration_enabled=config.get("manual_calibration_enabled", False),
         )
 
-    @property
-    def name(self):
-        return "Solar Forecast (Cloud Compensated)"
+
 
     @property
     def state(self):
@@ -194,7 +188,7 @@ class WeatherCapabilitySensor(SensorEntity):
     """Sensor showing detected weather capabilities for manual forecast."""
     
     _attr_has_entity_name = True
-    _attr_unique_id = "solar_forecast_weather_capabilities"
+    _attr_translation_key = "weather_capability"
     _attr_icon = "mdi:weather-partly-cloudy"
     
     def __init__(self, hass: HomeAssistant, entry):
@@ -234,10 +228,6 @@ class WeatherCapabilitySensor(SensorEntity):
         """Return True only if manual physics is enabled."""
         config = {**self._entry.data, **(self._entry.options or {})}
         return config.get("forecast_source") == "manual_physics"
-    
-    @property
-    def name(self):
-        return "Weather Forecast Capabilities"
     
     @property
     def state(self):

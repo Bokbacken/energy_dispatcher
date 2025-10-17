@@ -12,11 +12,13 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
 
 
 class ResetBatteryCostButton(ButtonEntity):
+    _attr_has_entity_name = True
+    _attr_translation_key = "reset_battery_cost"
+    _attr_icon = "mdi:backup-restore"
+    
     def __init__(self, hass: HomeAssistant, entry_id: str):
         self._hass = hass
         self._entry_id = entry_id
-        self._attr_name = "Reset Battery Energy Cost"
-        self._attr_icon = "mdi:backup-restore"
 
     @property
     def unique_id(self) -> str:

@@ -66,7 +66,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
 class DishwasherOptimalTimeSensor(BaseEDSensor):
     """Sensor showing optimal time to run dishwasher."""
 
-    _attr_name = "Dishwasher Optimal Start Time"
+    _attr_translation_key = "dishwasher_optimal_time"
     _attr_icon = "mdi:dishwasher"
 
     @property
@@ -113,7 +113,7 @@ class DishwasherOptimalTimeSensor(BaseEDSensor):
 class WashingMachineOptimalTimeSensor(BaseEDSensor):
     """Sensor showing optimal time to run washing machine."""
 
-    _attr_name = "Washing Machine Optimal Start Time"
+    _attr_translation_key = "washing_machine_optimal_time"
     _attr_icon = "mdi:washing-machine"
 
     @property
@@ -160,7 +160,7 @@ class WashingMachineOptimalTimeSensor(BaseEDSensor):
 class WaterHeaterOptimalTimeSensor(BaseEDSensor):
     """Sensor showing optimal time to heat water."""
 
-    _attr_name = "Water Heater Optimal Time"
+    _attr_translation_key = "water_heater_optimal_time"
     _attr_icon = "mdi:water-boiler"
 
     @property
@@ -211,7 +211,7 @@ class WaterHeaterOptimalTimeSensor(BaseEDSensor):
 class WeatherAdjustedSolarForecastSensor(BaseEDSensor):
     """Sensor showing weather-adjusted solar forecast."""
 
-    _attr_name = "Weather Adjusted Solar Forecast"
+    _attr_translation_key = "weather_adjusted_solar_forecast"
     _attr_icon = "mdi:weather-partly-cloudy"
     _attr_native_unit_of_measurement = "kWh"
     _attr_device_class = "energy"
@@ -260,7 +260,7 @@ class WeatherAdjustedSolarForecastSensor(BaseEDSensor):
 class ExportOpportunityBinarySensor(BinarySensorEntity, BaseEDSensor):
     """Binary sensor indicating export opportunity."""
     
-    _attr_name = "Export Opportunity"
+    _attr_translation_key = "export_opportunity"
     _attr_icon = "mdi:transmission-tower-export"
     _attr_device_class = BinarySensorDeviceClass.POWER
 
@@ -294,7 +294,7 @@ class ExportOpportunityBinarySensor(BinarySensorEntity, BaseEDSensor):
 class ExportRevenueEstimateSensor(BaseEDSensor):
     """Sensor showing estimated export revenue."""
     
-    _attr_name = "Export Revenue Estimate"
+    _attr_translation_key = "export_revenue_estimate"
     _attr_icon = "mdi:cash-plus"
     _attr_native_unit_of_measurement = "SEK"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -334,7 +334,7 @@ class ExportRevenueEstimateSensor(BaseEDSensor):
 class LoadShiftOpportunitySensor(BaseEDSensor):
     """Sensor showing best load shifting opportunity."""
     
-    _attr_name = "Load Shift Opportunity"
+    _attr_translation_key = "load_shift_opportunity"
     _attr_icon = "mdi:clock-time-four"
 
     @property
@@ -378,7 +378,7 @@ class LoadShiftOpportunitySensor(BaseEDSensor):
 class LoadShiftSavingsSensor(BaseEDSensor):
     """Sensor showing potential savings from load shifting."""
     
-    _attr_name = "Load Shift Savings Potential"
+    _attr_translation_key = "load_shift_savings"
     _attr_icon = "mdi:piggy-bank"
     _attr_native_unit_of_measurement = "SEK"
     _attr_state_class = SensorStateClass.MEASUREMENT

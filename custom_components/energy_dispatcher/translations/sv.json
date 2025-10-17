@@ -190,6 +190,90 @@
   },
   "entity": {
     "sensor": {
+      "plan_summary": {
+        "name": "Planöversikt"
+      },
+      "price_schedule": {
+        "name": "Prisschema"
+      },
+      "solar_forecast": {
+        "name": "Solprognos"
+      },
+      "battery_status": {
+        "name": "Batteristatus"
+      },
+      "ev_status": {
+        "name": "EV-status"
+      },
+      "enriched_power_price": {
+        "name": "Berikat Elpris"
+      },
+      "grid_export_value": {
+        "name": "Nätexportvärde"
+      },
+      "house_load_baseline": {
+        "name": "Huslast Baslinje"
+      },
+      "battery_runtime_estimate": {
+        "name": "Batteritidsuppskattning"
+      },
+      "battery_energy_cost": {
+        "name": "Batterienergikostnad"
+      },
+      "battery_vs_grid_price_delta": {
+        "name": "Batteri vs Nätprisdelta"
+      },
+      "solar_power_forecast_now": {
+        "name": "Soleffektprognos Nu"
+      },
+      "solar_energy_forecast_today": {
+        "name": "Solenergiprognos Idag"
+      },
+      "solar_energy_forecast_tomorrow": {
+        "name": "Solenergiprognos Imorgon"
+      },
+      "solar_production_now": {
+        "name": "Solproduktion Nu"
+      },
+      "solar_production_today": {
+        "name": "Solproduktion Idag"
+      },
+      "solar_forecast_delta_15m": {
+        "name": "Solprognosdelta 15 min"
+      },
+      "ev_time_until_charge": {
+        "name": "EV Tid Tills Laddning"
+      },
+      "ev_charge_reason": {
+        "name": "EV Laddningsorsak"
+      },
+      "ev_charging_session": {
+        "name": "EV Laddningssession"
+      },
+      "battery_charging_state": {
+        "name": "Batteriladdningsstatus"
+      },
+      "battery_power_flow": {
+        "name": "Batterieffektflöde"
+      },
+      "battery_time_until_charge": {
+        "name": "Batteri Tid Tills Laddning"
+      },
+      "battery_charge_reason": {
+        "name": "Batteriladdningsorsak"
+      },
+      "cost_level": {
+        "name": "Kostnadsnivå"
+      },
+      "battery_reserve_recommendation": {
+        "name": "Batterireservrekommendation"
+      },
+      "next_high_cost_window": {
+        "name": "Nästa Högkostnadsfönster"
+      },
+      "optimization_plan": {
+        "name": "Optimeringsplan"
+      },
       "dishwasher_optimal_time": {
         "name": "Diskmaskin Optimal Starttid"
       },
@@ -199,15 +283,156 @@
       "water_heater_optimal_time": {
         "name": "Varmvattenberedare Optimal Tid"
       },
+      "weather_adjusted_solar_forecast": {
+        "name": "Väderjusterad Solprognos"
+      },
+      "export_opportunity": {
+        "name": "Exportmöjlighet"
+      },
+      "export_revenue_estimate": {
+        "name": "Exportintäktsuppskattning"
+      },
       "load_shift_opportunity": {
         "name": "Lastförskjutningsmöjlighet"
       },
       "load_shift_savings": {
         "name": "Lastförskjutning Besparingspotential"
+      },
+      "solar_forecast_raw": {
+        "name": "Solprognos (Rå)"
+      },
+      "solar_forecast_compensated": {
+        "name": "Solprognos (Kompenserad)"
+      },
+      "weather_capability": {
+        "name": "Väderkapacitet"
+      }
+    },
+    "number": {
+      "ev_battery_capacity": {
+        "name": "EV Batterikapacitet"
+      },
+      "ev_current_soc": {
+        "name": "EV Aktuell SOC"
+      },
+      "ev_target_soc": {
+        "name": "EV Mål-SOC"
+      },
+      "home_battery_capacity": {
+        "name": "Hemmabatteri Kapacitet"
+      },
+      "home_battery_soc_floor": {
+        "name": "Hemmabatteri SOC-golv"
+      },
+      "evse_max_current": {
+        "name": "EVSE Max Ström"
+      },
+      "evse_phases": {
+        "name": "EVSE Faser"
+      },
+      "evse_voltage": {
+        "name": "EVSE Spänning"
+      }
+    },
+    "select": {
+      "ev_target_preset": {
+        "name": "EV Mål-SOC – Snabbval"
+      }
+    },
+    "switch": {
+      "auto_dispatch": {
+        "name": "Automatisk styrning"
+      },
+      "auto_ev": {
+        "name": "Auto EV"
+      },
+      "auto_planner": {
+        "name": "Automatisk planerare"
+      }
+    },
+    "button": {
+      "force_battery_charge": {
+        "name": "Tvinga batteriladdning"
+      },
+      "force_battery_discharge": {
+        "name": "Tvinga batteriurladdning"
+      },
+      "reset_battery_cost": {
+        "name": "Återställ Batterienergikostnad"
       }
     }
   },
   "services": {
+    "set_manual_ev": {
+      "name": "Ställ in manuell EV SOC",
+      "description": "Uppdatera manuell EV laddningsnivå",
+      "fields": {
+        "soc_current": {
+          "name": "Nuvarande SOC",
+          "description": "Nuvarande EV-batteri procent"
+        },
+        "soc_target": {
+          "name": "Mål-SOC",
+          "description": "Mål-SOC för EV procent"
+        }
+      }
+    },
+    "ev_force_charge": {
+      "name": "EV tvingad laddning",
+      "description": "Starta EV-laddning en tid med visst strömvärde",
+      "fields": {
+        "duration": {
+          "name": "Varaktighet (minuter)",
+          "description": "Varaktighet i minuter"
+        },
+        "current": {
+          "name": "Laddström (A)",
+          "description": "Laddström i ampere"
+        }
+      }
+    },
+    "ev_pause": {
+      "name": "EV paus",
+      "description": "Pausa EV-laddning i angivet antal minuter",
+      "fields": {
+        "duration": {
+          "name": "Varaktighet (minuter)",
+          "description": "Varaktighet i minuter"
+        }
+      }
+    },
+    "force_battery_charge": {
+      "name": "Tvinga batteriladdning",
+      "description": "Ladda batteriet med angiven effekt om adapter stödjer det",
+      "fields": {
+        "power_w": {
+          "name": "Effekt (W)",
+          "description": "Effekt i watt"
+        },
+        "duration": {
+          "name": "Varaktighet (minuter)",
+          "description": "Varaktighet i minuter"
+        }
+      }
+    },
+    "battery_cost_reset": {
+      "name": "Återställ batterienergikostnad",
+      "description": "Återställ den vägda genomsnittskostnaden (WACE) för energi i batteriet till noll"
+    },
+    "battery_cost_set_soc": {
+      "name": "Ställ in batteri SOC manuellt",
+      "description": "Ställ in batteriets laddningsnivå (SOC) manuellt i procent",
+      "fields": {
+        "soc_percent": {
+          "name": "SOC Procent",
+          "description": "Batteriladdningsnivå (0-100%)"
+        }
+      }
+    },
+    "create_dashboard_notification": {
+      "name": "Skapa instrumentpanel-meddelande",
+      "description": "Skapa eller återskapa instrumentpanelens installationsmeddelande med instruktioner och länkar"
+    },
     "schedule_appliance": {
       "name": "Schemalägg Apparat",
       "description": "Få optimal tid att köra en apparat baserat på elpriser och solprognos",

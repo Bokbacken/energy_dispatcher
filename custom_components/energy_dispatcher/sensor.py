@@ -80,6 +80,8 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
 
 
 class BaseEDSensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True
+    
     def __init__(self, coordinator, entry_id: str):
         super().__init__(coordinator)
         self._entry_id = entry_id
@@ -94,7 +96,7 @@ class BaseEDSensor(CoordinatorEntity, SensorEntity):
 
 
 class EnrichedPriceSensor(BaseEDSensor):
-    _attr_name = "Enriched Power Price"
+    _attr_translation_key = "enriched_power_price"
     _attr_native_unit_of_measurement = "SEK/kWh"
     _attr_icon = "mdi:currency-usd"
 
@@ -124,7 +126,7 @@ class EnrichedPriceSensor(BaseEDSensor):
 
 
 class ExportPriceSensor(BaseEDSensor):
-    _attr_name = "Grid Export Value"
+    _attr_translation_key = "grid_export_value"
     _attr_native_unit_of_measurement = "SEK/kWh"
     _attr_icon = "mdi:transmission-tower-export"
 
@@ -153,7 +155,7 @@ class ExportPriceSensor(BaseEDSensor):
 
 
 class HouseBaselineSensor(BaseEDSensor):
-    _attr_name = "House Load Baseline"
+    _attr_translation_key = "house_load_baseline"
     _attr_native_unit_of_measurement = "W"
     _attr_icon = "mdi:home-lightning-bolt"
     _attr_device_class = "power"
@@ -178,7 +180,7 @@ class HouseBaselineSensor(BaseEDSensor):
 
 
 class BatteryRuntimeSensor(BaseEDSensor):
-    _attr_name = "Battery Runtime Estimate"
+    _attr_translation_key = "battery_runtime_estimate"
     _attr_native_unit_of_measurement = "h"
     _attr_icon = "mdi:clock-outline"
 
@@ -199,7 +201,7 @@ class BatteryRuntimeSensor(BaseEDSensor):
 
 
 class BatteryCostSensor(BaseEDSensor):
-    _attr_name = "Battery Energy Cost"
+    _attr_translation_key = "battery_energy_cost"
     _attr_native_unit_of_measurement = "SEK/kWh"
     _attr_icon = "mdi:battery-heart-variant"
 
@@ -243,7 +245,7 @@ class BatteryCostSensor(BaseEDSensor):
 
 
 class BatteryVsGridDeltaSensor(BaseEDSensor):
-    _attr_name = "Battery vs Grid Price Delta"
+    _attr_translation_key = "battery_vs_grid_price_delta"
     _attr_native_unit_of_measurement = "SEK/kWh"
     _attr_icon = "mdi:scale-balance"
 
@@ -257,7 +259,7 @@ class BatteryVsGridDeltaSensor(BaseEDSensor):
 
 
 class SolarPowerNowSensor(BaseEDSensor):
-    _attr_name = "Solar Power Forecast Now"
+    _attr_translation_key = "solar_power_forecast_now"
     _attr_native_unit_of_measurement = "W"
     _attr_icon = "mdi:solar-power"
     _attr_device_class = "power"
@@ -278,7 +280,7 @@ class SolarPowerNowSensor(BaseEDSensor):
 
 
 class SolarEnergyTodaySensor(BaseEDSensor):
-    _attr_name = "Solar Energy Forecast Today"
+    _attr_translation_key = "solar_energy_forecast_today"
     _attr_native_unit_of_measurement = "kWh"
     _attr_icon = "mdi:solar-power"
     _attr_device_class = "energy"
@@ -294,7 +296,7 @@ class SolarEnergyTodaySensor(BaseEDSensor):
 
 
 class SolarEnergyTomorrowSensor(BaseEDSensor):
-    _attr_name = "Solar Energy Forecast Tomorrow"
+    _attr_translation_key = "solar_energy_forecast_tomorrow"
     _attr_native_unit_of_measurement = "kWh"
     _attr_icon = "mdi:solar-power"
     _attr_device_class = "energy"
@@ -310,7 +312,7 @@ class SolarEnergyTomorrowSensor(BaseEDSensor):
 
 
 class PVPowerNowSensor(BaseEDSensor):
-    _attr_name = "Solar Production Now"
+    _attr_translation_key = "solar_production_now"
     _attr_native_unit_of_measurement = "W"
     _attr_icon = "mdi:solar-power"
     _attr_device_class = "power"
@@ -326,7 +328,7 @@ class PVPowerNowSensor(BaseEDSensor):
 
 
 class PVEnergyTodaySensor(BaseEDSensor):
-    _attr_name = "Solar Production Today"
+    _attr_translation_key = "solar_production_today"
     _attr_native_unit_of_measurement = "kWh"
     _attr_icon = "mdi:solar-power"
     _attr_device_class = "energy"
@@ -342,7 +344,7 @@ class PVEnergyTodaySensor(BaseEDSensor):
 
 
 class SolarDelta15mSensor(BaseEDSensor):
-    _attr_name = "Solar Forecast Delta 15m"
+    _attr_translation_key = "solar_forecast_delta_15m"
     _attr_native_unit_of_measurement = "W"
     _attr_icon = "mdi:chart-line"
     _attr_state_class = "measurement"
@@ -361,7 +363,7 @@ class SolarDelta15mSensor(BaseEDSensor):
 
 
 class EVTimeUntilChargeSensor(BaseEDSensor):
-    _attr_name = "EV Time Until Charge"
+    _attr_translation_key = "ev_time_until_charge"
     _attr_native_unit_of_measurement = "min"
     _attr_icon = "mdi:clock-start"
 
@@ -375,7 +377,7 @@ class EVTimeUntilChargeSensor(BaseEDSensor):
 
 
 class EVChargeReasonSensor(BaseEDSensor):
-    _attr_name = "EV Charge Reason"
+    _attr_translation_key = "ev_charge_reason"
     _attr_icon = "mdi:information-outline"
 
     @property
@@ -395,7 +397,7 @@ class EVChargeReasonSensor(BaseEDSensor):
 
 
 class EVChargingSessionSensor(BaseEDSensor):
-    _attr_name = "EV Charging Session"
+    _attr_translation_key = "ev_charging_session"
     _attr_icon = "mdi:ev-station"
 
     @property
@@ -434,7 +436,7 @@ class EVChargingSessionSensor(BaseEDSensor):
 
 
 class BatteryChargingStateSensor(BaseEDSensor):
-    _attr_name = "Battery Charging State"
+    _attr_translation_key = "battery_charging_state"
     _attr_icon = "mdi:battery-charging"
 
     @property
@@ -489,7 +491,7 @@ class BatteryChargingStateSensor(BaseEDSensor):
 
 
 class BatteryPowerFlowSensor(BaseEDSensor):
-    _attr_name = "Battery Power Flow"
+    _attr_translation_key = "battery_power_flow"
     _attr_native_unit_of_measurement = "W"
     _attr_icon = "mdi:transmission-tower"
     _attr_device_class = "power"
@@ -542,7 +544,7 @@ class BatteryPowerFlowSensor(BaseEDSensor):
 
 
 class BattTimeUntilChargeSensor(BaseEDSensor):
-    _attr_name = "Battery Time Until Charge"
+    _attr_translation_key = "battery_time_until_charge"
     _attr_native_unit_of_measurement = "min"
     _attr_icon = "mdi:clock-start"
 
@@ -556,7 +558,7 @@ class BattTimeUntilChargeSensor(BaseEDSensor):
 
 
 class BattChargeReasonSensor(BaseEDSensor):
-    _attr_name = "Battery Charge Reason"
+    _attr_translation_key = "battery_charge_reason"
     _attr_icon = "mdi:information-outline"
 
     @property
@@ -632,7 +634,7 @@ class SolarForecastCompensatedSensor(SensorEntity):
 
 class CostLevelSensor(BaseEDSensor):
     """Sensor showing current price cost level (cheap/medium/high)."""
-    _attr_name = "Cost Level"
+    _attr_translation_key = "cost_level"
     _attr_icon = "mdi:tag-multiple"
 
     @property
@@ -660,7 +662,7 @@ class CostLevelSensor(BaseEDSensor):
 
 class BatteryReserveSensor(BaseEDSensor):
     """Sensor showing recommended battery reserve SOC based on upcoming prices."""
-    _attr_name = "Battery Reserve Recommendation"
+    _attr_translation_key = "battery_reserve_recommendation"
     _attr_native_unit_of_measurement = "%"
     _attr_icon = "mdi:battery-alert"
 
@@ -684,7 +686,7 @@ class BatteryReserveSensor(BaseEDSensor):
 
 class NextHighCostWindowSensor(BaseEDSensor):
     """Sensor showing the next high-cost time window."""
-    _attr_name = "Next High Cost Window"
+    _attr_translation_key = "next_high_cost_window"
     _attr_icon = "mdi:clock-alert"
 
     @property
@@ -729,7 +731,7 @@ class NextHighCostWindowSensor(BaseEDSensor):
 
 class OptimizationPlanSensor(BaseEDSensor):
     """Sensor showing the optimization plan for the next 24 hours."""
-    _attr_name = "Optimization Plan"
+    _attr_translation_key = "optimization_plan"
     _attr_icon = "mdi:calendar-clock"
 
     @property

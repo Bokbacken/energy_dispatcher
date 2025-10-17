@@ -12,6 +12,9 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
 
 class EVTargetPresetSelect(SelectEntity):
     should_poll = False
+    _attr_has_entity_name = True
+    _attr_translation_key = "ev_target_preset"
+    
     def __init__(self, entry_id: str):
         self._entry_id = entry_id
         self._current = "Custom"
@@ -28,10 +31,6 @@ class EVTargetPresetSelect(SelectEntity):
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_select_ev_target_preset_{self._entry_id}"
-
-    @property
-    def name(self) -> str:
-        return "EV Mål SOC – Snabbval"
 
     @property
     def options(self):
@@ -51,9 +50,4 @@ class EVTargetPresetSelect(SelectEntity):
             if ent_id:
                 await self.hass.services.async_call("number", "set_value", {"entity_id": ent_id, "value": value}, blocking=False)
             self.hass.bus.async_fire(EVENT_ACTION, {"entry_id": self._entry_id, "entity_id": self.entity_id, "key": "ev_target_preset", "value": option})
-            await self.hass.services.async_call(
-                "logbook", "log",
-                {"name": "Energy Dispatcher", "message": f"EV mål SOC preset → {option}", "domain": "energy_dispatcher"},
-                blocking=False
-            )
         self.async_write_ha_state()
