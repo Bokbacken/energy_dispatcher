@@ -68,46 +68,8 @@ async def create_default_dashboard(hass: HomeAssistant, entry: ConfigEntry):
             "require_admin": False,
         }
         
-        # Basic dashboard view configuration
-        view_config = {
-            "title": "Energy Control",
-            "path": "energy-control",
-            "icon": "mdi:lightning-bolt",
-            "cards": [
-                {
-                    "type": "markdown",
-                    "content": "# Energy Dispatcher\n\nYour automated dashboard has been created! This is a basic view to get you started.\n\nFor a complete dashboard with graphs and controls, see the [Dashboard Guide](https://github.com/Bokbacken/energy_dispatcher/blob/main/docs/dashboard_guide.md)."
-                },
-                {
-                    "type": "entities",
-                    "title": "⚙️ Essential Settings",
-                    "entities": [
-                        f"number.{DOMAIN}_ev_aktuell_soc",
-                        f"number.{DOMAIN}_ev_mal_soc",
-                        f"number.{DOMAIN}_ev_batterikapacitet",
-                        f"number.{DOMAIN}_hemmabatteri_kapacitet",
-                    ]
-                },
-                {
-                    "type": "entities",
-                    "title": "🔋 Battery & EV Status",
-                    "entities": [
-                        f"sensor.{DOMAIN}_battery_soc",
-                        f"sensor.{DOMAIN}_ev_soc",
-                        f"sensor.{DOMAIN}_optimal_battery_action",
-                        f"sensor.{DOMAIN}_ev_optimal_action",
-                    ]
-                },
-                {
-                    "type": "entities",
-                    "title": "⚡ Quick Controls",
-                    "entities": [
-                        f"switch.{DOMAIN}_auto_ev_enabled",
-                        f"switch.{DOMAIN}_auto_planner_enabled",
-                    ]
-                }
-            ]
-        }
+        # Note: Automatic dashboard creation is complex and requires Lovelace storage API
+        # For now, we just create a notification with setup instructions
         
         # Try to use the lovelace storage system
         try:
