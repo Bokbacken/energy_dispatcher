@@ -1,102 +1,12 @@
-set_manual_ev:
-  name: Set manual EV SOC
-  description: Uppdatera manuell EV SOC
-  fields:
-    soc_current:
-      name: Current SOC
-      description: Nuvarande EV-batteri %
-      example: 40
-      required: false
-      selector:
-        number:
-          min: 0
-          max: 100
-          unit_of_measurement: "%"
-          mode: box
-    soc_target:
-      name: Target SOC
-      description: Mål-SoC för EV %
-      example: 80
-      required: false
-      selector:
-        number:
-          min: 0
-          max: 100
-          unit_of_measurement: "%"
-          mode: box
-
-ev_force_charge:
-  name: EV force charge
-  description: Starta EV-laddning en tid med visst strömvärde
-  fields:
-    duration:
-      name: Duration (minuter)
-      example: 60
-      required: false
-      selector:
-        number:
-          min: 1
-          max: 480
-          unit_of_measurement: "min"
-    current:
-      name: Laddström (A)
-      example: 16
-      required: false
-      selector:
-        number:
-          min: 6
-          max: 32
-          unit_of_measurement: "A"
-
-ev_pause:
-  name: EV pause
-  description: Pausa EV-laddning i angivet antal minuter
-  fields:
-    duration:
-      name: Duration (minuter)
-      example: 30
-      required: false
-      selector:
-        number:
-          min: 1
-          max: 240
-          unit_of_measurement: "min"
-
-force_battery_charge:
-  name: Force battery charge
-  description: Ladda batteriet med angiven effekt om adapter stödjer det
-  fields:
-    power_w:
-      name: Effekt (W)
-      example: 10000
-      required: false
-      selector:
-        number:
-          min: 500
-          max: 20000
-          unit_of_measurement: "W"
-    duration:
-      name: Duration (minuter)
-      example: 60
-      required: false
-      selector:
-        number:
-          min: 1
-          max: 480
-          unit_of_measurement: "min"
+# Service definitions for Energy Dispatcher
+# Translations are provided in translations/en.json and translations/sv.json
+# The services.yaml file provides the schema and UI selectors
 
 battery_cost_reset:
-  name: Reset battery energy cost
-  description: Reset the weighted average cost (WACE) of energy in the battery to zero
 
 battery_cost_set_soc:
-  name: Set battery SOC manually
-  description: Manually set the battery state of charge (SOC) percentage
   fields:
     soc_percent:
-      name: SOC Percentage
-      description: Battery state of charge (0-100%)
-      example: 50
       required: true
       selector:
         number:
@@ -106,29 +16,18 @@ battery_cost_set_soc:
           mode: box
 
 create_dashboard_notification:
-  name: Create dashboard setup notification
-  description: Manually create or recreate the dashboard setup notification with instructions and links
 
 schedule_appliance:
-  name: Schedule Appliance
-  description: Get optimal time to run an appliance based on electricity prices and solar forecast
   fields:
     appliance:
-      name: Appliance
-      description: Type of appliance
       required: true
       selector:
         select:
           options:
-            - label: "Dishwasher"
-              value: "dishwasher"
-            - label: "Washing Machine"
-              value: "washing_machine"
-            - label: "Water Heater"
-              value: "water_heater"
+            - "dishwasher"
+            - "washing_machine"
+            - "water_heater"
     power_w:
-      name: Power (W)
-      description: Appliance power consumption in watts
       required: true
       selector:
         number:
@@ -137,8 +36,6 @@ schedule_appliance:
           step: 50
           unit_of_measurement: "W"
     duration_hours:
-      name: Duration (hours)
-      description: How long the appliance runs
       required: true
       selector:
         number:
@@ -147,38 +44,25 @@ schedule_appliance:
           step: 0.25
           unit_of_measurement: "hours"
     earliest_start:
-      name: Earliest Start Time
-      description: Earliest acceptable start time (optional)
       required: false
       selector:
         time:
     latest_end:
-      name: Latest End Time
-      description: Latest acceptable completion time (optional)
       required: false
       selector:
         time:
 
 set_export_mode:
-  name: Set Export Mode
-  description: Configure energy export behavior
   fields:
     mode:
-      name: Export Mode
-      description: When to export energy to grid
       required: true
       selector:
         select:
           options:
-            - label: "Never Export"
-              value: "never"
-            - label: "Excess Solar Only"
-              value: "excess_solar_only"
-            - label: "Peak Price Opportunistic"
-              value: "peak_price_opportunistic"
+            - "never"
+            - "excess_solar_only"
+            - "peak_price_opportunistic"
     min_export_price:
-      name: Minimum Export Price (SEK/kWh)
-      description: Minimum price to consider export (optional)
       required: false
       selector:
         number:
@@ -188,27 +72,17 @@ set_export_mode:
           unit_of_measurement: "SEK/kWh"
 
 override_battery_mode:
-  name: Override Battery Mode
-  description: Temporarily override automatic battery optimization
   fields:
     mode:
-      name: Mode
-      description: Battery operation mode to enforce
       required: true
       selector:
         select:
           options:
-            - label: "Charge"
-              value: "charge"
-            - label: "Discharge"
-              value: "discharge"
-            - label: "Hold"
-              value: "hold"
-            - label: "Auto"
-              value: "auto"
+            - "charge"
+            - "discharge"
+            - "hold"
+            - "auto"
     duration_minutes:
-      name: Duration (minutes)
-      description: How long to maintain override
       required: false
       default: 60
       selector:
@@ -218,8 +92,6 @@ override_battery_mode:
           step: 5
           unit_of_measurement: "min"
     power_w:
-      name: Power (W)
-      description: Power level for charge/discharge (optional)
       required: false
       selector:
         number:
