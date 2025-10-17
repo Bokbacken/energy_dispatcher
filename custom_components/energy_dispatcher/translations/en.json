@@ -289,6 +289,75 @@
       "ev_status": {
         "name": "EV status"
       },
+      "enriched_power_price": {
+        "name": "Enriched Power Price"
+      },
+      "grid_export_value": {
+        "name": "Grid Export Value"
+      },
+      "house_load_baseline": {
+        "name": "House Load Baseline"
+      },
+      "battery_runtime_estimate": {
+        "name": "Battery Runtime Estimate"
+      },
+      "battery_energy_cost": {
+        "name": "Battery Energy Cost"
+      },
+      "battery_vs_grid_price_delta": {
+        "name": "Battery vs Grid Price Delta"
+      },
+      "solar_power_forecast_now": {
+        "name": "Solar Power Forecast Now"
+      },
+      "solar_energy_forecast_today": {
+        "name": "Solar Energy Forecast Today"
+      },
+      "solar_energy_forecast_tomorrow": {
+        "name": "Solar Energy Forecast Tomorrow"
+      },
+      "solar_production_now": {
+        "name": "Solar Production Now"
+      },
+      "solar_production_today": {
+        "name": "Solar Production Today"
+      },
+      "solar_forecast_delta_15m": {
+        "name": "Solar Forecast Delta 15m"
+      },
+      "ev_time_until_charge": {
+        "name": "EV Time Until Charge"
+      },
+      "ev_charge_reason": {
+        "name": "EV Charge Reason"
+      },
+      "ev_charging_session": {
+        "name": "EV Charging Session"
+      },
+      "battery_charging_state": {
+        "name": "Battery Charging State"
+      },
+      "battery_power_flow": {
+        "name": "Battery Power Flow"
+      },
+      "battery_time_until_charge": {
+        "name": "Battery Time Until Charge"
+      },
+      "battery_charge_reason": {
+        "name": "Battery Charge Reason"
+      },
+      "cost_level": {
+        "name": "Cost Level"
+      },
+      "battery_reserve_recommendation": {
+        "name": "Battery Reserve Recommendation"
+      },
+      "next_high_cost_window": {
+        "name": "Next High Cost Window"
+      },
+      "optimization_plan": {
+        "name": "Optimization Plan"
+      },
       "dishwasher_optimal_time": {
         "name": "Dishwasher Optimal Start Time"
       },
@@ -298,16 +367,71 @@
       "water_heater_optimal_time": {
         "name": "Water Heater Optimal Time"
       },
+      "weather_adjusted_solar_forecast": {
+        "name": "Weather Adjusted Solar Forecast"
+      },
+      "export_opportunity": {
+        "name": "Export Opportunity"
+      },
+      "export_revenue_estimate": {
+        "name": "Export Revenue Estimate"
+      },
       "load_shift_opportunity": {
         "name": "Load Shift Opportunity"
       },
       "load_shift_savings": {
         "name": "Load Shift Savings Potential"
+      },
+      "solar_forecast_raw": {
+        "name": "Solar Forecast (Raw)"
+      },
+      "solar_forecast_compensated": {
+        "name": "Solar Forecast (Compensated)"
+      },
+      "weather_capability": {
+        "name": "Weather Capability"
+      }
+    },
+    "number": {
+      "ev_battery_capacity": {
+        "name": "EV Battery Capacity"
+      },
+      "ev_current_soc": {
+        "name": "EV Current SOC"
+      },
+      "ev_target_soc": {
+        "name": "EV Target SOC"
+      },
+      "home_battery_capacity": {
+        "name": "Home Battery Capacity"
+      },
+      "home_battery_soc_floor": {
+        "name": "Home Battery SOC Floor"
+      },
+      "evse_max_current": {
+        "name": "EVSE Max Current"
+      },
+      "evse_phases": {
+        "name": "EVSE Phases"
+      },
+      "evse_voltage": {
+        "name": "EVSE Voltage"
+      }
+    },
+    "select": {
+      "ev_target_preset": {
+        "name": "EV Target SOC – Quick Select"
       }
     },
     "switch": {
       "auto_dispatch": {
         "name": "Auto dispatch"
+      },
+      "auto_ev": {
+        "name": "Auto EV"
+      },
+      "auto_planner": {
+        "name": "Auto Planner"
       }
     },
     "button": {
@@ -316,10 +440,83 @@
       },
       "force_battery_discharge": {
         "name": "Force battery discharge"
+      },
+      "reset_battery_cost": {
+        "name": "Reset Battery Energy Cost"
       }
     }
   },
   "services": {
+    "set_manual_ev": {
+      "name": "Set manual EV SOC",
+      "description": "Update manual EV state of charge",
+      "fields": {
+        "soc_current": {
+          "name": "Current SOC",
+          "description": "Current EV battery percentage"
+        },
+        "soc_target": {
+          "name": "Target SOC",
+          "description": "Target SOC for EV percentage"
+        }
+      }
+    },
+    "ev_force_charge": {
+      "name": "EV force charge",
+      "description": "Start EV charging for a period with specified current",
+      "fields": {
+        "duration": {
+          "name": "Duration (minutes)",
+          "description": "Duration in minutes"
+        },
+        "current": {
+          "name": "Charging Current (A)",
+          "description": "Charging current in Amperes"
+        }
+      }
+    },
+    "ev_pause": {
+      "name": "EV pause",
+      "description": "Pause EV charging for specified number of minutes",
+      "fields": {
+        "duration": {
+          "name": "Duration (minutes)",
+          "description": "Duration in minutes"
+        }
+      }
+    },
+    "force_battery_charge": {
+      "name": "Force battery charge",
+      "description": "Charge the battery with specified power if adapter supports it",
+      "fields": {
+        "power_w": {
+          "name": "Power (W)",
+          "description": "Power in watts"
+        },
+        "duration": {
+          "name": "Duration (minutes)",
+          "description": "Duration in minutes"
+        }
+      }
+    },
+    "battery_cost_reset": {
+      "name": "Reset battery energy cost",
+      "description": "Reset the weighted average cost (WACE) of energy in the battery to zero"
+    },
+    "battery_cost_set_soc": {
+      "name": "Set battery SOC manually",
+      "description": "Manually set the battery state of charge (SOC) percentage",
+      "fields": {
+        "soc_percent": {
+          "name": "SOC Percentage",
+          "description": "Battery state of charge (0-100%)"
+        }
+      }
+    },
+    "create_dashboard_notification": {
+      "name": "Create dashboard setup notification",
+      "description": "Manually create or recreate the dashboard setup notification with instructions and links"
+    },
     "schedule_appliance": {
       "name": "Schedule Appliance",
       "description": "Get optimal time to run an appliance based on electricity prices and solar forecast",

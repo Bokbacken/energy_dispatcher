@@ -31,23 +31,25 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     def nv(key: str) -> float:
         return float(manual.get(key, DEFAULTS[key]))
     entities = [
-        EDNumber(entry.entry_id, "EV Batterikapacitet", "kWh", 10, 150, 1, M_EV_BATT_KWH, nv(M_EV_BATT_KWH)),
-        EDNumber(entry.entry_id, "EV Aktuell SOC", "%", 0, 100, 1, M_EV_CURRENT_SOC, nv(M_EV_CURRENT_SOC)),
-        EDNumber(entry.entry_id, "EV Mål SOC", "%", 10, 100, 5, M_EV_TARGET_SOC, nv(M_EV_TARGET_SOC)),
-        EDNumber(entry.entry_id, "Hemmabatteri Kapacitet", "kWh", 1, 50, 0.5, M_HOME_BATT_CAP_KWH, nv(M_HOME_BATT_CAP_KWH)),
-        EDNumber(entry.entry_id, "Hemmabatteri SOC-golv", "%", 0, 50, 1, M_HOME_BATT_SOC_FLOOR, nv(M_HOME_BATT_SOC_FLOOR)),
-        EDNumber(entry.entry_id, "EVSE Max A", "A", 6, 32, 1, M_EVSE_MAX_A, nv(M_EVSE_MAX_A)),
-        EDNumber(entry.entry_id, "EVSE Faser", None, 1, 3, 1, M_EVSE_PHASES, nv(M_EVSE_PHASES)),
-        EDNumber(entry.entry_id, "EVSE Spänning", "V", 180, 250, 1, M_EVSE_VOLTAGE, nv(M_EVSE_VOLTAGE)),
+        EDNumber(entry.entry_id, "ev_battery_capacity", "kWh", 10, 150, 1, M_EV_BATT_KWH, nv(M_EV_BATT_KWH)),
+        EDNumber(entry.entry_id, "ev_current_soc", "%", 0, 100, 1, M_EV_CURRENT_SOC, nv(M_EV_CURRENT_SOC)),
+        EDNumber(entry.entry_id, "ev_target_soc", "%", 10, 100, 5, M_EV_TARGET_SOC, nv(M_EV_TARGET_SOC)),
+        EDNumber(entry.entry_id, "home_battery_capacity", "kWh", 1, 50, 0.5, M_HOME_BATT_CAP_KWH, nv(M_HOME_BATT_CAP_KWH)),
+        EDNumber(entry.entry_id, "home_battery_soc_floor", "%", 0, 50, 1, M_HOME_BATT_SOC_FLOOR, nv(M_HOME_BATT_SOC_FLOOR)),
+        EDNumber(entry.entry_id, "evse_max_current", "A", 6, 32, 1, M_EVSE_MAX_A, nv(M_EVSE_MAX_A)),
+        EDNumber(entry.entry_id, "evse_phases", None, 1, 3, 1, M_EVSE_PHASES, nv(M_EVSE_PHASES)),
+        EDNumber(entry.entry_id, "evse_voltage", "V", 180, 250, 1, M_EVSE_VOLTAGE, nv(M_EVSE_VOLTAGE)),
     ]
     async_add_entities(entities)
 
 class EDNumber(NumberEntity):
     should_poll = False
-    def __init__(self, entry_id: str, name: str, unit: Optional[str],
+    _attr_has_entity_name = True
+    
+    def __init__(self, entry_id: str, translation_key: str, unit: Optional[str],
                  min_v: float, max_v: float, step: float, key: str, init_value: float):
         self._entry_id = entry_id
-        self._name = name
+        self._attr_translation_key = translation_key
         self._unit = unit
         self._min = min_v
         self._max = max_v
@@ -69,10 +71,6 @@ class EDNumber(NumberEntity):
     @property
     def unique_id(self) -> str:
         return f"{DOMAIN}_number_{self._key}_{self._entry_id}"
-
-    @property
-    def name(self) -> str:
-        return self._name
 
     @property
     def native_unit_of_measurement(self) -> Optional[str]:
@@ -98,6 +96,3 @@ class EDNumber(NumberEntity):
         self.hass.data[DOMAIN][self._entry_id][STORE_MANUAL][self._key] = float(value)
         self.async_write_ha_state()
         self.hass.bus.async_fire(EVENT_ACTION, {"entry_id": self._entry_id, "entity_id": self.entity_id, "key": self._key, "value": float(value)})
-        await self.hass.services.async_call("logbook", "log",
-            {"name": "Energy Dispatcher", "message": f"Set {self._name} → {value}", "domain": "energy_dispatcher"},
-            blocking=False)

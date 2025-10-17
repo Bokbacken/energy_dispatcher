@@ -29,10 +29,9 @@ class BaseEDSwitch(SwitchEntity):
 
 
 class AutoEVSwitch(BaseEDSwitch):
-    @property
-    def name(self):
-        return "Energy Dispatcher - Auto EV"
-
+    _attr_has_entity_name = True
+    _attr_translation_key = "auto_ev"
+    
     @property
     def unique_id(self):
         return f"{DOMAIN}_switch_auto_ev_{self._entry_id}"
@@ -51,10 +50,9 @@ class AutoEVSwitch(BaseEDSwitch):
 
 
 class AutoPlannerSwitch(BaseEDSwitch):
-    @property
-    def name(self):
-        return "Energy Dispatcher - Auto Planner"
-
+    _attr_has_entity_name = True
+    _attr_translation_key = "auto_planner"
+    
     @property
     def unique_id(self):
         return f"{DOMAIN}_switch_auto_planner_{self._entry_id}"
